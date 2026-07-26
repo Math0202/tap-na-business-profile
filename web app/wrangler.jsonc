@@ -1,0 +1,32 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "tap-na",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-07-25",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  },
+  "vars": {
+    "SUPABASE_URL": "https://mjfkthjxqvedqhpemxmt.supabase.co"
+  },
+  "routes": [
+    {
+      "pattern": "redirct.link",
+      "custom_domain": true
+    },
+    {
+      "pattern": "www.redirct.link",
+      "custom_domain": true
+    },
+    {
+      "pattern": "cards.redirct.link",
+      "custom_domain": true
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
