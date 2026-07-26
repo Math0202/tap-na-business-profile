@@ -218,8 +218,39 @@ onUnmounted(() => setClaimChrome(false))
 </script>
 
 <template>
-  <div v-if="!mode" class="min-h-screen flex items-center justify-center px-5">
-    <div class="text-sm text-gray-400">Opening card…</div>
+  <div v-if="!mode" class="min-h-screen flex flex-col items-center overflow-x-hidden" aria-busy="true" aria-label="Loading profile">
+    <div class="w-full h-40 bg-zinc-800/80 animate-pulse" aria-hidden="true" />
+    <main class="w-full max-w-md flex-1 flex flex-col relative z-10 pb-20 -mt-10">
+      <section class="px-6">
+        <div class="flex items-end gap-4">
+          <div class="w-36 h-36 rounded-full shrink-0 border-[3px] border-zinc-700 bg-zinc-800 animate-pulse" />
+          <div class="pb-2 flex-1 min-w-0 space-y-2">
+            <div class="h-5 w-40 max-w-full rounded-md bg-zinc-800 animate-pulse" />
+            <div class="h-3.5 w-28 max-w-full rounded-md bg-zinc-800/80 animate-pulse" />
+            <div class="h-3 w-24 max-w-full rounded-md bg-zinc-800/60 animate-pulse" />
+            <div class="mt-2 flex items-center gap-2">
+              <div class="w-9 h-9 rounded-full bg-zinc-800 animate-pulse" />
+              <div class="w-9 h-9 rounded-full bg-zinc-800 animate-pulse" />
+              <div class="w-9 h-9 rounded-full bg-zinc-800 animate-pulse" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="page-sheet flex-1 mt-6 px-6 pt-6 space-y-3">
+        <div
+          v-for="n in 5"
+          :key="n"
+          class="card-item-bg rounded-2xl flex items-center p-4"
+        >
+          <div class="w-12 h-12 rounded-full bg-zinc-700/80 animate-pulse mr-4 shrink-0" />
+          <div class="h-3.5 rounded-md bg-zinc-700/60 animate-pulse" :class="n % 2 ? 'w-24' : 'w-32'" />
+        </div>
+        <div class="pt-4 pb-2">
+          <div class="w-full h-12 rounded-full bg-zinc-700/70 animate-pulse" />
+        </div>
+      </div>
+    </main>
   </div>
 
   <!-- Linked & active: render the owner's profile in place (never redirect) -->

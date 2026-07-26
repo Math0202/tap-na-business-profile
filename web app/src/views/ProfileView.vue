@@ -307,6 +307,11 @@ function openPasswordModal() {
 }
 
 function saveLogin() {
+  if (!newPassword.value) {
+    loginFeedback.value = 'Enter a new password.'
+    loginFeedbackClass.value = 'text-xs text-center min-h-[1rem] text-red-400'
+    return
+  }
   const result = updateLoginCredentials({
     loginEmail: loginEmail.value.trim(),
     loginPhone: loginPhone.value.trim(),
@@ -450,8 +455,8 @@ onMounted(() => {
 
 <template>
   <main class="w-full max-w-md min-h-screen mx-auto flex flex-col relative pb-28">
-    <header class="px-6 pt-16 pb-4">
-      <BrandMark size="sm" class="mb-3" />
+    <header class="px-6 pt-16 pb-4 text-center">
+      <BrandMark size="sm" class="mb-3 mx-auto" />
       <h1 class="text-2xl font-bold tracking-tight">Edit Profile</h1>
       <p class="text-gray-400 text-sm mt-1">Update your digital business card</p>
     </header>
@@ -460,23 +465,71 @@ onMounted(() => {
       <div class="flex flex-col items-center gap-3 py-2">
         <div class="relative">
           <div
-            class="w-28 h-28 overflow-hidden border-2 border-zinc-700 shadow-xl bg-zinc-800"
+            class="relative w-28 h-28 overflow-hidden border-2 border-zinc-700 shadow-xl bg-zinc-800"
             :class="isTable ? 'rounded-3xl' : 'rounded-full'"
           >
             <img :src="previewSrc" :alt="isTable ? 'Business logo' : 'Profile photo'" class="w-full h-full object-cover" />
+            <div
+              v-if="avatarUploading"
+              class="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-1"
+            >
+              <span class="material-symbols-outlined text-white text-[28px] animate-spin">progress_activity</span>
+              <span class="text-[10px] text-white/80 font-medium">Uploading…</span>
+            </div>
           </div>
           <label
             for="avatar-input"
             class="absolute bottom-0 right-0 w-9 h-9 rounded-full bg-white text-black flex items-center justify-center cursor-pointer shadow-lg hover:bg-gray-200 transition-colors"
+            :class="{ 'opacity-50 pointer-events-none': avatarUploading }"
             aria-label="Change photo"
           >
             <span class="material-symbols-outlined text-[18px]">photo_camera</span>
           </label>
-          <input id="avatar-input" ref="avatarInput" type="file" accept="image/*" class="hidden" @change="onAvatarChange" />
+          <input
+            id="avatar-input"
+            ref="avatarInput"
+            type="file"
+            accept="image/*"
+            class="hidden"
+            :disabled="avatarUploading"
+            @change="onAvatarChange"
+          />
         </div>
         <p class="text-gray-500 text-xs">
-          {{ isTable ? 'Tap camera to change business logo' : 'Tap camera to change photo' }}
+          {{
+            avatarUploading
+              ? 'Uploading…'
+              : isTable
+                ? 'Tap camera to change business logo'
+                : 'Tap camera to change photo'
+          }}
         </p>
+        <div class="w-full max-w-xs space-y-2 pt-1">
+          <button
+            type="button"
+            class="w-full py-3 rounded-full bg-zinc-700 text-white font-semibold text-sm hover:bg-zinc-600 transition-colors flex items-center justify-center gap-2"
+            @click="onLogout"
+          >
+            <span class="material-symbols-outlined text-[18px]">logout</span>
+            Log out
+          </button>
+          <button
+            type="button"
+            class="w-full py-3 rounded-full bg-red-500/15 text-red-400 border border-red-500/30 font-semibold text-sm hover:bg-red-500/25 transition-colors flex items-center justify-center gap-2"
+            @click="showDeleteModal = true"
+          >
+            <span class="material-symbols-outlined text-[18px]">delete</span>
+            Delete Profile
+          </button>
+          <button
+            type="button"
+            class="w-full py-3 rounded-full border border-[var(--border)] text-gray-200 font-semibold text-sm hover:bg-white/5 transition-colors flex items-center justify-center gap-2"
+            @click="openPasswordModal"
+          >
+            <span class="material-symbols-outlined text-[18px]">lock</span>
+            Change password
+          </button>
+        </div>
       </div>
 
       <RouterLink
@@ -517,7 +570,7 @@ onMounted(() => {
           <label class="field-label" for="field-name">Full name</label>
           <div class="field-shell">
             <span class="material-symbols-outlined field-icon">badge</span>
-            <input id="field-name" v-model="name" type="text" class="field-input" placeholder="Tangeni Matheus" autocomplete="name" />
+            <input id="field-name" v-model="name" type="text" class="field-input" placeholder="Name Surname" autocomplete="name" />
           </div>
         </div>
         <div class="field-group">
@@ -670,48 +723,6 @@ onMounted(() => {
             <input id="field-login-phone" v-model="loginPhone" type="tel" class="field-input" placeholder="+264 81 000 0000" />
           </div>
         </div>
-        <div class="card-item-bg rounded-2xl p-4 space-y-4">
-          <p class="text-sm font-semibold">Change password</p>
-          <div class="field-group">
-            <label class="field-label" for="field-current-password">Current password</label>
-            <div class="field-shell">
-              <span class="material-symbols-outlined field-icon">lock</span>
-              <input id="field-current-password" v-model="currentPassword" type="password" class="field-input" placeholder="Leave blank if not set yet" />
-            </div>
-          </div>
-          <div class="field-group">
-            <label class="field-label" for="field-new-password">New password</label>
-            <div class="field-shell">
-              <span class="material-symbols-outlined field-icon">key</span>
-              <input id="field-new-password" v-model="newPassword" type="password" class="field-input" placeholder="At least 6 characters" />
-            </div>
-          </div>
-          <div class="field-group">
-            <label class="field-label" for="field-confirm-password">Confirm new password</label>
-            <div class="field-shell">
-              <span class="material-symbols-outlined field-icon">verified_user</span>
-              <input id="field-confirm-password" v-model="confirmPassword" type="password" class="field-input" placeholder="Repeat new password" />
-            </div>
-          </div>
-          <button type="button" class="w-full py-3 rounded-full bg-zinc-700 hover:bg-zinc-600 text-white font-semibold text-sm transition-colors" @click="saveLogin">
-            Update login details
-          </button>
-          <p :class="loginFeedbackClass">{{ loginFeedback }}</p>
-        </div>
-
-        <div class="space-y-3 pt-1">
-          <button type="button" class="w-full py-3.5 rounded-full bg-zinc-700 text-white font-semibold text-sm hover:bg-zinc-600 transition-colors flex items-center justify-center gap-2" @click="onLogout">
-            <span class="material-symbols-outlined text-[18px]">logout</span>
-            Log out
-          </button>
-          <button type="button" class="w-full py-3.5 rounded-full bg-zinc-700 text-white font-semibold text-sm hover:bg-zinc-600 transition-colors" @click="onReset">
-            Reset to defaults
-          </button>
-          <button type="button" class="w-full py-3.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/30 font-semibold text-sm hover:bg-red-500/25 transition-colors flex items-center justify-center gap-2" @click="showDeleteModal = true">
-            <span class="material-symbols-outlined text-[18px]">delete</span>
-            Delete Profile
-          </button>
-        </div>
       </section>
 
       <button type="submit" class="w-full py-4 rounded-full bg-white text-black font-bold text-base hover:bg-gray-200 transition-colors flex items-center justify-center gap-2">
@@ -720,6 +731,52 @@ onMounted(() => {
       </button>
     </form>
   </main>
+
+  <div v-if="showPasswordModal" class="fixed inset-0 z-[100] flex items-center justify-center p-6">
+    <div class="absolute inset-0 bg-black/70" @click="showPasswordModal = false" />
+    <div class="relative w-full max-w-sm card-item-bg rounded-3xl p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between gap-3">
+        <h2 class="text-lg font-bold">Change password</h2>
+        <button
+          type="button"
+          class="w-9 h-9 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center"
+          aria-label="Close"
+          @click="showPasswordModal = false"
+        >
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+      <div class="field-group">
+        <label class="field-label" for="field-current-password">Current password</label>
+        <div class="field-shell">
+          <span class="material-symbols-outlined field-icon">lock</span>
+          <input id="field-current-password" v-model="currentPassword" type="password" class="field-input" placeholder="Leave blank if not set yet" />
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="field-label" for="field-new-password">New password</label>
+        <div class="field-shell">
+          <span class="material-symbols-outlined field-icon">key</span>
+          <input id="field-new-password" v-model="newPassword" type="password" class="field-input" placeholder="At least 6 characters" />
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="field-label" for="field-confirm-password">Confirm new password</label>
+        <div class="field-shell">
+          <span class="material-symbols-outlined field-icon">verified_user</span>
+          <input id="field-confirm-password" v-model="confirmPassword" type="password" class="field-input" placeholder="Repeat new password" />
+        </div>
+      </div>
+      <p :class="loginFeedbackClass">{{ loginFeedback }}</p>
+      <button
+        type="button"
+        class="w-full py-3.5 rounded-full bg-white text-black font-bold text-sm hover:bg-gray-200 transition-colors"
+        @click="saveLogin"
+      >
+        Update password
+      </button>
+    </div>
+  </div>
 
   <div v-if="showDeleteModal" class="fixed inset-0 z-[100] flex items-center justify-center p-6">
     <div class="absolute inset-0 bg-black/70" @click="showDeleteModal = false" />

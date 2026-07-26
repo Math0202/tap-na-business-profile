@@ -217,6 +217,7 @@ function ogHtml({ title, description, url, image, site = 'tap-na' }) {
   <meta property="og:image:secure_url" content="${img}">
   <meta property="og:image:width" content="400">
   <meta property="og:image:height" content="400">
+  <meta property="og:image:alt" content="${t} profile picture">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="${t}">
   <meta name="twitter:description" content="${d}">
@@ -244,7 +245,21 @@ async function serveOgImage(env, origin, slug) {
     ''
 
   if (/^https?:\/\//i.test(raw)) {
-    return Response.redirect(raw, 302)
+    try {
+      const upstream = await fetch(raw, {
+        headers: { Accept: 'image/avif,image/webp,image/png,image/jpeg,image/*' }
+      })
+      if (upstream.ok && upstream.body) {
+        const headers = new Headers()
+        headers.set('Content-Type', upstream.headers.get('Content-Type') || 'image/jpeg')
+        headers.set('Cache-Control', 'public, max-age=3600, s-maxage=86400')
+        headers.set('Content-Disposition', `inline; filename="${escapeHtml(slug)}-profile-image"`)
+        headers.set('X-Content-Type-Options', 'nosniff')
+        return new Response(upstream.body, { status: 200, headers })
+      }
+    } catch {
+      /* fall through to the default profile image */
+    }
   }
   if (raw.startsWith('data:image/')) {
     const m = raw.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/)
@@ -885,7 +900,10 @@ export default {
                 .filter(Boolean)
                 .join(' · ')
             : 'Open this NFC / QR card on tap-na'
-          const image = `${url.origin}/api/og/${encodeURIComponent(slug)}.jpg`
+          const imageVersion = profile?.updated_at
+            ? `?v=${encodeURIComponent(profile.updated_at)}`
+            : ''
+          const image = `${url.origin}/api/og/${encodeURIComponent(slug)}.jpg${imageVersion}`
           return new Response(
             ogHtml({ title, description, url: shareUrl, image }),
             {

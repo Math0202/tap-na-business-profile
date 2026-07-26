@@ -118,7 +118,7 @@ onMounted(() => {
 
 <template>
   <div class="min-h-screen flex flex-col items-center overflow-x-hidden">
-    <main class="w-full max-w-5xl min-h-screen flex flex-col relative z-10 px-5 pt-16 pb-36">
+    <main class="w-full max-w-7xl min-h-screen flex flex-col relative z-10 px-5 pt-16 pb-36">
       <header class="mb-6">
         <BrandMark size="sm" class="mb-2" />
         <h1 class="text-2xl font-bold tracking-tight mt-1">Admin dashboard</h1>
@@ -207,78 +207,76 @@ onMounted(() => {
         No profiles match this filter.
       </div>
 
-      <!-- Profiles grid -->
-      <section v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
+      <!-- Profiles grid: 3 cols mobile, 6 cols desktop; tiles centered -->
+      <section v-else class="grid grid-cols-3 lg:grid-cols-6 gap-3 mb-8 justify-items-center">
         <article
           v-for="p in filtered"
           :key="p.id"
-          class="card-item-bg rounded-2xl p-4 flex flex-col gap-3"
+          class="card-item-bg rounded-2xl p-3 w-full flex flex-col items-center text-center gap-2"
         >
-          <div class="flex items-center gap-3">
-            <img
-              v-if="profileThumb(p)"
-              :src="profileThumb(p)"
-              alt=""
-              class="w-12 h-12 object-cover shrink-0 bg-zinc-800"
-              :class="p.cardType === 'table' ? 'rounded-2xl' : 'rounded-full'"
-            >
-            <div
-              v-else
-              class="w-12 h-12 shrink-0 bg-zinc-800 flex items-center justify-center text-sm font-bold text-gray-300"
-              :class="p.cardType === 'table' ? 'rounded-2xl' : 'rounded-full'"
-            >
-              {{ initials(p) }}
-            </div>
-            <div class="min-w-0 flex-1">
-              <p class="font-semibold text-sm truncate text-[var(--text)]">{{ profileLabel(p) }}</p>
-              <p class="text-xs text-gray-400 truncate mt-0.5">{{ profileMeta(p) }}</p>
-            </div>
+          <img
+            v-if="profileThumb(p)"
+            :src="profileThumb(p)"
+            alt=""
+            class="w-14 h-14 lg:w-16 lg:h-16 object-cover shrink-0 bg-zinc-800"
+            :class="p.cardType === 'table' ? 'rounded-2xl' : 'rounded-full'"
+          >
+          <div
+            v-else
+            class="w-14 h-14 lg:w-16 lg:h-16 shrink-0 bg-zinc-800 flex items-center justify-center text-sm font-bold text-gray-300"
+            :class="p.cardType === 'table' ? 'rounded-2xl' : 'rounded-full'"
+          >
+            {{ initials(p) }}
           </div>
 
-          <div class="flex items-center gap-2 flex-wrap">
+          <div class="min-w-0 w-full">
+            <p class="font-semibold text-xs lg:text-sm leading-tight line-clamp-2 text-[var(--text)]">{{ profileLabel(p) }}</p>
+            <p class="text-[10px] lg:text-xs text-gray-400 line-clamp-2 mt-0.5">{{ profileMeta(p) }}</p>
+          </div>
+
+          <div class="flex items-center justify-center gap-1 flex-wrap">
             <span
-              class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
+              class="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
               :class="p.cardType === 'table'
                 ? 'bg-sky-500/15 text-sky-300'
                 : 'bg-violet-500/15 text-violet-300'"
             >
-              {{ p.cardType === 'table' ? 'Business' : 'Personal' }}
+              {{ p.cardType === 'table' ? 'Biz' : 'Personal' }}
             </span>
             <span
-              class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
+              class="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
               :class="p.disabled
                 ? 'bg-amber-500/15 text-amber-300'
                 : 'bg-emerald-500/15 text-emerald-300'"
             >
-              {{ p.disabled ? 'Disabled' : 'Live' }}
+              {{ p.disabled ? 'Off' : 'Live' }}
             </span>
           </div>
 
-          <div class="text-[11px] text-gray-500 space-y-1">
+          <div class="text-[10px] text-gray-500 space-y-0.5 w-full min-w-0">
             <p class="truncate">{{ p.email || 'No email' }}</p>
             <p class="font-mono text-sky-300/90 truncate">
               <template v-if="p.slugs?.length">
                 {{ p.slugs.map((s) => s.slug).join(' · ') }}
               </template>
-              <template v-else>No slug linked</template>
+              <template v-else>No slug</template>
             </p>
-            <p>Created {{ formatDate(p.createdAt) }}</p>
           </div>
 
-          <div class="mt-auto pt-1">
+          <div class="mt-auto w-full pt-1">
             <RouterLink
               v-if="viewPath(p)"
               :to="viewPath(p)"
-              class="inline-flex items-center gap-2 w-full justify-center px-4 py-2.5 rounded-full bg-white text-black text-xs font-bold no-underline hover:bg-gray-200 transition-colors"
+              class="inline-flex items-center gap-1 w-full justify-center px-2 py-2 rounded-full bg-white text-black text-[10px] lg:text-xs font-bold no-underline hover:bg-gray-200 transition-colors"
             >
-              <span class="material-symbols-outlined text-[18px]">visibility</span>
-              View profile
+              <span class="material-symbols-outlined text-[16px]">visibility</span>
+              View
             </RouterLink>
             <span
               v-else
-              class="inline-flex items-center gap-2 w-full justify-center px-4 py-2.5 rounded-full border border-[var(--border)] text-xs font-semibold text-gray-500"
+              class="inline-flex items-center gap-1 w-full justify-center px-2 py-2 rounded-full border border-[var(--border)] text-[10px] lg:text-xs font-semibold text-gray-500"
             >
-              No public page yet
+              No page
             </span>
           </div>
         </article>
