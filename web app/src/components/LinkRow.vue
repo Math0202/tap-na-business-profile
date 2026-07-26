@@ -7,6 +7,7 @@ const props = defineProps({
   icon: { type: String, required: true },
   label: { type: String, required: true },
   href: { type: String, default: '' },
+  detail: { type: String, default: '' },
   external: { type: Boolean, default: false },
   trackKey: { type: String, default: '' }
 })
@@ -127,7 +128,14 @@ function IconMark() {
     <div class="w-12 h-12 rounded-full bg-white flex items-center justify-center text-black mr-4 shadow-lg shrink-0">
       <IconMark />
     </div>
-    <span class="text-gray-300 font-medium text-sm">{{ label }}</span>
+    <div class="min-w-0 flex-1 text-left">
+      <template v-if="detail">
+        <p class="text-[10px] uppercase tracking-wide text-gray-500 leading-none mb-1">{{ label }}</p>
+        <p class="text-gray-200 font-medium text-sm truncate">{{ detail }}</p>
+      </template>
+      <span v-else class="text-gray-300 font-medium text-sm">{{ label }}</span>
+    </div>
+    <span class="material-symbols-outlined text-gray-500 text-[22px] shrink-0 ml-2">chevron_right</span>
   </a>
   <RouterLink
     v-else-if="href && isInternal"
@@ -138,7 +146,14 @@ function IconMark() {
     <div class="w-12 h-12 rounded-full bg-white flex items-center justify-center text-black mr-4 shadow-lg shrink-0">
       <IconMark />
     </div>
-    <span class="text-gray-300 font-medium text-sm">{{ label }}</span>
+    <div class="min-w-0 flex-1 text-left">
+      <template v-if="detail">
+        <p class="text-[10px] uppercase tracking-wide text-gray-500 leading-none mb-1">{{ label }}</p>
+        <p class="text-gray-200 font-medium text-sm truncate">{{ detail }}</p>
+      </template>
+      <span v-else class="text-gray-300 font-medium text-sm">{{ label }}</span>
+    </div>
+    <span class="material-symbols-outlined text-gray-500 text-[22px] shrink-0 ml-2">chevron_right</span>
   </RouterLink>
   <RouterLink
     v-else
@@ -149,6 +164,13 @@ function IconMark() {
     <div class="w-12 h-12 rounded-full bg-white flex items-center justify-center text-black mr-4 shadow-lg shrink-0">
       <IconMark />
     </div>
-    <span class="text-gray-300 font-medium text-sm">{{ label }}</span>
+    <div class="min-w-0 flex-1 text-left">
+      <template v-if="detail">
+        <p class="text-[10px] uppercase tracking-wide text-gray-500 leading-none mb-1">{{ label }}</p>
+        <p class="text-gray-200 font-medium text-sm truncate">{{ detail }}</p>
+      </template>
+      <span v-else class="text-gray-300 font-medium text-sm">{{ label }}</span>
+    </div>
+    <span class="material-symbols-outlined text-gray-500 text-[22px] shrink-0 ml-2">chevron_right</span>
   </RouterLink>
 </template>

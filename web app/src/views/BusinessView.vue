@@ -55,6 +55,37 @@ const shareUrl = computed(() =>
   profileShareUrl(shareSlug.value, undefined, { cardType: 'table' })
 )
 
+
+function filled(value) {
+  return !!String(value || '').trim()
+}
+
+/** Pretty contact text for the row (not the href). */
+function contactDetail(kind, value) {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  if (kind === 'phone' || kind === 'email') return raw
+  if (kind === 'whatsapp') {
+    if (/wa\.me\//i.test(raw)) {
+      return raw.replace(/^https?:\/\//i, '').split(/[?#]/)[0]
+    }
+    const digits = raw.replace(/[^\d]/g, '')
+    if (!digits) return raw
+    return 'wa.me/' + digits
+  }
+  if (kind === 'instagram' || kind === 'tiktok' || kind === 'x') {
+    let handle = raw
+    handle = handle.replace(/^https?:\/\/(www\.)?/i, '')
+    handle = handle.replace(/^(instagram\.com|tiktok\.com|x\.com|twitter\.com)\//i, '')
+    handle = handle.split(/[/?#]/)[0].replace(/^@/, '')
+    return handle ? '@' + handle : raw
+  }
+  if (kind === 'website' || kind === 'menu' || kind === 'review') {
+    return raw.replace(/^https?:\/\//i, '').replace(/\/$/, '')
+  }
+  return raw
+}
+
 function hrefOrEmpty(value, network) {
   if (actionsBlocked.value || !value) return ''
   if (network === 'phone') return 'tel:' + value
@@ -164,7 +195,7 @@ onUnmounted(() => {
       <div class="page-sheet rounded-t-3xl px-6 pt-0 pb-10 flex-1">
         <div class="flex flex-col items-center -mt-12 mb-6 text-center">
           <img :src="logo" class="biz-logo" alt="Business logo" />
-          <h1 class="mt-4 text-2xl font-bold tracking-tight max-w-[90%] truncate">{{ name }}</h1>
+          <h1 class="mt-4 text-2xl font-bold tracking-tight w-full max-w-[90%] block whitespace-nowrap overflow-hidden text-ellipsis" :title="name">{{ name }}</h1>
           <p class="text-gray-400 text-sm mt-1 max-w-[90%] truncate">{{ tagline }}</p>
           <p
             v-if="profile.address && !deleted"
@@ -223,16 +254,102 @@ onUnmounted(() => {
         </div>
 
         <section class="space-y-3" :class="{ 'opacity-40 pointer-events-none': disabled }">
-          <LinkRow icon="phone" label="Number" track-key="phone" :href="hrefOrEmpty(profile.phone, 'phone')" @track="onLinkTrack" />
-          <LinkRow icon="email" label="Email" track-key="email" :href="hrefOrEmpty(profile.email, 'email')" @track="onLinkTrack" />
-          <LinkRow icon="whatsapp" label="WhatsApp" track-key="whatsapp" :href="hrefOrEmpty(profile.whatsapp, 'whatsapp')" :external="true" @track="onLinkTrack" />
-          <LinkRow icon="website" label="Website" track-key="website" :href="hrefOrEmpty(profile.website, 'website')" :external="true" @track="onLinkTrack" />
-          <LinkRow icon="menu" label="Menu" track-key="menu" :href="hrefOrEmpty(profile.menuUrl, 'menu')" :external="true" @track="onLinkTrack" />
-          <LinkRow icon="review" label="Google review" track-key="review" :href="hrefOrEmpty(profile.googleReview, 'review')" :external="true" @track="onLinkTrack" />
-          <LinkRow icon="checkin" label="Events check-in" track-key="checkin" :href="checkInHref" :external="checkInExternal" @track="onLinkTrack" />
-          <LinkRow icon="feedback" label="Feedback" track-key="feedback" :href="feedbackHref" :external="feedbackExternal" @track="onLinkTrack" />
-          <LinkRow icon="instagram" label="Instagram" track-key="instagram" :href="hrefOrEmpty(profile.instagram, 'instagram')" :external="true" @track="onLinkTrack" />
-          <LinkRow icon="tiktok" label="TikTok" track-key="tiktok" :href="hrefOrEmpty(profile.tiktok, 'tiktok')" :external="true" @track="onLinkTrack" />
+          <LinkRow
+            v-if="filled(profile.phone)"
+            icon="phone"
+            label="Number"
+            track-key="phone"
+            :detail="contactDetail('phone', profile.phone)"
+            :href="hrefOrEmpty(profile.phone, 'phone')"
+            @track="onLinkTrack"
+          />
+          <LinkRow
+            v-if="filled(profile.email)"
+            icon="email"
+            label="Email"
+            track-key="email"
+            :detail="contactDetail('email', profile.email)"
+            :href="hrefOrEmpty(profile.email, 'email')"
+            @track="onLinkTrack"
+          />
+          <LinkRow
+            v-if="filled(profile.whatsapp)"
+            icon="whatsapp"
+            label="WhatsApp"
+            track-key="whatsapp"
+            :detail="contactDetail('whatsapp', profile.whatsapp)"
+            :href="hrefOrEmpty(profile.whatsapp, 'whatsapp')"
+            :external="true"
+            @track="onLinkTrack"
+          />
+          <LinkRow
+            v-if="filled(profile.website)"
+            icon="website"
+            label="Website"
+            track-key="website"
+            :detail="contactDetail('website', profile.website)"
+            :href="hrefOrEmpty(profile.website, 'website')"
+            :external="true"
+            @track="onLinkTrack"
+          />
+          <LinkRow
+            v-if="filled(profile.menuUrl)"
+            icon="menu"
+            label="Menu"
+            track-key="menu"
+            :detail="contactDetail('menu', profile.menuUrl)"
+            :href="hrefOrEmpty(profile.menuUrl, 'menu')"
+            :external="true"
+            @track="onLinkTrack"
+          />
+          <LinkRow
+            v-if="filled(profile.googleReview)"
+            icon="review"
+            label="Google review"
+            track-key="review"
+            :detail="contactDetail('review', profile.googleReview)"
+            :href="hrefOrEmpty(profile.googleReview, 'review')"
+            :external="true"
+            @track="onLinkTrack"
+          />
+          <LinkRow
+            icon="checkin"
+            label="Events check-in"
+            track-key="checkin"
+            detail="Check in to an event"
+            :href="checkInHref"
+            :external="checkInExternal"
+            @track="onLinkTrack"
+          />
+          <LinkRow
+            icon="feedback"
+            label="Feedback"
+            track-key="feedback"
+            detail="Leave feedback"
+            :href="feedbackHref"
+            :external="feedbackExternal"
+            @track="onLinkTrack"
+          />
+          <LinkRow
+            v-if="filled(profile.instagram)"
+            icon="instagram"
+            label="Instagram"
+            track-key="instagram"
+            :detail="contactDetail('instagram', profile.instagram)"
+            :href="hrefOrEmpty(profile.instagram, 'instagram')"
+            :external="true"
+            @track="onLinkTrack"
+          />
+          <LinkRow
+            v-if="filled(profile.tiktok)"
+            icon="tiktok"
+            label="TikTok"
+            track-key="tiktok"
+            :detail="contactDetail('tiktok', profile.tiktok)"
+            :href="hrefOrEmpty(profile.tiktok, 'tiktok')"
+            :external="true"
+            @track="onLinkTrack"
+          />
         </section>
 
         <div class="mt-10 flex flex-col items-center gap-1">

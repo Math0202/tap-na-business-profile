@@ -34,7 +34,6 @@ const useEmbed = ref(false)
 const deleted = computed(() => isProfileDeleted(profile.value))
 const disabled = computed(() => isProfileDisabled(profile.value))
 const name = computed(() => displayName(profile.value))
-const nameDisplay = computed(() => formatWrappedName(name.value))
 const title = computed(() => {
   if (deleted.value) return 'Create your profile'
   return String(profile.value.title || '').trim()
@@ -45,22 +44,6 @@ const actionsBlocked = computed(() => disabled.value || deleted.value)
 const hasVideo = computed(
   () => !deleted.value && !disabled.value && !!(profile.value.video && String(profile.value.video).trim())
 )
-
-/** Break long names onto two lines; hyphenate very long first/last names mid-word. */
-function formatWrappedName(full) {
-  const raw = String(full || '').trim()
-  if (!raw) return 'No profile'
-  const softBreak = (part, max = 12) => {
-    if (part.length <= max) return part
-    const mid = Math.ceil(part.length / 2)
-    return `${part.slice(0, mid)}-\n${part.slice(mid)}`
-  }
-  const parts = raw.split(/\s+/).filter(Boolean)
-  if (parts.length >= 2) {
-    return `${softBreak(parts[0])}\n${softBreak(parts.slice(1).join(' '))}`
-  }
-  return softBreak(parts[0], 14)
-}
 
 function filledHref(value, network) {
   if (deleted.value || !String(value || '').trim()) return ''
@@ -91,6 +74,27 @@ const shareText = computed(() => {
   const n = profile.value.name || 'this digital business card'
   return `Check out ${n}'s digital business card:`
 })
+
+function contactDetail(kind, value) {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  if (kind === 'phone' || kind === 'email') return raw
+  if (kind === 'whatsapp') {
+    if (/wa\.me\//i.test(raw)) return raw.replace(/^https?:\/\//i, '').split(/[?#]/)[0]
+    const digits = raw.replace(/[^\d]/g, '')
+    return digits ? 'wa.me/' + digits : raw
+  }
+  if (kind === 'instagram' || kind === 'tiktok' || kind === 'x') {
+    let handle = raw.replace(/^https?:\/\/(www\.)?/i, '')
+    handle = handle.replace(/^(instagram\.com|tiktok\.com|x\.com|twitter\.com)\//i, '')
+    handle = handle.split(/[/?#]/)[0].replace(/^@/, '')
+    return handle ? '@' + handle : raw
+  }
+  if (kind === 'website' || kind === 'linkedin' || kind === 'youtube') {
+    return raw.replace(/^https?:\/\//i, '').replace(/\/$/, '')
+  }
+  return raw
+}
 
 function linkHref(value, network) {
   if (disabled.value || !value) return ''
@@ -254,19 +258,19 @@ watch(() => route.path, () => {
               <img :src="avatar" alt="Portrait" class="w-full h-full object-cover" />
             </div>
             <div class="pb-2 flex-1 min-w-0">
-              <h1 class="text-xl font-bold tracking-tight whitespace-pre-line break-words leading-tight" :title="name">
-                {{ nameDisplay }}
+              <h1 class="text-xl font-bold tracking-tight whitespace-nowrap overflow-hidden text-ellipsis" :title="name">
+                {{ name }}
               </h1>
               <p
                 v-if="title"
-                class="text-gray-400 text-sm font-medium mt-0.5 break-words"
+                class="text-gray-400 text-sm font-medium mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis"
                 :title="title"
               >
                 {{ title }}
               </p>
               <p
                 v-if="company"
-                class="text-gray-500 text-sm mt-0.5 break-words"
+                class="text-gray-500 text-sm mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis"
                 :title="company"
               >
                 {{ company }}
@@ -329,15 +333,94 @@ watch(() => route.path, () => {
           class="px-6 space-y-3"
           :class="{ 'opacity-40 pointer-events-none': disabled }"
         >
-          <LinkRow v-if="filledHref(profile.phone, 'phone')" icon="phone" label="Number" track-key="phone" :href="filledHref(profile.phone, 'phone')" @track="onLinkTrack" />
-          <LinkRow v-if="filledHref(profile.email, 'email')" icon="email" label="Email" track-key="email" :href="filledHref(profile.email, 'email')" @track="onLinkTrack" />
-          <LinkRow v-if="filledHref(profile.whatsapp, 'whatsapp')" icon="whatsapp" label="WhatsApp" track-key="whatsapp" :href="filledHref(profile.whatsapp, 'whatsapp')" :external="true" @track="onLinkTrack" />
-          <LinkRow v-if="filledHref(profile.linkedin, 'linkedin')" icon="linkedin" label="LinkedIn" track-key="linkedin" :href="filledHref(profile.linkedin, 'linkedin')" :external="true" @track="onLinkTrack" />
-          <LinkRow v-if="filledHref(profile.youtube, 'youtube')" icon="youtube" label="YouTube" track-key="youtube" :href="filledHref(profile.youtube, 'youtube')" :external="true" @track="onLinkTrack" />
-          <LinkRow v-if="filledHref(profile.x, 'x')" icon="x" label="X" track-key="x" :href="filledHref(profile.x, 'x')" :external="true" @track="onLinkTrack" />
-          <LinkRow v-if="filledHref(profile.instagram, 'instagram')" icon="instagram" label="Instagram" track-key="instagram" :href="filledHref(profile.instagram, 'instagram')" :external="true" @track="onLinkTrack" />
-          <LinkRow v-if="filledHref(profile.tiktok, 'tiktok')" icon="tiktok" label="TikTok" track-key="tiktok" :href="filledHref(profile.tiktok, 'tiktok')" :external="true" @track="onLinkTrack" />
-          <LinkRow v-if="filledHref(profile.website, 'website')" icon="website" label="Website" track-key="website" :href="filledHref(profile.website, 'website')" :external="true" @track="onLinkTrack" />
+          <LinkRow
+            v-if="filledHref(profile.phone, 'phone')"
+            icon="phone"
+            label="Number"
+            track-key="phone"
+            :detail="contactDetail('phone', profile.phone)"
+            :href="filledHref(profile.phone, 'phone')"
+            @track="onLinkTrack"
+          />
+          <LinkRow
+            v-if="filledHref(profile.email, 'email')"
+            icon="email"
+            label="Email"
+            track-key="email"
+            :detail="contactDetail('email', profile.email)"
+            :href="filledHref(profile.email, 'email')"
+            @track="onLinkTrack"
+          />
+          <LinkRow
+            v-if="filledHref(profile.whatsapp, 'whatsapp')"
+            icon="whatsapp"
+            label="WhatsApp"
+            track-key="whatsapp"
+            :detail="contactDetail('whatsapp', profile.whatsapp)"
+            :href="filledHref(profile.whatsapp, 'whatsapp')"
+            :external="true"
+            @track="onLinkTrack"
+          />
+          <LinkRow
+            v-if="filledHref(profile.linkedin, 'linkedin')"
+            icon="linkedin"
+            label="LinkedIn"
+            track-key="linkedin"
+            :detail="contactDetail('linkedin', profile.linkedin)"
+            :href="filledHref(profile.linkedin, 'linkedin')"
+            :external="true"
+            @track="onLinkTrack"
+          />
+          <LinkRow
+            v-if="filledHref(profile.youtube, 'youtube')"
+            icon="youtube"
+            label="YouTube"
+            track-key="youtube"
+            :detail="contactDetail('youtube', profile.youtube)"
+            :href="filledHref(profile.youtube, 'youtube')"
+            :external="true"
+            @track="onLinkTrack"
+          />
+          <LinkRow
+            v-if="filledHref(profile.x, 'x')"
+            icon="x"
+            label="X"
+            track-key="x"
+            :detail="contactDetail('x', profile.x)"
+            :href="filledHref(profile.x, 'x')"
+            :external="true"
+            @track="onLinkTrack"
+          />
+          <LinkRow
+            v-if="filledHref(profile.instagram, 'instagram')"
+            icon="instagram"
+            label="Instagram"
+            track-key="instagram"
+            :detail="contactDetail('instagram', profile.instagram)"
+            :href="filledHref(profile.instagram, 'instagram')"
+            :external="true"
+            @track="onLinkTrack"
+          />
+          <LinkRow
+            v-if="filledHref(profile.tiktok, 'tiktok')"
+            icon="tiktok"
+            label="TikTok"
+            track-key="tiktok"
+            :detail="contactDetail('tiktok', profile.tiktok)"
+            :href="filledHref(profile.tiktok, 'tiktok')"
+            :external="true"
+            @track="onLinkTrack"
+          />
+          <LinkRow
+            v-if="filledHref(profile.website, 'website')"
+            icon="website"
+            label="Website"
+            track-key="website"
+            :detail="contactDetail('website', profile.website)"
+            :href="filledHref(profile.website, 'website')"
+            :external="true"
+            @track="onLinkTrack"
+          />
         </section>
 
         <div class="px-6 mt-8 mb-4">
