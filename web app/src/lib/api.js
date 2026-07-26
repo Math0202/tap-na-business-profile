@@ -69,6 +69,14 @@ export function apiLogCardOpen(slug, via = '') {
   })
 }
 
+/** Log a click / share / other profile event */
+export function apiLogCardEvent(slug, action, via = '') {
+  return request(`/api/cards/${encodeURIComponent(slug)}/event`, {
+    method: 'POST',
+    body: { action, via }
+  })
+}
+
 /** Link a card to a profile */
 export function apiClaimCard(slug, { profileId, kind } = {}) {
   return request(`/api/cards/${encodeURIComponent(slug)}/claim`, {
@@ -155,6 +163,13 @@ export function apiShopProducts() {
 /** All profiles + all cards (slugs) straight from the backend */
 export function apiAdminOverview() {
   return request('/api/admin/overview', { timeoutMs: 12000 })
+}
+
+/** Live activity feed for one profile (opens, clicks, shares, device, location) */
+export function apiAdminProfileActivities(profileId) {
+  return request(`/api/admin/profiles/${encodeURIComponent(profileId)}/activities`, {
+    timeoutMs: 15000
+  })
 }
 
 

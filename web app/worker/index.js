@@ -51,6 +51,48 @@ function randomSlug(len = 6) {
   return out
 }
 
+
+function requestGeo(request) {
+  const cf = request.cf || {}
+  return {
+    country: String(cf.country || '').trim(),
+    city: String(cf.city || '').trim(),
+    region: String(cf.region || cf.regionCode || '').trim()
+  }
+}
+
+async function recordCardActivity(env, request, { slug, channel = 'nfc', action = 'open' }) {
+  const code = String(slug || '').trim()
+  if (!code) return null
+  const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(code)}&select=id,profile_id`)
+  const card = cards?.[0]
+  if (!card) return null
+  const ua = request.headers.get('User-Agent') || ''
+  const { device, browser } = parseUa(ua)
+  const geo = requestGeo(request)
+  const ch = channel === 'qr' ? 'qr' : channel === 'other' ? 'other' : 'nfc'
+  const act = String(action || 'open').trim().slice(0, 64) || 'open'
+  const openId = uid('open')
+  await sb(env, 'card_opens', {
+    method: 'POST',
+    body: {
+      id: openId,
+      card_id: card.id,
+      slug: code,
+      channel: ch,
+      action: act,
+      user_agent: ua.slice(0, 400),
+      device_type: device,
+      browser,
+      ip_country: geo.country,
+      ip_city: geo.city,
+      ip_region: geo.region
+    },
+    prefer: 'return=minimal'
+  })
+  return { openId, channel: ch, action: act, device, browser, ...geo, profileId: card.profile_id || '' }
+}
+
 function parseUa(ua = '') {
   const s = String(ua)
   let device = 'desktop'
@@ -372,30 +414,28 @@ async function handleApi(request, env, url) {
   const openMatch = pathname.match(/^\/api\/cards\/([^/]+)\/open$/)
   if (openMatch && method === 'POST') {
     const slug = decodeURIComponent(openMatch[1])
-    const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&select=id`)
-    const card = cards?.[0]
-    if (!card) return bad('Card not found', 404)
     const body = await readJson(request)
     const via = String(body?.via || url.searchParams.get('via') || '').toLowerCase()
     const channel = via === 'qr' ? 'qr' : 'nfc'
-    const ua = request.headers.get('User-Agent') || ''
-    const { device, browser } = parseUa(ua)
-    const openId = uid('open')
-    await sb(env, 'card_opens', {
-      method: 'POST',
-      body: {
-        id: openId,
-        card_id: card.id,
-        slug,
-        channel,
-        user_agent: ua.slice(0, 400),
-        device_type: device,
-        browser,
-        ip_country: request.cf?.country || ''
-      },
-      prefer: 'return=minimal'
-    })
-    return json({ ok: true, openId, channel, device, browser })
+    const recorded = await recordCardActivity(env, request, { slug, channel, action: 'open' })
+    if (!recorded) return bad('Card not found', 404)
+    return json({ ok: true, ...recorded })
+  }
+
+  const eventMatch = pathname.match(/^\/api\/cards\/([^/]+)\/event$/)
+  if (eventMatch && method === 'POST') {
+    const slug = decodeURIComponent(eventMatch[1])
+    const body = await readJson(request)
+    const actionRaw = String(body?.action || body?.type || 'click').trim().toLowerCase()
+    const action = actionRaw.replace(/[^a-z0-9_.:-]/g, '_').slice(0, 64) || 'click'
+    const via = String(body?.via || url.searchParams.get('via') || '').toLowerCase()
+    let channel = 'other'
+    if (via === 'qr') channel = 'qr'
+    else if (via === 'nfc') channel = 'nfc'
+    else if (action.startsWith('share')) channel = 'other'
+    const recorded = await recordCardActivity(env, request, { slug, channel, action })
+    if (!recorded) return bad('Card not found', 404)
+    return json({ ok: true, ...recorded })
   }
 
   const claimMatch = pathname.match(/^\/api\/cards\/([^/]+)\/claim$/)
@@ -670,6 +710,81 @@ async function handleApi(request, env, url) {
     })
   }
 
+
+  const adminActivitiesMatch = pathname.match(/^\/api\/admin\/profiles\/([^/]+)\/activities$/)
+  if (adminActivitiesMatch && method === 'GET') {
+    const profileId = decodeURIComponent(adminActivitiesMatch[1])
+    const profiles = await sb(env, `profiles?id=eq.${encodeURIComponent(profileId)}&select=*`)
+    const profile = profiles?.[0]
+    if (!profile) return bad('Profile not found', 404)
+    const cards = await sb(
+      env,
+      `cards?profile_id=eq.${encodeURIComponent(profileId)}&select=id,slug,kind,status`
+    )
+    const slugs = (cards || []).map((c) => c.slug).filter(Boolean)
+    let opens = []
+    if (slugs.length) {
+      const orFilter = slugs.map((s) => `slug.eq.${encodeURIComponent(s)}`).join(',')
+      opens = await sb(
+        env,
+        `card_opens?or=(${orFilter})&select=id,slug,channel,action,user_agent,device_type,browser,ip_country,ip_city,ip_region,opened_at&order=opened_at.desc&limit=500`
+      )
+    }
+    const activities = (opens || []).map((o) => ({
+      id: o.id,
+      slug: o.slug || '',
+      channel: o.channel || 'other',
+      action: o.action || 'open',
+      device: o.device_type || '',
+      browser: o.browser || '',
+      country: o.ip_country || '',
+      city: o.ip_city || '',
+      region: o.ip_region || '',
+      userAgent: o.user_agent || '',
+      at: o.opened_at
+    }))
+    const countBy = (key) => {
+      const map = {}
+      for (const a of activities) {
+        const k = a[key] || 'unknown'
+        map[k] = (map[k] || 0) + 1
+      }
+      return Object.entries(map)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+    }
+    const opensCount = activities.filter((a) => a.action === 'open').length
+    const sharesCount = activities.filter((a) => String(a.action).startsWith('share')).length
+    const clicksCount = activities.filter((a) => String(a.action).startsWith('click')).length
+    return json({
+      ok: true,
+      profile: {
+        id: profile.id,
+        cardType: profile.card_type === 'table' ? 'table' : 'personal',
+        name: profile.name || '',
+        company: profile.company || '',
+        email: profile.email || '',
+        avatar: profile.avatar || '',
+        logo: profile.logo || '',
+        slugs: (cards || []).map((c) => ({ slug: c.slug, kind: c.kind, status: c.status }))
+      },
+      stats: {
+        total: activities.length,
+        opens: opensCount,
+        shares: sharesCount,
+        clicks: clicksCount,
+        byChannel: countBy('channel'),
+        byDevice: countBy('device'),
+        byBrowser: countBy('browser'),
+        byCountry: countBy('country'),
+        byAction: countBy('action'),
+        byCity: countBy('city')
+      },
+      activities
+    })
+  }
+
+
   if (pathname === '/api/upload' && method === 'POST') {
     const profile = await getSessionProfile(env, request)
     if (!profile) return bad('Unauthorized', 401)
@@ -920,27 +1035,9 @@ export default {
       }
 
       try {
-        const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&select=id`)
-        const card = cards?.[0]
-        if (card) {
-          const via = String(url.searchParams.get('via') || '').toLowerCase()
-          const channel = via === 'qr' ? 'qr' : 'nfc'
-          const { device, browser } = parseUa(ua)
-          await sb(env, 'card_opens', {
-            method: 'POST',
-            body: {
-              id: uid('open'),
-              card_id: card.id,
-              slug,
-              channel,
-              user_agent: ua.slice(0, 400),
-              device_type: device,
-              browser,
-              ip_country: request.cf?.country || ''
-            },
-            prefer: 'return=minimal'
-          })
-        }
+        const via = String(url.searchParams.get('via') || '').toLowerCase()
+        const channel = via === 'qr' ? 'qr' : 'nfc'
+        await recordCardActivity(env, request, { slug, channel, action: 'open' })
       } catch {
         /* non-fatal */
       }

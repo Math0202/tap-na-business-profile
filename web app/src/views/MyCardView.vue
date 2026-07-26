@@ -19,6 +19,7 @@ import {
 import { downloadVcard, profileShareUrl, youtubeEmbedUrl } from '../lib/shareHelpers'
 import { preferredShareSlug } from '../lib/cardLinkStore'
 import { trackVisit, trackShare, trackClick, LOCAL_ID } from '../lib/adminStore'
+import { apiLogCardEvent } from '../lib/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -122,6 +123,7 @@ function openShare() {
     return
   }
   trackClick(LOCAL_ID, 'share_open', 'Share / QR button')
+  logRemote('share:open')
   shareOpen.value = true
 }
 
@@ -131,6 +133,7 @@ function downloadQr() {
     return
   }
   trackClick(LOCAL_ID, 'download_qr', 'Download QR')
+  logRemote('click:download_qr')
   shareOpen.value = true
   setTimeout(() => shareModal.value?.downloadQr(), 80)
 }
@@ -141,6 +144,7 @@ function saveContact() {
     return
   }
   trackClick(LOCAL_ID, 'save_contact', 'Save contact')
+  logRemote('click:save_contact')
   const parts = profile.value.name.trim().split(/\s+/)
   const first = parts[0] || ''
   const last = parts.slice(1).join(' ') || ''
@@ -162,6 +166,7 @@ function saveContact() {
 function openVideo() {
   if (!profile.value.video || disabled.value || deleted.value) return
   trackClick(LOCAL_ID, 'play_video', 'Play video')
+  logRemote('click:play_video')
   const src = String(profile.value.video).trim()
   const yt = youtubeEmbedUrl(src)
   if (yt) {
@@ -177,21 +182,40 @@ function openVideo() {
   videoOpen.value = true
 }
 
+
+function eventVia() {
+  try {
+    const via = String(route.query.via || '').toLowerCase()
+    if (via === 'qr' || via === 'nfc') return via
+  } catch {}
+  return ''
+}
+
+function logRemote(action) {
+  const slug = shareSlug.value
+  if (!slug) return
+  apiLogCardEvent(slug, action, eventVia()).catch?.(() => {})
+}
+
 function onLinkTrack(key, label) {
   trackClick(LOCAL_ID, key, label)
+  logRemote('click:' + (key || 'link'))
 }
 
 function onShareChannel(channel) {
   trackShare(LOCAL_ID, channel)
+  logRemote('share:' + (channel || 'unknown'))
 }
 
 function onCopyLink() {
   trackShare(LOCAL_ID, 'copy link')
   trackClick(LOCAL_ID, 'copy_link', 'Copy link')
+  logRemote('click:copy_link')
 }
 
 function onQrDownload() {
   trackClick(LOCAL_ID, 'download_qr', 'Download QR')
+  logRemote('click:download_qr')
 }
 
 function closeVideo() {

@@ -86,6 +86,11 @@ const routes = [
     component: () => import('../views/AdminProfileDetailView.vue')
   },
   {
+    path: '/admin/profiles/:id/activities',
+    name: 'admin-profile-activities',
+    component: () => import('../views/AdminProfileActivitiesView.vue')
+  },
+  {
     path: '/admin/slugs',
     name: 'admin-slugs',
     component: () => import('../views/AdminSlugsView.vue')

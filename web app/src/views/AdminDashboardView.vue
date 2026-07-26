@@ -263,7 +263,7 @@ onMounted(() => {
             </p>
           </div>
 
-          <div class="mt-auto w-full pt-1">
+          <div class="mt-auto w-full pt-1 space-y-1.5">
             <RouterLink
               v-if="viewPath(p)"
               :to="viewPath(p)"
@@ -278,6 +278,20 @@ onMounted(() => {
             >
               No page
             </span>
+            <RouterLink
+              :to="`/admin/profiles/${encodeURIComponent(p.id)}/activities`"
+              class="inline-flex items-center gap-1 w-full justify-center px-2 py-2 rounded-full border border-[var(--border)] text-[10px] lg:text-xs font-semibold no-underline hover:text-white transition-colors"
+            >
+              <span class="material-symbols-outlined text-[16px]">monitoring</span>
+              Activity
+            </RouterLink>
+            <RouterLink
+              :to="`/admin/profiles/${encodeURIComponent(p.id)}`"
+              class="inline-flex items-center gap-1 w-full justify-center px-2 py-2 rounded-full border border-[var(--border)] text-[10px] lg:text-xs font-semibold no-underline hover:text-white transition-colors"
+            >
+              <span class="material-symbols-outlined text-[16px]">edit</span>
+              Edit
+            </RouterLink>
           </div>
         </article>
       </section>
