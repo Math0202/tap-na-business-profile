@@ -3,19 +3,23 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { isLoggedIn, loadProfile, isTableBusiness } from '../lib/profileStore'
 import { hideFloatingChrome } from '../lib/uiChrome'
+import { isStaffAdmin, isStaffLoggedIn, isStaffSales } from '../lib/staffAuth'
 
 const route = useRoute()
 const router = useRouter()
 const open = ref(false)
 const loggedIn = ref(isLoggedIn())
 const isTable = ref(isTableBusiness(loadProfile()))
+const staffIn = ref(isStaffLoggedIn())
+const staffAdmin = ref(isStaffAdmin())
+const staffSales = ref(isStaffSales())
 
 const isHome = computed(() => route.path === '/' || route.path === '/me' || route.path === '/business')
 const isShopHome = computed(() => route.path === '/' || route.path === '/cart')
 const isBusiness = computed(() => route.path === '/business')
 const isAdminArea = computed(() => route.path.startsWith('/admin'))
 const isLogin = computed(
-  () => route.path === '/login' || route.path === '/shop/login'
+  () => route.path === '/login' || route.path === '/shop/login' || route.path === '/admin/login'
 )
 const hideChrome = computed(
   () =>
@@ -37,6 +41,9 @@ const signupIcon = computed(() => (isBusiness.value ? 'storefront' : 'person_add
 function refreshAuth() {
   loggedIn.value = isLoggedIn()
   isTable.value = isTableBusiness(loadProfile())
+  staffIn.value = isStaffLoggedIn()
+  staffAdmin.value = isStaffAdmin()
+  staffSales.value = isStaffSales()
 }
 
 function setOpen(value) {
@@ -137,21 +144,25 @@ onUnmounted(() => {
           <span class="material-symbols-outlined">login</span>
           Login
         </RouterLink>
-        <RouterLink v-if="isBusiness || isAdminArea" to="/admin" role="menuitem" @click="setOpen(false)">
+        <RouterLink v-if="staffAdmin" to="/admin" role="menuitem" @click="setOpen(false)">
           <span class="material-symbols-outlined">dashboard</span>
           Admin
         </RouterLink>
-        <RouterLink v-if="isBusiness || isAdminArea" to="/admin/slugs" role="menuitem" @click="setOpen(false)">
+        <RouterLink v-if="staffAdmin" to="/admin/slugs" role="menuitem" @click="setOpen(false)">
           <span class="material-symbols-outlined">qr_code_2</span>
           Slugs
         </RouterLink>
-        <RouterLink v-if="isBusiness || isAdminArea" to="/admin/sales" role="menuitem" @click="setOpen(false)">
+        <RouterLink v-if="staffAdmin || staffSales" to="/admin/sales" role="menuitem" @click="setOpen(false)">
           <span class="material-symbols-outlined">point_of_sale</span>
           Sales
         </RouterLink>
-        <RouterLink v-if="isBusiness || isAdminArea" to="/admin/shop" role="menuitem" @click="setOpen(false)">
+        <RouterLink v-if="staffAdmin" to="/admin/shop" role="menuitem" @click="setOpen(false)">
           <span class="material-symbols-outlined">storefront</span>
           Shop
+        </RouterLink>
+        <RouterLink v-if="!staffIn" to="/admin/login" role="menuitem" @click="setOpen(false)">
+          <span class="material-symbols-outlined">admin_panel_settings</span>
+          Staff login
         </RouterLink>
       </div>
       <button

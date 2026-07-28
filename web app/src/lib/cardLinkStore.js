@@ -143,8 +143,25 @@ export function listCardsForProfile(profileId) {
   return listCards().filter((c) => c.profileId === profileId)
 }
 
+function saleLineItems(sale) {
+  if (Array.isArray(sale?.lines) && sale.lines.length) {
+    return sale.lines.map((line) => ({
+      productId: line.productId || '',
+      productName: line.productName || '',
+      quantity: Math.max(0, Number(line.quantity) || 0)
+    }))
+  }
+  return [
+    {
+      productId: sale?.productId || '',
+      productName: sale?.productName || '',
+      quantity: Math.max(0, Number(sale?.quantity) || 0)
+    }
+  ]
+}
+
 export function cardsNeededForSale(sale) {
-  const qty = Math.max(0, Number(sale?.quantity) || 0)
+  const qty = saleLineItems(sale).reduce((sum, line) => sum + line.quantity, 0)
   const existing = listCardsForSale(sale?.id).length
   return Math.max(0, qty - existing)
 }
@@ -170,22 +187,42 @@ function allocateUniqueSerial(existing) {
 }
 
 /**
- * Create physical card units for a sale line (one serial per quantity unit).
+ * Create physical card units for a sale (one serial per quantity unit, per product line).
  */
 export function provisionCardsForSale(sale, { count } = {}) {
   if (!sale?.id) return []
-  const kind = kindFromProductId(sale.productId)
-  const needed = count != null ? Math.max(0, Number(count)) : cardsNeededForSale(sale)
-  if (needed <= 0) return listCardsForSale(sale.id)
+  const lines = saleLineItems(sale)
 
-  return provisionSlugs({
-    count: needed,
-    kind,
-    productId: sale.productId,
-    productName: sale.productName,
-    saleId: sale.id,
-    customerName: sale.customerName || ''
-  })
+  if (count != null) {
+    const needed = Math.max(0, Number(count))
+    if (needed <= 0) return listCardsForSale(sale.id)
+    const first = lines[0] || {}
+    return provisionSlugs({
+      count: needed,
+      kind: kindFromProductId(first.productId || sale.productId),
+      productId: first.productId || sale.productId,
+      productName: first.productName || sale.productName,
+      saleId: sale.id,
+      customerName: sale.customerName || ''
+    })
+  }
+
+  const existing = listCardsForSale(sale.id)
+  for (const line of lines) {
+    if (line.quantity <= 0) continue
+    const have = existing.filter((c) => c.productId === line.productId).length
+    const need = Math.max(0, line.quantity - have)
+    if (need <= 0) continue
+    provisionSlugs({
+      count: need,
+      kind: kindFromProductId(line.productId),
+      productId: line.productId,
+      productName: line.productName,
+      saleId: sale.id,
+      customerName: sale.customerName || ''
+    })
+  }
+  return listCardsForSale(sale.id)
 }
 
 /**

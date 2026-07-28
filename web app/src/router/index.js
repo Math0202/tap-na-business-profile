@@ -7,6 +7,11 @@ import {
   hasCredentials,
   requireLogin
 } from '../lib/profileStore'
+import {
+  isStaffLoggedIn,
+  isStaffSales,
+  staffCanAccessAdminPath
+} from '../lib/staffAuth'
 
 const routes = [
   {
@@ -76,29 +81,45 @@ const routes = [
     component: () => import('../views/FeedbackView.vue')
   },
   {
+    path: '/menu',
+    name: 'menu',
+    component: () => import('../views/MenuView.vue')
+  },
+  {
+    path: '/admin/login',
+    name: 'admin-login',
+    component: () => import('../views/AdminLoginView.vue'),
+    meta: { staffPublic: true }
+  },
+  {
     path: '/admin',
     name: 'admin',
-    component: () => import('../views/AdminDashboardView.vue')
+    component: () => import('../views/AdminDashboardView.vue'),
+    meta: { requiresStaff: true, staffRoles: ['admin'] }
   },
   {
     path: '/admin/profiles/:id',
     name: 'admin-profile',
-    component: () => import('../views/AdminProfileDetailView.vue')
+    component: () => import('../views/AdminProfileDetailView.vue'),
+    meta: { requiresStaff: true, staffRoles: ['admin'] }
   },
   {
     path: '/admin/profiles/:id/activities',
     name: 'admin-profile-activities',
-    component: () => import('../views/AdminProfileActivitiesView.vue')
+    component: () => import('../views/AdminProfileActivitiesView.vue'),
+    meta: { requiresStaff: true, staffRoles: ['admin'] }
   },
   {
     path: '/admin/slugs',
     name: 'admin-slugs',
-    component: () => import('../views/AdminSlugsView.vue')
+    component: () => import('../views/AdminSlugsView.vue'),
+    meta: { requiresStaff: true, staffRoles: ['admin'] }
   },
   {
     path: '/admin/sales',
     name: 'admin-sales',
     component: () => import('../views/SalesModuleView.vue'),
+    meta: { requiresStaff: true, staffRoles: ['admin', 'sales'] },
     beforeEnter: (to) => {
       if (to.query.tab === 'slugs') return '/admin/slugs'
     }
@@ -106,7 +127,8 @@ const routes = [
   {
     path: '/admin/shop',
     name: 'admin-shop',
-    component: () => import('../views/AdminShopView.vue')
+    component: () => import('../views/AdminShopView.vue'),
+    meta: { requiresStaff: true, staffRoles: ['admin'] }
   },
   {
     path: '/venue',
@@ -143,6 +165,22 @@ router.beforeEach((to) => {
 
   if (to.path === '/me' && isTableBusiness(profile) && !isProfileDeleted(profile)) {
     return '/business'
+  }
+
+  // Staff area — home and /c/:serial stay public
+  if (to.path.startsWith('/admin') && !to.meta.staffPublic) {
+    if (!isStaffLoggedIn()) {
+      return { path: '/admin/login', query: { next: to.fullPath } }
+    }
+    if (!staffCanAccessAdminPath(to.path)) {
+      return isStaffSales() ? '/admin/sales' : '/admin/login'
+    }
+    if (to.meta.staffRoles?.length) {
+      const role = isStaffSales() ? 'sales' : 'admin'
+      if (!to.meta.staffRoles.includes(role)) {
+        return role === 'sales' ? '/admin/sales' : '/admin'
+      }
+    }
   }
 
   if (to.meta.requiresAuth) {

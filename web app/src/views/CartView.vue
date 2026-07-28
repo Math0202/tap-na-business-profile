@@ -1,4 +1,5 @@
 <script setup>
+/** Cart storefront — prices in N$ */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import ShopHeader from '../components/ShopHeader.vue'
@@ -14,6 +15,7 @@ import {
   refreshCart,
 } from '../lib/cartStore'
 import { loadProfile } from '../lib/profileStore'
+import { apiShopOrderQuote } from '../lib/api'
 
 const router = useRouter()
 const menuOpen = ref(false)
@@ -23,7 +25,9 @@ const checkoutOpen = ref(false)
 const customerName = ref('')
 const customerEmail = ref('')
 const customerPhone = ref('')
+const customerTown = ref('')
 const checkoutError = ref('')
+const submitting = ref(false)
 let toastTimer = null
 
 const lines = cartLines
@@ -77,12 +81,13 @@ function closeCheckout() {
   checkoutError.value = ''
 }
 
-function placeOrder() {
-  if (isEmpty.value) return
+async function placeOrder() {
+  if (isEmpty.value || submitting.value) return
 
   const name = customerName.value.trim()
   const email = customerEmail.value.trim()
   const phone = customerPhone.value.trim()
+  const town = customerTown.value.trim()
 
   if (!name) {
     checkoutError.value = 'Please enter your full name.'
@@ -96,33 +101,38 @@ function placeOrder() {
     checkoutError.value = 'Please enter a valid cellphone number.'
     return
   }
+  if (!town) {
+    checkoutError.value = 'Please enter your town.'
+    return
+  }
 
   checkoutError.value = ''
-  const note = checkoutNote.value.trim()
-  const rows = lines.value
-    .map(
-      (l) =>
-        `- ${l.name} × ${l.qty} @ ${formatPrice(l.price)} = ${formatPrice(l.lineTotal)}`
-    )
-    .join('\n')
-  const subject = encodeURIComponent(`tap-na order (${count.value} items)`)
-  const body = encodeURIComponent(
-    'Hi tap-na,\n\nI would like to place this order:\n\n' +
-      rows +
-      '\n\nSubtotal: ' +
-      formatPrice(subtotal.value) +
-      '\n\nFull name: ' +
-      name +
-      '\nEmail: ' +
-      email +
-      '\nCellphone: ' +
-      phone +
-      (note ? '\n\nNotes:\n' + note : '') +
-      '\n\nThanks!'
-  )
-  checkoutOpen.value = false
-  window.location.href = 'mailto:orders@tap-na.com?subject=' + subject + '&body=' + body
-  showToast('Opening mail to complete order')
+  submitting.value = true
+  try {
+    const res = await apiShopOrderQuote({
+      name,
+      email,
+      phone,
+      town,
+      note: checkoutNote.value.trim(),
+      items: lines.value.map((l) => ({
+        id: l.id,
+        name: l.name,
+        qty: l.qty,
+        price: l.price
+      }))
+    })
+    if (!res.ok) {
+      checkoutError.value = res.error || 'Could not send quote. Please try again.'
+      return
+    }
+    clearCart()
+    checkoutOpen.value = false
+    checkoutNote.value = ''
+    showToast('Quote emailed to you and auckmund@gmail.com')
+  } finally {
+    submitting.value = false
+  }
 }
 </script>
 
@@ -314,10 +324,10 @@ function placeOrder() {
         <div class="flex items-start justify-between gap-4">
           <div>
             <h2 id="checkout-title" class="font-headline-lg-mobile text-[22px] font-medium">
-              Your details
+              Request a quote
             </h2>
             <p class="text-on-surface-variant text-sm mt-1">
-              We need these before opening your order email.
+              We’ll email your order quote to you and to auckmund@gmail.com.
             </p>
           </div>
           <button
@@ -370,14 +380,28 @@ function placeOrder() {
               placeholder="+264 81 000 0000"
             >
           </label>
+          <label class="flex flex-col gap-1.5">
+            <span class="font-label-caps text-[10px] uppercase tracking-[0.2em] text-ink-muted">
+              Town
+            </span>
+            <input
+              v-model="customerTown"
+              type="text"
+              autocomplete="address-level2"
+              required
+              class="w-full bg-surface-container-lowest border border-border-subtle rounded-lg px-3 py-3 text-sm text-on-surface focus:outline-none focus:border-primary"
+              placeholder="Windhoek"
+            >
+          </label>
 
           <p v-if="checkoutError" class="text-sm text-red-600 min-h-[1.25rem]">{{ checkoutError }}</p>
 
           <button
             type="submit"
-            class="w-full bg-primary text-on-primary py-4 font-button-text text-button-text uppercase tracking-widest hover:opacity-90 transition-opacity"
+            class="w-full bg-primary text-on-primary py-4 font-button-text text-button-text uppercase tracking-widest hover:opacity-90 transition-opacity disabled:opacity-60"
+            :disabled="submitting"
           >
-            Continue to Email
+            {{ submitting ? 'Sending quote…' : 'Email quote' }}
           </button>
         </form>
       </div>

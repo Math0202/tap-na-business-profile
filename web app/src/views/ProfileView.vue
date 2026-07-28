@@ -14,12 +14,18 @@ import {
   isProfileDeleted,
   normalizeSocialFields,
   resolveSocialUrl,
-  publicPage
+  publicPage,
+  normalizeMenuImages
 } from '../lib/profileStore'
 import { listCardsForProfile, preferredShareSlug, kindLabel } from '../lib/cardLinkStore'
 import { LOCAL_ID } from '../lib/adminStore'
 import { profileShareUrl } from '../lib/shareHelpers'
-import { apiUploadAsset, apiUpdateMe, ensureApiSession } from '../lib/api'
+import { apiUploadAsset, apiUpdateMe, ensureApiSession, getApiToken } from '../lib/api'
+import {
+  BUSINESS_LINK_DEFS,
+  normalizeLinkOrder,
+  moveLinkOrder
+} from '../lib/businessLinks'
 
 const router = useRouter()
 
@@ -32,9 +38,21 @@ const phone = ref('')
 const email = ref('')
 const address = ref('')
 const menuUrl = ref('')
+const menuPdf = ref('')
+const menuImages = ref([])
+const menuUploading = ref(false)
+const menuFeedback = ref('')
+const menuFeedbackClass = ref('text-xs text-gray-500 min-h-[1rem]')
+const menuPdfInput = ref(null)
+const menuImageInput = ref(null)
 const googleReview = ref('')
 const checkInUrl = ref('')
 const feedbackUrl = ref('')
+const linkOrder = ref(normalizeLinkOrder([]))
+const showPhone = ref(false)
+const showEmail = ref(false)
+const showCheckin = ref(false)
+const showFeedback = ref(false)
 const whatsapp = ref('')
 const linkedin = ref('')
 const youtube = ref('')
@@ -106,9 +124,16 @@ function fillForm(profile) {
     email.value = ''
     address.value = ''
     menuUrl.value = ''
+    menuPdf.value = ''
+    menuImages.value = []
     googleReview.value = ''
     checkInUrl.value = ''
     feedbackUrl.value = ''
+    linkOrder.value = normalizeLinkOrder([])
+    showPhone.value = false
+    showEmail.value = false
+    showCheckin.value = false
+    showFeedback.value = false
     whatsapp.value = ''
     linkedin.value = ''
     youtube.value = ''
@@ -132,9 +157,16 @@ function fillForm(profile) {
     email.value = profile.email || ''
     address.value = profile.address || ''
     menuUrl.value = profile.menuUrl || ''
+    menuPdf.value = profile.menuPdf || ''
+    menuImages.value = normalizeMenuImages(profile.menuImages)
     googleReview.value = profile.googleReview || ''
     checkInUrl.value = profile.checkInUrl || ''
     feedbackUrl.value = profile.feedbackUrl || ''
+    linkOrder.value = normalizeLinkOrder(profile.linkOrder)
+    showPhone.value = !!profile.showPhone
+    showEmail.value = !!profile.showEmail
+    showCheckin.value = !!profile.showCheckin
+    showFeedback.value = !!profile.showFeedback
     whatsapp.value = profile.whatsapp || ''
     linkedin.value = profile.linkedin || ''
     youtube.value = profile.youtube || ''
@@ -194,16 +226,36 @@ async function onAvatarChange(e) {
   try {
     await ensureApiSession()
     let uploaded = await apiUploadAsset(file, { kind })
-    // Token may have gone stale — re-auth once and retry before giving up
-    if (!uploaded.ok && uploaded.status === 401 && (await ensureApiSession())) {
+    // Token may have gone stale — force re-auth once and retry
+    if (!uploaded.ok && uploaded.status === 401 && (await ensureApiSession({ force: true }))) {
       uploaded = await apiUploadAsset(file, { kind })
     }
     if (uploaded.ok && uploaded.data?.url) {
-      if (isTable.value) logoData.value = uploaded.data.url
-      else avatarData.value = uploaded.data.url
+      const url = uploaded.data.url
+      if (isTable.value) logoData.value = url
+      else avatarData.value = url
+
+      // Persist to local + Supabase immediately so card taps see the logo
+      const patch = isTable.value
+        ? { logo: url, cardType: 'table' }
+        : { avatar: url, cardType: cardType.value }
+      const saved = saveProfile(patch)
+      await ensureApiSession()
+      const sync = await apiUpdateMe({
+        cardType: saved.cardType,
+        avatar: saved.avatar,
+        logo: saved.logo
+      })
+      if (!sync.ok) {
+        alert(
+          sync.error
+            ? `Image uploaded, but profile sync failed (${sync.error}). Tap Save Profile.`
+            : 'Image uploaded, but profile sync failed. Tap Save Profile.'
+        )
+      }
       return
     }
-    // Offline fallback: keep a local data URL so editing still works
+    // Offline fallback: local preview only — never write data URLs to Supabase
     const dataUrl = await new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = () => resolve(reader.result)
@@ -217,8 +269,8 @@ async function onAvatarChange(e) {
     const hint = uploaded.status === 401
       ? 'Could not upload to the cloud — please log out and log in again, then retry.'
       : uploaded.error
-        ? `Saved locally (${uploaded.error})`
-        : 'Saved locally'
+        ? `Could not upload (${uploaded.error}). Showing a local preview only — it will not appear on scanned cards until upload succeeds.`
+        : 'Could not upload. Showing a local preview only — it will not appear on scanned cards until upload succeeds.'
     alert(hint)
   } finally {
     avatarUploading.value = false
@@ -250,7 +302,7 @@ async function onVideoFileChange(e) {
   videoFeedbackClass.value = 'text-xs text-gray-400 min-h-[1rem]'
   await ensureApiSession()
   let uploaded = await apiUploadAsset(file, { kind: 'video' })
-  if (!uploaded.ok && uploaded.status === 401 && (await ensureApiSession())) {
+  if (!uploaded.ok && uploaded.status === 401 && (await ensureApiSession({ force: true }))) {
     uploaded = await apiUploadAsset(file, { kind: 'video' })
   }
   if (uploaded.ok && uploaded.data?.url) {
@@ -306,6 +358,105 @@ function openPasswordModal() {
   showPasswordModal.value = true
 }
 
+function moveTile(key, direction) {
+  linkOrder.value = moveLinkOrder(linkOrder.value, key, direction)
+}
+
+async function uploadMenuFile(file, { asPdf = false } = {}) {
+  await ensureApiSession()
+  let uploaded = await apiUploadAsset(file, { kind: 'menu' })
+  if (!uploaded.ok && uploaded.status === 401 && (await ensureApiSession({ force: true }))) {
+    uploaded = await apiUploadAsset(file, { kind: 'menu' })
+  }
+  if (!uploaded.ok || !uploaded.data?.url) {
+    throw new Error(uploaded.error || 'Upload failed')
+  }
+  return uploaded.data.url
+}
+
+async function onMenuPdfChange(e) {
+  const file = e.target.files && e.target.files[0]
+  if (!file) return
+  if (file.size > 15 * 1024 * 1024) {
+    menuFeedback.value = 'PDF must be under 15 MB.'
+    menuFeedbackClass.value = 'text-xs text-amber-400 min-h-[1rem]'
+    e.target.value = ''
+    return
+  }
+  menuUploading.value = true
+  menuFeedback.value = 'Uploading PDF…'
+  menuFeedbackClass.value = 'text-xs text-gray-400 min-h-[1rem]'
+  try {
+    menuPdf.value = await uploadMenuFile(file, { asPdf: true })
+    menuFeedback.value = 'Menu PDF uploaded.'
+    menuFeedbackClass.value = 'text-xs text-emerald-400 min-h-[1rem]'
+  } catch (err) {
+    menuFeedback.value = err?.message || 'Could not upload PDF.'
+    menuFeedbackClass.value = 'text-xs text-red-400 min-h-[1rem]'
+  } finally {
+    menuUploading.value = false
+    e.target.value = ''
+  }
+}
+
+async function onMenuImagesChange(e) {
+  const files = Array.from(e.target.files || [])
+  if (!files.length) return
+  const room = Math.max(0, 12 - menuImages.value.length)
+  if (!room) {
+    menuFeedback.value = 'You can upload up to 12 menu images.'
+    menuFeedbackClass.value = 'text-xs text-amber-400 min-h-[1rem]'
+    e.target.value = ''
+    return
+  }
+  const batch = files.slice(0, room)
+  menuUploading.value = true
+  menuFeedback.value = `Uploading ${batch.length} image${batch.length === 1 ? '' : 's'}…`
+  menuFeedbackClass.value = 'text-xs text-gray-400 min-h-[1rem]'
+  try {
+    const urls = []
+    for (const file of batch) {
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error(`"${file.name}" is over 5 MB`)
+      }
+      urls.push(await uploadMenuFile(file))
+    }
+    menuImages.value = normalizeMenuImages([...menuImages.value, ...urls])
+    menuFeedback.value = 'Menu images uploaded.'
+    menuFeedbackClass.value = 'text-xs text-emerald-400 min-h-[1rem]'
+  } catch (err) {
+    menuFeedback.value = err?.message || 'Could not upload images.'
+    menuFeedbackClass.value = 'text-xs text-red-400 min-h-[1rem]'
+  } finally {
+    menuUploading.value = false
+    e.target.value = ''
+  }
+}
+
+function removeMenuImage(index) {
+  menuImages.value = menuImages.value.filter((_, i) => i !== index)
+}
+
+function moveMenuImage(index, direction) {
+  const next = [...menuImages.value]
+  const j = index + direction
+  if (j < 0 || j >= next.length) return
+  const tmp = next[index]
+  next[index] = next[j]
+  next[j] = tmp
+  menuImages.value = next
+}
+
+function clearMenuPdf() {
+  menuPdf.value = ''
+}
+
+const orderedTileDefs = computed(() =>
+  normalizeLinkOrder(linkOrder.value)
+    .map((key) => BUSINESS_LINK_DEFS.find((d) => d.key === key))
+    .filter(Boolean)
+)
+
 function saveLogin() {
   if (!newPassword.value) {
     loginFeedback.value = 'Enter a new password.'
@@ -335,9 +486,16 @@ function saveLogin() {
   }, 700)
 }
 
-function onSave(e) {
+async function onSave(e) {
   e.preventDefault()
-  if (!name.value.trim()) {
+  if (isTable.value) {
+    if (!company.value.trim()) {
+      return
+    }
+    if (!name.value.trim()) {
+      name.value = company.value.trim()
+    }
+  } else if (!name.value.trim()) {
     tab.value = 'basics'
     return
   }
@@ -363,6 +521,15 @@ function onSave(e) {
     videoData.value = urlFromField
   }
 
+  // Never sync giant data: URLs to Supabase — keep cloud http(s) assets only
+  const cloudSafe = (value, fallback = '') => {
+    const v = String(value || '').trim()
+    if (!v) return fallback
+    if (v.startsWith('data:')) return fallback
+    return v
+  }
+  const previous = loadProfile()
+
   try {
     const saved = saveProfile({
       cardType: cardType.value,
@@ -373,9 +540,16 @@ function onSave(e) {
       email: email.value.trim(),
       address: address.value.trim(),
       menuUrl: menuUrl.value.trim(),
+      menuPdf: String(menuPdf.value || '').trim(),
+      menuImages: normalizeMenuImages(menuImages.value),
       googleReview: googleReview.value.trim(),
       checkInUrl: checkInUrl.value.trim(),
       feedbackUrl: feedbackUrl.value.trim(),
+      linkOrder: normalizeLinkOrder(linkOrder.value),
+      showPhone: !!showPhone.value,
+      showEmail: !!showEmail.value,
+      showCheckin: !!showCheckin.value,
+      showFeedback: !!showFeedback.value,
       whatsapp: socials.whatsapp,
       linkedin: socials.linkedin,
       youtube: socials.youtube,
@@ -391,11 +565,10 @@ function onSave(e) {
       loginPhone: loginPhone.value.trim()
     })
 
-    // Push to the backend so card taps deliver the latest destinations
-    import('../lib/api').then(async (m) => {
-      await m.ensureApiSession()
-      if (!m.getApiToken()) return
-      m.apiUpdateMe({
+    let authed = await ensureApiSession()
+    if (!authed) authed = await ensureApiSession({ force: true })
+    if (authed && getApiToken()) {
+      const sync = await apiUpdateMe({
         cardType: saved.cardType,
         name: saved.name,
         title: saved.title,
@@ -411,15 +584,26 @@ function onSave(e) {
         website: saved.website,
         address: saved.address,
         menuUrl: saved.menuUrl,
+        menuPdf: cloudSafe(saved.menuPdf, cloudSafe(previous.menuPdf, '')),
+        menuImages: normalizeMenuImages(saved.menuImages),
         googleReview: saved.googleReview,
         checkInUrl: saved.checkInUrl,
         feedbackUrl: saved.feedbackUrl,
-        avatar: saved.avatar,
-        logo: saved.logo,
-        video: saved.video,
+        linkOrder: saved.linkOrder || [],
+        showPhone: !!saved.showPhone,
+        showEmail: !!saved.showEmail,
+        showCheckin: !!saved.showCheckin,
+        showFeedback: !!saved.showFeedback,
+        avatar: cloudSafe(saved.avatar, cloudSafe(previous.avatar, '/images/personal.png')),
+        logo: cloudSafe(saved.logo, cloudSafe(previous.logo, '')),
+        video: cloudSafe(saved.video, cloudSafe(previous.video, '')),
         disabled: saved.disabled
       })
-    }).catch(() => {})
+      if (!sync.ok) {
+        alert(sync.error || 'Saved on this device, but cloud sync failed. Try again.')
+        return
+      }
+    }
 
     showToast.value = true
     setTimeout(() => {
@@ -457,8 +641,12 @@ onMounted(() => {
   <main class="w-full max-w-md min-h-screen mx-auto flex flex-col relative pb-28">
     <header class="px-6 pt-16 pb-4 text-center">
       <BrandMark size="sm" class="mb-3 mx-auto" />
-      <h1 class="text-2xl font-bold tracking-tight">Edit Profile</h1>
-      <p class="text-gray-400 text-sm mt-1">Update your digital business card</p>
+      <h1 class="text-2xl font-bold tracking-tight">
+        {{ isTable ? 'Edit business profile' : 'Edit Profile' }}
+      </h1>
+      <p class="text-gray-400 text-sm mt-1">
+        {{ isTable ? 'Set up what guests see when they tap your card' : 'Update your digital business card' }}
+      </p>
     </header>
 
     <form class="px-6 space-y-5 flex-1" @submit="onSave">
@@ -565,7 +753,8 @@ onMounted(() => {
         </div>
       </div>
 
-      <section class="space-y-4">
+      <!-- Personal card fields -->
+      <section v-if="!isTable" class="space-y-4">
         <div class="field-group">
           <label class="field-label" for="field-name">Full name</label>
           <div class="field-shell">
@@ -589,14 +778,34 @@ onMounted(() => {
         </div>
       </section>
 
-      <section class="space-y-4">
+      <!-- Business / table card fields -->
+      <section v-else class="space-y-4">
+        <div class="field-group">
+          <label class="field-label" for="field-business-name">Business Name</label>
+          <div class="field-shell">
+            <span class="material-symbols-outlined field-icon">storefront</span>
+            <input
+              id="field-business-name"
+              v-model="company"
+              type="text"
+              class="field-input"
+              placeholder="Your venue or business"
+              autocomplete="organization"
+              required
+            />
+          </div>
+        </div>
         <div class="field-group">
           <label class="field-label" for="field-phone">Phone</label>
           <div class="field-shell">
             <span class="material-symbols-outlined field-icon">call</span>
             <input id="field-phone" v-model="phone" type="tel" class="field-input" placeholder="+264 81 000 0000" />
           </div>
-          <p class="field-hint">Include country code for best results</p>
+          <label class="mt-2 flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+            <input v-model="showPhone" type="checkbox" class="rounded border-zinc-600" />
+            Show phone number on public profile
+          </label>
+          <p class="field-hint">Stored for your account — only shown publicly if you opt in.</p>
         </div>
         <div class="field-group">
           <label class="field-label" for="field-email">Email</label>
@@ -604,44 +813,153 @@ onMounted(() => {
             <span class="material-symbols-outlined field-icon">mail</span>
             <input id="field-email" v-model="email" type="email" class="field-input" placeholder="you@example.com" />
           </div>
+          <label class="mt-2 flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+            <input v-model="showEmail" type="checkbox" class="rounded border-zinc-600" />
+            Show email on public profile
+          </label>
+          <p class="field-hint">Stored for your account — only shown publicly if you opt in.</p>
         </div>
-        <div v-if="isTable" class="space-y-4">
-          <div class="field-group">
-            <label class="field-label" for="field-address">Address</label>
-            <div class="field-shell">
-              <span class="material-symbols-outlined field-icon">location_on</span>
-              <input id="field-address" v-model="address" type="text" class="field-input" placeholder="Street, city" />
+        <div class="field-group space-y-3">
+          <label class="field-label" for="field-menu">Menu</label>
+          <p class="text-gray-500 text-xs">
+            Add a link, upload a PDF, and/or upload menu page images (up to 12).
+          </p>
+          <div class="field-shell">
+            <span class="material-symbols-outlined field-icon">link</span>
+            <input
+              id="field-menu"
+              v-model="menuUrl"
+              type="url"
+              class="field-input"
+              placeholder="Optional menu website link"
+            />
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            <label
+              class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-zinc-700 text-sm font-semibold cursor-pointer hover:bg-zinc-600"
+              :class="{ 'opacity-50 pointer-events-none': menuUploading }"
+            >
+              <span class="material-symbols-outlined text-[18px]">picture_as_pdf</span>
+              {{ menuPdf ? 'Replace PDF' : 'Upload PDF' }}
+              <input
+                ref="menuPdfInput"
+                type="file"
+                accept="application/pdf,.pdf"
+                class="hidden"
+                :disabled="menuUploading"
+                @change="onMenuPdfChange"
+              />
+            </label>
+            <label
+              class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-zinc-700 text-sm font-semibold cursor-pointer hover:bg-zinc-600"
+              :class="{ 'opacity-50 pointer-events-none': menuUploading }"
+            >
+              <span class="material-symbols-outlined text-[18px]">photo_library</span>
+              Add images
+              <input
+                ref="menuImageInput"
+                type="file"
+                accept="image/*"
+                multiple
+                class="hidden"
+                :disabled="menuUploading"
+                @change="onMenuImagesChange"
+              />
+            </label>
+          </div>
+
+          <div
+            v-if="menuPdf"
+            class="card-item-bg rounded-2xl p-3 flex items-center gap-3"
+          >
+            <span class="material-symbols-outlined text-[22px]">picture_as_pdf</span>
+            <a
+              :href="menuPdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-sm font-medium flex-1 truncate no-underline text-inherit"
+            >
+              Menu PDF uploaded
+            </a>
+            <button
+              type="button"
+              class="text-xs font-semibold text-red-400 px-2 py-1"
+              @click="clearMenuPdf"
+            >
+              Remove
+            </button>
+          </div>
+
+          <div v-if="menuImages.length" class="space-y-2">
+            <div
+              v-for="(img, index) in menuImages"
+              :key="img + '-' + index"
+              class="card-item-bg rounded-2xl p-2 flex items-center gap-2"
+            >
+              <img :src="img" alt="" class="w-12 h-12 rounded-lg object-cover shrink-0" />
+              <span class="text-xs text-gray-400 flex-1">Page {{ index + 1 }}</span>
+              <button
+                type="button"
+                class="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center disabled:opacity-30"
+                :disabled="index === 0"
+                aria-label="Move image up"
+                @click="moveMenuImage(index, -1)"
+              >
+                <span class="material-symbols-outlined text-[16px]">keyboard_arrow_up</span>
+              </button>
+              <button
+                type="button"
+                class="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center disabled:opacity-30"
+                :disabled="index === menuImages.length - 1"
+                aria-label="Move image down"
+                @click="moveMenuImage(index, 1)"
+              >
+                <span class="material-symbols-outlined text-[16px]">keyboard_arrow_down</span>
+              </button>
+              <button
+                type="button"
+                class="w-8 h-8 rounded-full bg-red-500/15 text-red-400 flex items-center justify-center"
+                aria-label="Remove image"
+                @click="removeMenuImage(index)"
+              >
+                <span class="material-symbols-outlined text-[16px]">close</span>
+              </button>
             </div>
           </div>
-          <div class="field-group">
-            <label class="field-label" for="field-menu">Menu link</label>
-            <div class="field-shell">
-              <span class="material-symbols-outlined field-icon">restaurant_menu</span>
-              <input id="field-menu" v-model="menuUrl" type="url" class="field-input" placeholder="https://… or PDF link" />
-            </div>
+          <p :class="menuFeedbackClass">{{ menuFeedback }}</p>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="field-website-biz">Website</label>
+          <div class="social-row">
+            <div class="social-icon"><span class="material-symbols-outlined text-[20px]">language</span></div>
+            <input id="field-website-biz" v-model="website" type="text" class="field-input" placeholder="www.yourwebsite.com" />
+            <button type="button" class="social-test-btn" @click="testSocial('website')">Visit</button>
           </div>
-          <div class="field-group">
-            <label class="field-label" for="field-google-review">Google review link</label>
-            <div class="field-shell">
-              <span class="material-symbols-outlined field-icon">star</span>
-              <input id="field-google-review" v-model="googleReview" type="url" class="field-input" placeholder="https://g.page/r/…" />
-            </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="field-google-review">Google Review</label>
+          <div class="field-shell">
+            <span class="material-symbols-outlined field-icon">star</span>
+            <input id="field-google-review" v-model="googleReview" type="url" class="field-input" placeholder="https://g.page/r/…" />
           </div>
-          <div class="field-group">
-            <label class="field-label" for="field-checkin">Events check-in link</label>
-            <div class="field-shell">
-              <span class="material-symbols-outlined field-icon">event_available</span>
-              <input id="field-checkin" v-model="checkInUrl" type="url" class="field-input" placeholder="Leave blank to use built-in check-in" />
-            </div>
-            <p class="field-hint">Optional. Blank uses tap-na’s check-in form.</p>
+        </div>
+      </section>
+
+      <section v-if="!isTable" class="space-y-4">
+        <div class="field-group">
+          <label class="field-label" for="field-phone-personal">Phone</label>
+          <div class="field-shell">
+            <span class="material-symbols-outlined field-icon">call</span>
+            <input id="field-phone-personal" v-model="phone" type="tel" class="field-input" placeholder="+264 81 000 0000" />
           </div>
-          <div class="field-group">
-            <label class="field-label" for="field-feedback">Feedback link</label>
-            <div class="field-shell">
-              <span class="material-symbols-outlined field-icon">rate_review</span>
-              <input id="field-feedback" v-model="feedbackUrl" type="url" class="field-input" placeholder="Leave blank to use built-in feedback" />
-            </div>
-            <p class="field-hint">Optional. Blank uses tap-na’s feedback form.</p>
+          <p class="field-hint">Include country code for best results</p>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="field-email-personal">Email</label>
+          <div class="field-shell">
+            <span class="material-symbols-outlined field-icon">mail</span>
+            <input id="field-email-personal" v-model="email" type="email" class="field-input" placeholder="you@example.com" />
           </div>
         </div>
       </section>
@@ -657,22 +975,24 @@ onMounted(() => {
             <button type="button" class="social-test-btn" @click="testSocial('whatsapp')">Visit</button>
           </div>
         </div>
-        <div class="field-group">
-          <label class="field-label">LinkedIn</label>
-          <div class="social-row">
-            <div class="social-icon"><span class="material-symbols-outlined text-[20px]">work</span></div>
-            <input v-model="linkedin" type="text" class="field-input" placeholder="Paste your LinkedIn profile link" />
-            <button type="button" class="social-test-btn" @click="testSocial('linkedin')">Visit</button>
+        <template v-if="!isTable">
+          <div class="field-group">
+            <label class="field-label">LinkedIn</label>
+            <div class="social-row">
+              <div class="social-icon"><span class="material-symbols-outlined text-[20px]">work</span></div>
+              <input v-model="linkedin" type="text" class="field-input" placeholder="Paste your LinkedIn profile link" />
+              <button type="button" class="social-test-btn" @click="testSocial('linkedin')">Visit</button>
+            </div>
           </div>
-        </div>
-        <div class="field-group">
-          <label class="field-label">YouTube</label>
-          <div class="social-row">
-            <div class="social-icon"><span class="material-symbols-outlined text-[20px]">play_circle</span></div>
-            <input v-model="youtube" type="text" class="field-input" placeholder="@channel or profile link" />
-            <button type="button" class="social-test-btn" @click="testSocial('youtube')">Visit</button>
+          <div class="field-group">
+            <label class="field-label">YouTube</label>
+            <div class="social-row">
+              <div class="social-icon"><span class="material-symbols-outlined text-[20px]">play_circle</span></div>
+              <input v-model="youtube" type="text" class="field-input" placeholder="@channel or profile link" />
+              <button type="button" class="social-test-btn" @click="testSocial('youtube')">Visit</button>
+            </div>
           </div>
-        </div>
+        </template>
         <div class="field-group">
           <label class="field-label">X</label>
           <div class="social-row">
@@ -697,7 +1017,7 @@ onMounted(() => {
             <button type="button" class="social-test-btn" @click="testSocial('tiktok')">Visit</button>
           </div>
         </div>
-        <div class="field-group">
+        <div v-if="!isTable" class="field-group">
           <label class="field-label">Website</label>
           <div class="social-row">
             <div class="social-icon"><span class="material-symbols-outlined text-[20px]">language</span></div>
@@ -706,6 +1026,64 @@ onMounted(() => {
           </div>
         </div>
         <p :class="socialFeedbackClass">{{ socialFeedback }}</p>
+      </section>
+
+      <section v-if="isTable" class="space-y-3">
+        <div>
+          <h2 class="text-sm font-semibold">Venue actions</h2>
+          <p class="text-gray-500 text-xs mt-1">
+            Optional. Turn these on only if you want guests to use them.
+          </p>
+        </div>
+        <label class="card-item-bg rounded-2xl px-4 py-3 flex items-center gap-3 cursor-pointer">
+          <input v-model="showCheckin" type="checkbox" class="rounded border-zinc-600" />
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-medium">Events check-in</p>
+            <p class="text-xs text-gray-500">Show a check-in tile on your public profile</p>
+          </div>
+        </label>
+        <label class="card-item-bg rounded-2xl px-4 py-3 flex items-center gap-3 cursor-pointer">
+          <input v-model="showFeedback" type="checkbox" class="rounded border-zinc-600" />
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-medium">Feedback</p>
+            <p class="text-xs text-gray-500">Show a feedback tile on your public profile</p>
+          </div>
+        </label>
+      </section>
+
+      <section v-if="isTable" class="space-y-3">
+        <div>
+          <h2 class="text-sm font-semibold">Tile order</h2>
+          <p class="text-gray-500 text-xs mt-1">
+            Change the order of contact and link tiles on your business profile.
+          </p>
+        </div>
+        <div
+          v-for="(tile, index) in orderedTileDefs"
+          :key="tile.key"
+          class="card-item-bg rounded-2xl px-3 py-2.5 flex items-center gap-2"
+        >
+          <span class="material-symbols-outlined text-[20px] text-gray-400 shrink-0">drag_handle</span>
+          <span class="text-sm font-medium flex-1 min-w-0 truncate">{{ tile.label }}</span>
+          <button
+            type="button"
+            class="w-9 h-9 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center disabled:opacity-30"
+            aria-label="Move up"
+            :disabled="index === 0"
+            @click="moveTile(tile.key, -1)"
+          >
+            <span class="material-symbols-outlined text-[18px]">keyboard_arrow_up</span>
+          </button>
+          <button
+            type="button"
+            class="w-9 h-9 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center disabled:opacity-30"
+            aria-label="Move down"
+            :disabled="index === orderedTileDefs.length - 1"
+            @click="moveTile(tile.key, 1)"
+          >
+            <span class="material-symbols-outlined text-[18px]">keyboard_arrow_down</span>
+          </button>
+        </div>
       </section>
 
       <section class="space-y-4">

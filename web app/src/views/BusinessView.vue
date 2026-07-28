@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useRouter, RouterLink } from 'vue-router'
+import { useRoute, useRouter, RouterLink } from 'vue-router'
 import PageBanner from '../components/PageBanner.vue'
 import BrandMark from '../components/BrandMark.vue'
 import LinkRow from '../components/LinkRow.vue'
@@ -11,12 +11,16 @@ import {
   isProfileDeleted,
   isProfileDisabled,
   resolveSocialUrl,
-  isLoggedIn
+  isLoggedIn,
+  hasMenuContent,
+  menuPageHref,
+  normalizeMenuImages
 } from '../lib/profileStore'
-import { downloadVcard, profileShareUrl } from '../lib/shareHelpers'
+import { downloadVcard, profileShareUrl, vcardPhotoLine } from '../lib/shareHelpers'
 import { preferredShareSlug } from '../lib/cardLinkStore'
 import { trackVisit, trackShare, trackClick, LOCAL_ID } from '../lib/adminStore'
 import { apiLogCardEvent } from '../lib/api'
+import { normalizeLinkOrder, businessLinkDef } from '../lib/businessLinks'
 
 const route = useRoute()
 const router = useRouter()
@@ -110,6 +114,121 @@ const feedbackHref = computed(() => {
 const checkInExternal = computed(() => /^https?:/i.test(checkInHref.value))
 const feedbackExternal = computed(() => /^https?:/i.test(feedbackHref.value))
 
+const visibleTiles = computed(() => {
+  const p = profile.value
+  return normalizeLinkOrder(p.linkOrder).map((key) => {
+    const def = businessLinkDef(key)
+    if (!def) return null
+    if (key === 'phone') {
+      if (!p.showPhone || !filled(p.phone)) return null
+      return {
+        ...def,
+        detail: contactDetail('phone', p.phone),
+        href: hrefOrEmpty(p.phone, 'phone'),
+        external: false
+      }
+    }
+    if (key === 'email') {
+      if (!p.showEmail || !filled(p.email)) return null
+      return {
+        ...def,
+        detail: contactDetail('email', p.email),
+        href: hrefOrEmpty(p.email, 'email'),
+        external: false
+      }
+    }
+    if (key === 'whatsapp') {
+      if (!filled(p.whatsapp)) return null
+      return {
+        ...def,
+        detail: contactDetail('whatsapp', p.whatsapp),
+        href: hrefOrEmpty(p.whatsapp, 'whatsapp'),
+        external: true
+      }
+    }
+    if (key === 'website') {
+      if (!filled(p.website)) return null
+      return {
+        ...def,
+        detail: contactDetail('website', p.website),
+        href: hrefOrEmpty(p.website, 'website'),
+        external: true
+      }
+    }
+    if (key === 'menu') {
+      if (!hasMenuContent(p)) return null
+      const href = menuPageHref(p)
+      const images = normalizeMenuImages(p.menuImages)
+      const detail = p.menuPdf
+        ? 'PDF menu'
+        : images.length
+          ? images.length + ' page' + (images.length === 1 ? '' : 's')
+          : contactDetail('menu', p.menuUrl)
+      return {
+        ...def,
+        detail,
+        href,
+        external: /^https?:/i.test(href)
+      }
+    }
+    if (key === 'review') {
+      if (!filled(p.googleReview)) return null
+      return {
+        ...def,
+        detail: contactDetail('review', p.googleReview),
+        href: hrefOrEmpty(p.googleReview, 'review'),
+        external: true
+      }
+    }
+    if (key === 'checkin') {
+      if (!p.showCheckin) return null
+      return {
+        ...def,
+        detail: 'Check in to an event',
+        href: checkInHref.value,
+        external: checkInExternal.value
+      }
+    }
+    if (key === 'feedback') {
+      if (!p.showFeedback) return null
+      return {
+        ...def,
+        detail: 'Leave feedback',
+        href: feedbackHref.value,
+        external: feedbackExternal.value
+      }
+    }
+    if (key === 'x') {
+      if (!filled(p.x)) return null
+      return {
+        ...def,
+        detail: contactDetail('x', p.x),
+        href: hrefOrEmpty(p.x, 'x'),
+        external: true
+      }
+    }
+    if (key === 'instagram') {
+      if (!filled(p.instagram)) return null
+      return {
+        ...def,
+        detail: contactDetail('instagram', p.instagram),
+        href: hrefOrEmpty(p.instagram, 'instagram'),
+        external: true
+      }
+    }
+    if (key === 'tiktok') {
+      if (!filled(p.tiktok)) return null
+      return {
+        ...def,
+        detail: contactDetail('tiktok', p.tiktok),
+        href: hrefOrEmpty(p.tiktok, 'tiktok'),
+        external: true
+      }
+    }
+    return null
+  }).filter(Boolean)
+})
+
 function openShare() {
   if (actionsBlocked.value) {
     router.push(isLoggedIn() ? '/profile' : { path: '/login', query: { next: '/profile' } })
@@ -131,7 +250,7 @@ function downloadQr() {
   setTimeout(() => shareModal.value?.downloadQr(), 80)
 }
 
-function saveContact() {
+async function saveContact() {
   if (deleted.value || disabled.value) {
     router.push('/profile')
     return
@@ -139,6 +258,7 @@ function saveContact() {
   trackClick(LOCAL_ID, 'save_contact', 'Save contact')
   logRemote('click:save_contact')
   const n = venueName.value
+  const photo = await vcardPhotoLine(logo.value || profile.value.logo || profile.value.avatar)
   downloadVcard(n.replace(/\s+/g, '_') + '.vcf', [
     'BEGIN:VCARD',
     'VERSION:3.0',
@@ -152,6 +272,7 @@ function saveContact() {
       ? 'ADR;TYPE=WORK:;;' + profile.value.address.replace(/,/g, '\\,') + ';;;;'
       : '',
     'URL:' + shareUrl.value,
+    photo,
     'NOTE:tap-na Table venue profile',
     'END:VCARD'
   ])
@@ -279,99 +400,14 @@ onUnmounted(() => {
 
         <section class="space-y-3" :class="{ 'opacity-40 pointer-events-none': disabled }">
           <LinkRow
-            v-if="filled(profile.phone)"
-            icon="phone"
-            label="Number"
-            track-key="phone"
-            :detail="contactDetail('phone', profile.phone)"
-            :href="hrefOrEmpty(profile.phone, 'phone')"
-            @track="onLinkTrack"
-          />
-          <LinkRow
-            v-if="filled(profile.email)"
-            icon="email"
-            label="Email"
-            track-key="email"
-            :detail="contactDetail('email', profile.email)"
-            :href="hrefOrEmpty(profile.email, 'email')"
-            @track="onLinkTrack"
-          />
-          <LinkRow
-            v-if="filled(profile.whatsapp)"
-            icon="whatsapp"
-            label="WhatsApp"
-            track-key="whatsapp"
-            :detail="contactDetail('whatsapp', profile.whatsapp)"
-            :href="hrefOrEmpty(profile.whatsapp, 'whatsapp')"
-            :external="true"
-            @track="onLinkTrack"
-          />
-          <LinkRow
-            v-if="filled(profile.website)"
-            icon="website"
-            label="Website"
-            track-key="website"
-            :detail="contactDetail('website', profile.website)"
-            :href="hrefOrEmpty(profile.website, 'website')"
-            :external="true"
-            @track="onLinkTrack"
-          />
-          <LinkRow
-            v-if="filled(profile.menuUrl)"
-            icon="menu"
-            label="Menu"
-            track-key="menu"
-            :detail="contactDetail('menu', profile.menuUrl)"
-            :href="hrefOrEmpty(profile.menuUrl, 'menu')"
-            :external="true"
-            @track="onLinkTrack"
-          />
-          <LinkRow
-            v-if="filled(profile.googleReview)"
-            icon="review"
-            label="Google review"
-            track-key="review"
-            :detail="contactDetail('review', profile.googleReview)"
-            :href="hrefOrEmpty(profile.googleReview, 'review')"
-            :external="true"
-            @track="onLinkTrack"
-          />
-          <LinkRow
-            icon="checkin"
-            label="Events check-in"
-            track-key="checkin"
-            detail="Check in to an event"
-            :href="checkInHref"
-            :external="checkInExternal"
-            @track="onLinkTrack"
-          />
-          <LinkRow
-            icon="feedback"
-            label="Feedback"
-            track-key="feedback"
-            detail="Leave feedback"
-            :href="feedbackHref"
-            :external="feedbackExternal"
-            @track="onLinkTrack"
-          />
-          <LinkRow
-            v-if="filled(profile.instagram)"
-            icon="instagram"
-            label="Instagram"
-            track-key="instagram"
-            :detail="contactDetail('instagram', profile.instagram)"
-            :href="hrefOrEmpty(profile.instagram, 'instagram')"
-            :external="true"
-            @track="onLinkTrack"
-          />
-          <LinkRow
-            v-if="filled(profile.tiktok)"
-            icon="tiktok"
-            label="TikTok"
-            track-key="tiktok"
-            :detail="contactDetail('tiktok', profile.tiktok)"
-            :href="hrefOrEmpty(profile.tiktok, 'tiktok')"
-            :external="true"
+            v-for="tile in visibleTiles"
+            :key="tile.key"
+            :icon="tile.icon"
+            :label="tile.label"
+            :track-key="tile.trackKey"
+            :detail="tile.detail"
+            :href="tile.href"
+            :external="!!tile.external"
             @track="onLinkTrack"
           />
         </section>

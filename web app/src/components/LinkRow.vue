@@ -131,9 +131,9 @@ function IconMark() {
     <div class="min-w-0 flex-1 text-left">
       <template v-if="detail">
         <p class="text-[10px] uppercase tracking-wide text-gray-500 leading-none mb-1">{{ label }}</p>
-        <p class="text-gray-200 font-medium text-sm truncate">{{ detail }}</p>
+        <p class="link-row-detail text-gray-200 font-medium text-sm truncate">{{ detail }}</p>
       </template>
-      <span v-else class="text-gray-300 font-medium text-sm">{{ label }}</span>
+      <span v-else class="link-row-detail text-gray-300 font-medium text-sm">{{ label }}</span>
     </div>
     <span class="material-symbols-outlined text-gray-500 text-[22px] shrink-0 ml-2">chevron_right</span>
   </a>
@@ -149,9 +149,9 @@ function IconMark() {
     <div class="min-w-0 flex-1 text-left">
       <template v-if="detail">
         <p class="text-[10px] uppercase tracking-wide text-gray-500 leading-none mb-1">{{ label }}</p>
-        <p class="text-gray-200 font-medium text-sm truncate">{{ detail }}</p>
+        <p class="link-row-detail text-gray-200 font-medium text-sm truncate">{{ detail }}</p>
       </template>
-      <span v-else class="text-gray-300 font-medium text-sm">{{ label }}</span>
+      <span v-else class="link-row-detail text-gray-300 font-medium text-sm">{{ label }}</span>
     </div>
     <span class="material-symbols-outlined text-gray-500 text-[22px] shrink-0 ml-2">chevron_right</span>
   </RouterLink>
@@ -167,9 +167,9 @@ function IconMark() {
     <div class="min-w-0 flex-1 text-left">
       <template v-if="detail">
         <p class="text-[10px] uppercase tracking-wide text-gray-500 leading-none mb-1">{{ label }}</p>
-        <p class="text-gray-200 font-medium text-sm truncate">{{ detail }}</p>
+        <p class="link-row-detail text-gray-200 font-medium text-sm truncate">{{ detail }}</p>
       </template>
-      <span v-else class="text-gray-300 font-medium text-sm">{{ label }}</span>
+      <span v-else class="link-row-detail text-gray-300 font-medium text-sm">{{ label }}</span>
     </div>
     <span class="material-symbols-outlined text-gray-500 text-[22px] shrink-0 ml-2">chevron_right</span>
   </RouterLink>

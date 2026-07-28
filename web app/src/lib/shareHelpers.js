@@ -18,6 +18,75 @@ export function youtubeEmbedUrl(value) {
   return id ? 'https://www.youtube.com/embed/' + id : ''
 }
 
+/** Fold long vCard lines (RFC 2425) so phonebooks accept PHOTO payloads. */
+function foldVcardLine(line) {
+  const s = String(line || '')
+  if (s.length <= 75) return s
+  let out = s.slice(0, 75)
+  let rest = s.slice(75)
+  while (rest.length) {
+    out += '\r\n ' + rest.slice(0, 74)
+    rest = rest.slice(74)
+  }
+  return out
+}
+
+function mimeToVcardType(mime) {
+  const m = String(mime || '').toLowerCase()
+  if (m.includes('png')) return 'PNG'
+  if (m.includes('gif')) return 'GIF'
+  if (m.includes('webp')) return 'JPEG'
+  return 'JPEG'
+}
+
+/**
+ * Build a vCard 3.0 PHOTO line from an image URL or data URL.
+ * Embeds base64 so the contact photo survives offline import into phonebooks.
+ * Returns '' if the image cannot be loaded.
+ */
+export async function vcardPhotoLine(imageUrl, origin) {
+  const raw = String(imageUrl || '').trim()
+  if (!raw || raw.startsWith('data:image/svg')) return ''
+
+  try {
+    let mime = 'image/jpeg'
+    let base64 = ''
+
+    if (raw.startsWith('data:')) {
+      const match = raw.match(/^data:([^;]+);base64,(.+)$/i)
+      if (!match) return ''
+      mime = match[1] || mime
+      base64 = match[2]
+    } else {
+      const url = absoluteUrl(raw, origin)
+      if (!url || !/^https?:\/\//i.test(url)) return ''
+      const res = await fetch(url, { mode: 'cors' })
+      if (!res.ok) return ''
+      const blob = await res.blob()
+      if (!blob.type.startsWith('image/') || blob.size < 32 || blob.size > 2.5 * 1024 * 1024) {
+        return ''
+      }
+      mime = blob.type || mime
+      base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => {
+          const dataUrl = String(reader.result || '')
+          const comma = dataUrl.indexOf(',')
+          resolve(comma >= 0 ? dataUrl.slice(comma + 1) : '')
+        }
+        reader.onerror = () => reject(new Error('read failed'))
+        reader.readAsDataURL(blob)
+      })
+    }
+
+    if (!base64) return ''
+    const type = mimeToVcardType(mime)
+    return foldVcardLine(`PHOTO;ENCODING=b;TYPE=${type}:${base64}`)
+  } catch {
+    return ''
+  }
+}
+
 export function downloadVcard(filename, lines) {
   const vcard = lines.filter(Boolean).join('\r\n')
   const blob = new Blob([vcard], { type: 'text/vcard;charset=utf-8' })

@@ -16,7 +16,7 @@ import {
   resolveSocialUrl,
   isLoggedIn
 } from '../lib/profileStore'
-import { downloadVcard, profileShareUrl, youtubeEmbedUrl } from '../lib/shareHelpers'
+import { downloadVcard, profileShareUrl, youtubeEmbedUrl, vcardPhotoLine } from '../lib/shareHelpers'
 import { preferredShareSlug } from '../lib/cardLinkStore'
 import { trackVisit, trackShare, trackClick, LOCAL_ID } from '../lib/adminStore'
 import { apiLogCardEvent } from '../lib/api'
@@ -138,7 +138,7 @@ function downloadQr() {
   setTimeout(() => shareModal.value?.downloadQr(), 80)
 }
 
-function saveContact() {
+async function saveContact() {
   if (deleted.value || disabled.value || !profile.value.name) {
     router.push('/profile')
     return
@@ -148,6 +148,7 @@ function saveContact() {
   const parts = profile.value.name.trim().split(/\s+/)
   const first = parts[0] || ''
   const last = parts.slice(1).join(' ') || ''
+  const photo = await vcardPhotoLine(profile.value.avatar)
   downloadVcard(profile.value.name.replace(/\s+/g, '_') + '.vcf', [
     'BEGIN:VCARD',
     'VERSION:3.0',
@@ -158,6 +159,7 @@ function saveContact() {
     profile.value.phone ? 'TEL;TYPE=CELL:' + profile.value.phone : '',
     profile.value.email ? 'EMAIL:' + profile.value.email : '',
     'URL:' + shareUrl.value,
+    photo,
     'NOTE:Digital business card',
     'END:VCARD'
   ])
@@ -456,7 +458,7 @@ watch(() => route.path, () => {
             @click="saveContact"
           >
             <span class="material-symbols-outlined">person_add</span>
-            Save Contact
+            Save to  Phone Book
           </button>
         </div>
         <SecurityMarquee />

@@ -4,26 +4,22 @@ import { useRoute, useRouter, RouterLink } from 'vue-router'
 import BrandMark from '../components/BrandMark.vue'
 import AdminBottomNav from '../components/AdminBottomNav.vue'
 import {
-  getEntryById,
-  getActivitiesForProfile,
-  getActivityStats,
-  getClickBreakdown,
   profileThumb,
   profileLabel,
   profileMeta,
-  publicPathFor,
-  setEntryDisabled,
-  updateEntry,
-  softDeleteEntry,
   activityIcon,
-  LOCAL_ID
+  CLICK_LABELS
 } from '../lib/adminStore'
 import {
-  listCardsForAdminEntry,
   cardPublicUrl,
   kindLabel,
   kindIcon
 } from '../lib/cardLinkStore'
+import {
+  apiAdminGetProfile,
+  apiAdminUpdateProfile,
+  apiAdminProfileActivities
+} from '../lib/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -35,8 +31,12 @@ const linkedCards = ref([])
 const stats = ref({ visits: 0, shares: 0, clicks: 0, total: 0, checkIns: 0, feedback: 0 })
 const tab = ref('activity') // activity | manage
 const savedMsg = ref('')
+const saveError = ref('')
 const showDeleteConfirm = ref(false)
 const toast = ref('')
+const loading = ref(true)
+const loadError = ref('')
+const saving = ref(false)
 
 const isBusiness = computed(() => entry.value?.cardType === 'table')
 
@@ -49,17 +49,20 @@ const form = ref({
   whatsapp: '',
   website: '',
   address: '',
-  city: '',
   menuUrl: '',
   googleReview: '',
-  notes: '',
+  x: '',
+  instagram: '',
+  tiktok: '',
+  linkedin: '',
+  youtube: '',
   cardType: 'personal',
   disabled: false
 })
 
 const profileId = computed(() => String(route.params.id || ''))
 
-const notFound = computed(() => !entry.value)
+const notFound = computed(() => !loading.value && !entry.value)
 
 function formatDate(iso, withTime = false) {
   if (!iso) return '—'
@@ -84,69 +87,196 @@ function formatDate(iso, withTime = false) {
   }
 }
 
-function load() {
+function applyProfile(p) {
+  entry.value = {
+    id: p.id,
+    cardType: p.cardType === 'table' ? 'table' : 'personal',
+    name: p.name || '',
+    title: p.title || '',
+    company: p.company || '',
+    email: p.email || '',
+    phone: p.phone || '',
+    whatsapp: p.whatsapp || '',
+    linkedin: p.linkedin || '',
+    youtube: p.youtube || '',
+    x: p.x || '',
+    instagram: p.instagram || '',
+    tiktok: p.tiktok || '',
+    website: p.website || '',
+    address: p.address || '',
+    menuUrl: p.menuUrl || '',
+    googleReview: p.googleReview || '',
+    checkInUrl: p.checkInUrl || '',
+    feedbackUrl: p.feedbackUrl || '',
+    avatar: p.avatar || '',
+    logo: p.logo || '',
+    shareSlug: p.shareSlug || '',
+    remoteProfileId: p.id,
+    createdAt: p.createdAt || '',
+    updatedAt: p.updatedAt || '',
+    disabled: !!p.disabled,
+    deleted: false,
+    local: false
+  }
+  linkedCards.value = (p.slugs || []).map((s) => ({
+    serial: s.slug,
+    kind: s.kind === 'personal' ? 'personal' : 'table',
+    status: s.status || 'linked'
+  }))
+  form.value = {
+    name: p.name || '',
+    title: p.title || '',
+    company: p.company || '',
+    email: p.email || '',
+    phone: p.phone || '',
+    whatsapp: p.whatsapp || '',
+    website: p.website || '',
+    address: p.address || '',
+    menuUrl: p.menuUrl || '',
+    googleReview: p.googleReview || '',
+    x: p.x || '',
+    instagram: p.instagram || '',
+    tiktok: p.tiktok || '',
+    linkedin: p.linkedin || '',
+    youtube: p.youtube || '',
+    cardType: p.cardType === 'table' ? 'table' : 'personal',
+    disabled: !!p.disabled
+  }
+  document.title = profileLabel(entry.value) + ' · Admin'
+}
+
+async function loadActivities() {
   const id = profileId.value
-  const found = getEntryById(id)
-  entry.value = found
-  if (!found) {
+  if (!id) return
+  const act = await apiAdminProfileActivities(id)
+  if (!act.ok || !act.data) {
     activities.value = []
     clickRows.value = []
-    linkedCards.value = []
+    stats.value = { visits: 0, shares: 0, clicks: 0, total: 0, checkIns: 0, feedback: 0 }
     return
   }
-  activities.value = getActivitiesForProfile(id, found.cardType)
-  stats.value = getActivityStats(id)
-  clickRows.value = getClickBreakdown(id)
-  linkedCards.value = listCardsForAdminEntry(found)
-  form.value = {
-    name: found.name || '',
-    title: found.title || '',
-    company: found.company || '',
-    email: found.email || '',
-    phone: found.phone || '',
-    whatsapp: found.whatsapp || '',
-    website: found.website || '',
-    address: found.address || '',
-    city: found.city || '',
-    menuUrl: found.menuUrl || '',
-    googleReview: found.googleReview || '',
-    notes: found.notes || '',
-    cardType: found.cardType === 'table' ? 'table' : 'personal',
-    disabled: !!found.disabled
+  const list = act.data.activities || []
+  activities.value = list.slice(0, 40).map((a) => ({
+    id: a.id,
+    type: String(a.action || 'open').startsWith('click')
+      ? 'click'
+      : String(a.action || '').startsWith('share')
+        ? 'share'
+        : 'visit',
+    label: a.action || 'open',
+    detail: [a.slug, a.channel, a.device, a.city].filter(Boolean).join(' · '),
+    at: a.at
+  }))
+  const clickMap = {}
+  for (const a of list) {
+    const action = String(a.action || '')
+    if (!action.startsWith('click')) continue
+    const key = action.includes(':') ? action.slice(action.indexOf(':') + 1) : action
+    clickMap[key] = (clickMap[key] || 0) + 1
   }
-  document.title = profileLabel(found) + ' · Admin'
+  clickRows.value = Object.entries(clickMap)
+    .map(([key, count]) => ({
+      key,
+      label: CLICK_LABELS[key] || key,
+      count
+    }))
+    .sort((a, b) => b.count - a.count)
+  const s = act.data.stats || {}
+  stats.value = {
+    visits: s.opens || 0,
+    shares: s.shares || 0,
+    clicks: s.clicks || 0,
+    total: s.total || 0,
+    checkIns: 0,
+    feedback: 0
+  }
+}
+
+async function load() {
+  const id = profileId.value
+  loading.value = true
+  loadError.value = ''
+  entry.value = null
+  if (!id) {
+    loading.value = false
+    return
+  }
+  const res = await apiAdminGetProfile(id)
+  if (!res.ok || !res.data?.profile) {
+    loadError.value = res.error || 'Profile not found'
+    loading.value = false
+    return
+  }
+  applyProfile(res.data.profile)
+  await loadActivities()
+  loading.value = false
 }
 
 function refreshActivity() {
-  if (!entry.value) return
-  activities.value = getActivitiesForProfile(entry.value.id, entry.value.cardType)
-  stats.value = getActivityStats(entry.value.id)
-  clickRows.value = getClickBreakdown(entry.value.id)
+  loadActivities()
 }
 
-function toggleStatus() {
-  if (!entry.value) return
-  setEntryDisabled(entry.value.id, !entry.value.disabled)
-  load()
-}
-
-function saveManage(e) {
-  e.preventDefault()
-  if (!entry.value) return
-  // Never allow changing personal ↔ business — type is fixed at card generation
-  const next = updateEntry(entry.value.id, {
-    ...form.value,
-    cardType: entry.value.cardType
+async function toggleStatus() {
+  if (!entry.value || saving.value) return
+  saving.value = true
+  saveError.value = ''
+  const res = await apiAdminUpdateProfile(entry.value.id, {
+    disabled: !entry.value.disabled
   })
-  entry.value = next
+  saving.value = false
+  if (!res.ok || !res.data?.profile) {
+    saveError.value = res.error || 'Could not update status'
+    return
+  }
+  applyProfile(res.data.profile)
+  toast.value = entry.value.disabled ? 'Profile disabled' : 'Profile enabled'
+  setTimeout(() => { toast.value = '' }, 2000)
+}
+
+async function saveManage(e) {
+  e.preventDefault()
+  if (!entry.value || saving.value) return
+  saving.value = true
+  savedMsg.value = ''
+  saveError.value = ''
+  const res = await apiAdminUpdateProfile(entry.value.id, {
+    name: form.value.name,
+    title: form.value.title,
+    company: form.value.company,
+    email: form.value.email,
+    phone: form.value.phone,
+    whatsapp: form.value.whatsapp,
+    website: form.value.website,
+    address: form.value.address,
+    menuUrl: form.value.menuUrl,
+    googleReview: form.value.googleReview,
+    x: form.value.x,
+    instagram: form.value.instagram,
+    tiktok: form.value.tiktok,
+    linkedin: form.value.linkedin,
+    youtube: form.value.youtube,
+    disabled: form.value.disabled
+  })
+  saving.value = false
+  if (!res.ok || !res.data?.profile) {
+    saveError.value = res.error || 'Could not save changes'
+    return
+  }
+  applyProfile(res.data.profile)
   savedMsg.value = 'Changes saved'
   setTimeout(() => { savedMsg.value = '' }, 2000)
-  refreshActivity()
 }
 
-function confirmDelete() {
-  if (!entry.value) return
-  softDeleteEntry(entry.value.id)
+async function confirmDelete() {
+  if (!entry.value || saving.value) return
+  saving.value = true
+  const res = await apiAdminUpdateProfile(entry.value.id, { disabled: true })
+  saving.value = false
+  showDeleteConfirm.value = false
+  if (!res.ok) {
+    saveError.value = res.error || 'Could not disable profile'
+    return
+  }
   router.replace('/admin')
 }
 
@@ -172,10 +302,14 @@ onMounted(load)
 <template>
   <div class="min-h-screen flex flex-col items-center overflow-x-hidden">
     <main class="w-full max-w-3xl min-h-screen flex flex-col relative z-10 px-5 pt-16 pb-36">
-      <div v-if="notFound" class="card-item-bg rounded-2xl p-6 text-center">
+      <div v-if="loading" class="card-item-bg rounded-2xl p-6 text-center text-sm text-gray-400">
+        Loading profile…
+      </div>
+
+      <div v-else-if="notFound" class="card-item-bg rounded-2xl p-6 text-center">
         <span class="material-symbols-outlined text-4xl text-gray-500">person_off</span>
         <p class="font-semibold mt-2">Profile not found</p>
-        <p class="text-sm text-gray-400 mt-1">It may have been deleted from the directory.</p>
+        <p class="text-sm text-gray-400 mt-1">{{ loadError || 'It may have been deleted.' }}</p>
         <RouterLink to="/admin" class="inline-block mt-4 text-sm font-semibold underline underline-offset-2">
           Back to dashboard
         </RouterLink>
@@ -456,15 +590,39 @@ onMounted(load)
                 </div>
               </div>
               <div>
-                <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">City</label>
-                <div class="field-shell">
-                  <input v-model="form.city" type="text" class="field-input" placeholder="City">
-                </div>
-              </div>
-              <div>
                 <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">Address</label>
                 <div class="field-shell">
                   <input v-model="form.address" type="text" class="field-input" placeholder="Street address">
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">X</label>
+                <div class="field-shell">
+                  <input v-model="form.x" type="text" class="field-input" placeholder="@handle or link">
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">Instagram</label>
+                <div class="field-shell">
+                  <input v-model="form.instagram" type="text" class="field-input" placeholder="@handle or link">
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">TikTok</label>
+                <div class="field-shell">
+                  <input v-model="form.tiktok" type="text" class="field-input" placeholder="@handle or link">
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">LinkedIn</label>
+                <div class="field-shell">
+                  <input v-model="form.linkedin" type="text" class="field-input" placeholder="Profile link">
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">YouTube</label>
+                <div class="field-shell">
+                  <input v-model="form.youtube" type="text" class="field-input" placeholder="@channel or link">
                 </div>
               </div>
             </div>
@@ -484,22 +642,15 @@ onMounted(load)
               </div>
             </template>
 
-            <div>
-              <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">Admin notes</label>
-              <div class="field-shell !items-start !py-2">
-                <textarea
-                  v-model="form.notes"
-                  rows="3"
-                  class="field-input !py-2 resize-y"
-                  placeholder="Internal notes about this profile…"
-                />
-              </div>
-            </div>
-
+            <p v-if="saveError" class="text-xs text-red-400">{{ saveError }}</p>
             <p v-if="savedMsg" class="text-xs text-emerald-400">{{ savedMsg }}</p>
 
-            <button type="submit" class="w-full py-3.5 rounded-full bg-white text-black font-bold text-sm hover:bg-gray-200 transition-colors">
-              Save changes
+            <button
+              type="submit"
+              class="w-full py-3.5 rounded-full bg-white text-black font-bold text-sm hover:bg-gray-200 transition-colors disabled:opacity-60"
+              :disabled="saving"
+            >
+              {{ saving ? 'Saving…' : 'Save changes' }}
             </button>
           </form>
         </section>
@@ -512,9 +663,9 @@ onMounted(load)
     >
       <div class="absolute inset-0 bg-black/70" @click="showDeleteConfirm = false" />
       <div class="relative w-full max-w-sm card-item-bg rounded-3xl p-6 shadow-2xl">
-        <h2 class="text-lg font-bold">Delete profile?</h2>
+        <h2 class="text-lg font-bold">Disable profile?</h2>
         <p class="text-sm text-gray-400 mt-2">
-          This removes <strong class="text-white">{{ profileLabel(entry) }}</strong> from the admin directory.
+          This disables <strong class="text-white">{{ profileLabel(entry) }}</strong> so their card no longer shows as live.
         </p>
         <div class="flex gap-2 mt-5">
           <button
@@ -529,7 +680,7 @@ onMounted(load)
             class="flex-1 py-3 rounded-full bg-red-500 text-white text-sm font-bold"
             @click="confirmDelete"
           >
-            Delete
+            Disable
           </button>
         </div>
       </div>

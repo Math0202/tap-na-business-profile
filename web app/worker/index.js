@@ -177,6 +177,208 @@ async function getSessionProfile(env, request) {
   return profiles?.[0] || null
 }
 
+/* ——— Staff auth (Supabase Auth: admin + sales) ——— */
+
+const DEFAULT_STAFF_ADMIN_EMAIL = 'admin@01'
+const DEFAULT_STAFF_ADMIN_PASSWORD = 'Math@@0202'
+
+function bearerToken(request) {
+  const auth = request.headers.get('Authorization') || ''
+  return auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
+}
+
+function staffClaimsFromUser(user) {
+  const meta = user?.app_metadata || {}
+  const role = meta.role === 'sales' ? 'sales' : meta.role === 'admin' ? 'admin' : ''
+  return {
+    id: user?.id || '',
+    email: user?.email || '',
+    role,
+    agentId: String(meta.agent_id || meta.agentId || ''),
+    name: user?.user_metadata?.name || meta.name || ''
+  }
+}
+
+async function authAdminFetch(env, path, { method = 'GET', body } = {}) {
+  const key = String(env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
+  const res = await fetch(`${env.SUPABASE_URL}/auth/v1${path}`, {
+    method,
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json'
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined
+  })
+  const text = await res.text()
+  let data = null
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch {
+    data = { message: text }
+  }
+  if (!res.ok) {
+    const msg =
+      data?.msg ||
+      data?.error_description ||
+      data?.message ||
+      data?.error ||
+      text ||
+      `HTTP ${res.status}`
+    const err = new Error(msg)
+    err.status = res.status
+    err.data = data
+    throw err
+  }
+  return data
+}
+
+async function ensureDefaultStaffAdmin(env) {
+  const email = DEFAULT_STAFF_ADMIN_EMAIL
+  let existing = null
+  try {
+    const listed = await authAdminFetch(env, '/admin/users?page=1&per_page=200')
+    existing = (listed?.users || []).find(
+      (u) => String(u.email || '').toLowerCase() === email.toLowerCase()
+    )
+  } catch {
+    existing = null
+  }
+
+  if (existing?.id) {
+    await authAdminFetch(env, `/admin/users/${existing.id}`, {
+      method: 'PUT',
+      body: {
+        password: DEFAULT_STAFF_ADMIN_PASSWORD,
+        email_confirm: true,
+        app_metadata: { ...(existing.app_metadata || {}), role: 'admin' },
+        user_metadata: {
+          ...(existing.user_metadata || {}),
+          name: existing.user_metadata?.name || 'System Admin'
+        }
+      }
+    })
+    return existing
+  }
+
+  return authAdminFetch(env, '/admin/users', {
+    method: 'POST',
+    body: {
+      email,
+      password: DEFAULT_STAFF_ADMIN_PASSWORD,
+      email_confirm: true,
+      app_metadata: { role: 'admin' },
+      user_metadata: { name: 'System Admin' }
+    }
+  })
+}
+
+async function getStaffFromRequest(env, request) {
+  const token = bearerToken(request)
+  if (!token) return null
+  try {
+    const key = String(env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
+    const res = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, {
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${token}`
+      }
+    })
+    if (!res.ok) return null
+    const user = await res.json()
+    const claims = staffClaimsFromUser(user)
+    if (!claims.role) return null
+    return { ...claims, accessToken: token, user }
+  } catch {
+    return null
+  }
+}
+
+async function requireStaff(env, request, { roles = ['admin', 'sales'] } = {}) {
+  const staff = await getStaffFromRequest(env, request)
+  if (!staff) return { error: bad('Staff login required', 401) }
+  if (!roles.includes(staff.role)) return { error: bad('Forbidden', 403) }
+  return { staff }
+}
+
+function staffSessionPayload(tokenData, user) {
+  const claims = staffClaimsFromUser(user || tokenData?.user)
+  return {
+    ok: true,
+    accessToken: tokenData.access_token,
+    refreshToken: tokenData.refresh_token,
+    expiresIn: tokenData.expires_in,
+    expiresAt: tokenData.expires_at || null,
+    tokenType: tokenData.token_type || 'bearer',
+    user: claims
+  }
+}
+
+function mapSalesProductRow(row) {
+  const images = Array.isArray(row?.images)
+    ? row.images.filter((src) => typeof src === 'string' && src.trim())
+    : []
+  return {
+    id: row.id,
+    name: row.name || '',
+    defaultPrice: Number(row.default_price) || 0,
+    category: row.category === 'table' || row.category === 'personal' ? row.category : 'other',
+    active: row.active !== false,
+    description: row.description || '',
+    images,
+    video: row.video || '',
+    createdAt: row.created_at || '',
+    updatedAt: row.updated_at || ''
+  }
+}
+
+function mapSalesProductPublic(row) {
+  const mapped = mapSalesProductRow(row)
+  const section = mapped.category === 'table' ? 'table-brochure' : 'business-cards'
+  return {
+    id: mapped.id,
+    name: mapped.name,
+    price: mapped.defaultPrice,
+    desc: mapped.description,
+    image: mapped.images[0] || '',
+    images: mapped.images,
+    video: mapped.video,
+    alt: mapped.name,
+    section,
+    badge: '',
+    label: '',
+    active: mapped.active,
+    category: mapped.category
+  }
+}
+
+function salesProductToDb(body, { isNew = false } = {}) {
+  const categoryRaw = String(body?.category || '').trim()
+  const category =
+    categoryRaw === 'table' || categoryRaw === 'personal' || categoryRaw === 'other'
+      ? categoryRaw
+      : body?.section === 'table-brochure'
+        ? 'table'
+        : 'personal'
+  const images = Array.isArray(body?.images)
+    ? body.images.filter((src) => typeof src === 'string' && src.trim()).map((src) => src.trim())
+    : body?.image
+      ? [String(body.image).trim()]
+      : []
+  return {
+    id: String(body?.id || '').trim() || uid('prod'),
+    name: String(body?.name || '').trim(),
+    default_price: Math.max(0, Number(body?.defaultPrice ?? body?.price) || 0),
+    category,
+    active: body?.active !== false,
+    description: String(body?.description || body?.desc || '').trim(),
+    images,
+    video: String(body?.video || '').trim(),
+    ...(isNew ? { created_at: new Date().toISOString() } : {}),
+    updated_at: new Date().toISOString()
+  }
+}
+
 async function preferredShareSlug(env, profileId, cardType = 'personal') {
   if (!profileId) return ''
   const cards = await sb(
@@ -213,9 +415,16 @@ async function publicProfile(env, row) {
     website: row.website,
     address: row.address,
     menuUrl: row.menu_url,
+    menuPdf: row.menu_pdf || '',
+    menuImages: Array.isArray(row.menu_images) ? row.menu_images : [],
     googleReview: row.google_review,
     checkInUrl: row.check_in_url,
     feedbackUrl: row.feedback_url,
+    linkOrder: Array.isArray(row.link_order) ? row.link_order : [],
+    showPhone: !!row.show_phone,
+    showEmail: !!row.show_email,
+    showCheckin: !!row.show_checkin,
+    showFeedback: !!row.show_feedback,
     avatar: row.avatar,
     logo: row.logo,
     video: row.video,
@@ -350,7 +559,175 @@ async function handleApi(request, env, url) {
     return json({ ok: true, service: 'tap-na', domain: 'redirct.link', db: 'supabase' })
   }
 
+  if (pathname === '/api/staff/login' && method === 'POST') {
+    const body = await readJson(request)
+    const email = String(body?.email || '').trim().toLowerCase()
+    const password = String(body?.password || '')
+    if (!email || !password) return bad('Email and password required')
+    try {
+      await ensureDefaultStaffAdmin(env)
+    } catch (err) {
+      return bad(err.message || 'Could not ensure admin account', 500)
+    }
+    const key = String(env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
+    const res = await fetch(`${env.SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ email, password })
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok) {
+      return bad(data?.error_description || data?.msg || data?.error || 'Invalid login', 401)
+    }
+    const claims = staffClaimsFromUser(data.user)
+    if (!claims.role) return bad('This account is not staff', 403)
+    return json(staffSessionPayload(data, data.user))
+  }
+
+  if (pathname === '/api/staff/refresh' && method === 'POST') {
+    const body = await readJson(request)
+    const refreshToken = String(body?.refreshToken || '').trim()
+    if (!refreshToken) return bad('refreshToken required')
+    const key = String(env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
+    const res = await fetch(`${env.SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ refresh_token: refreshToken })
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok) {
+      return bad(data?.error_description || data?.msg || data?.error || 'Session expired', 401)
+    }
+    const claims = staffClaimsFromUser(data.user)
+    if (!claims.role) return bad('This account is not staff', 403)
+    return json(staffSessionPayload(data, data.user))
+  }
+
+  if (pathname === '/api/staff/me' && method === 'GET') {
+    const gate = await requireStaff(env, request)
+    if (gate.error) return gate.error
+    return json({ ok: true, user: gate.staff })
+  }
+
+  if (pathname === '/api/staff/logout' && method === 'POST') {
+    const token = bearerToken(request)
+    if (token) {
+      try {
+        const key = String(env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
+        await fetch(`${env.SUPABASE_URL}/auth/v1/logout`, {
+          method: 'POST',
+          headers: {
+            apikey: key,
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+      } catch {
+        /* ignore */
+      }
+    }
+    return json({ ok: true })
+  }
+
+  if (pathname === '/api/staff/users' && method === 'POST') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
+    const body = await readJson(request)
+    const email = String(body?.email || '').trim().toLowerCase()
+    const password = String(body?.password || '')
+    const agentId = String(body?.agentId || '').trim()
+    const name = String(body?.name || '').trim()
+    const role = body?.role === 'admin' ? 'admin' : 'sales'
+    if (!email) return bad('Email required')
+    if (role === 'sales' && !agentId) return bad('agentId required for sales users')
+    if (!password && !body?.authUserId) return bad('Password required for new login')
+
+    try {
+      let userId = String(body?.authUserId || '').trim()
+      if (userId) {
+        const patch = {
+          email,
+          email_confirm: true,
+          app_metadata: {
+            role,
+            agent_id: role === 'sales' ? agentId : ''
+          },
+          user_metadata: { name: name || email }
+        }
+        if (password) patch.password = password
+        const updated = await authAdminFetch(env, `/admin/users/${userId}`, {
+          method: 'PUT',
+          body: patch
+        })
+        return json({
+          ok: true,
+          user: staffClaimsFromUser(updated?.user || updated)
+        })
+      }
+
+      // Find existing by email first
+      const listed = await authAdminFetch(env, '/admin/users?page=1&per_page=200')
+      const existing = (listed?.users || []).find(
+        (u) => String(u.email || '').toLowerCase() === email
+      )
+      if (existing?.id) {
+        const patch = {
+          email,
+          email_confirm: true,
+          app_metadata: {
+            ...(existing.app_metadata || {}),
+            role,
+            agent_id: role === 'sales' ? agentId : ''
+          },
+          user_metadata: {
+            ...(existing.user_metadata || {}),
+            name: name || existing.user_metadata?.name || email
+          }
+        }
+        if (password) patch.password = password
+        const updated = await authAdminFetch(env, `/admin/users/${existing.id}`, {
+          method: 'PUT',
+          body: patch
+        })
+        return json({
+          ok: true,
+          user: staffClaimsFromUser(updated?.user || { ...existing, ...patch, id: existing.id, email })
+        })
+      }
+
+      const created = await authAdminFetch(env, '/admin/users', {
+        method: 'POST',
+        body: {
+          email,
+          password,
+          email_confirm: true,
+          app_metadata: {
+            role,
+            agent_id: role === 'sales' ? agentId : ''
+          },
+          user_metadata: { name: name || email }
+        }
+      })
+      return json({
+        ok: true,
+        user: staffClaimsFromUser(created?.user || created)
+      })
+    } catch (err) {
+      return bad(err.message || 'Could not create staff user', err.status || 500)
+    }
+  }
+
   if (pathname === '/api/cards/provision' && method === 'POST') {
+    const gate = await requireStaff(env, request, { roles: ['admin', 'sales'] })
+    if (gate.error) return gate.error
     const body = await readJson(request)
     const count = Math.min(500, Math.max(1, Number(body?.count) || 1))
     const kind = body?.kind === 'personal' ? 'personal' : 'table'
@@ -495,6 +872,8 @@ async function handleApi(request, env, url) {
 
   const unlinkMatch = pathname.match(/^\/api\/cards\/([^/]+)\/unlink$/)
   if (unlinkMatch && method === 'POST') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
     const slug = decodeURIComponent(unlinkMatch[1])
     const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&select=id`)
     if (!cards?.length) return bad('Card not found', 404)
@@ -508,6 +887,8 @@ async function handleApi(request, env, url) {
 
   const kindMatch = pathname.match(/^\/api\/cards\/([^/]+)$/)
   if (kindMatch && method === 'PATCH') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
     const slug = decodeURIComponent(kindMatch[1])
     const body = await readJson(request)
     const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&select=id`)
@@ -523,6 +904,8 @@ async function handleApi(request, env, url) {
 
   const deleteMatch = pathname.match(/^\/api\/cards\/([^/]+)$/)
   if (deleteMatch && method === 'DELETE') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
     const slug = decodeURIComponent(deleteMatch[1])
     const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&select=id`)
     const card = cards?.[0]
@@ -644,26 +1027,91 @@ async function handleApi(request, env, url) {
   if (pathname === '/api/shop/products' && method === 'GET') {
     const rows = await sb(
       env,
-      'shop_products?active=eq.true&select=id,name,price,description,image_path,image_url,alt,section,badge,label,sort_order&order=section.asc,sort_order.asc'
+      'sales_products?active=eq.true&select=id,name,default_price,category,active,description,images,video,created_at,updated_at&order=name.asc'
     )
     return json({
       ok: true,
-      products: (rows || []).map((row) => ({
-        id: row.id,
-        name: row.name,
-        price: Number(row.price),
-        desc: row.description || '',
-        image: row.image_url || '',
-        alt: row.alt || row.name || '',
-        section: row.section,
-        badge: row.badge || '',
-        label: row.label || '',
-        sortOrder: row.sort_order ?? 0
-      }))
+      products: (rows || []).map((row) => mapSalesProductPublic(row))
     })
   }
 
+  if (pathname === '/api/sales/products' && method === 'GET') {
+    const gate = await requireStaff(env, request, { roles: ['admin', 'sales'] })
+    if (gate.error) return gate.error
+    const includeInactive = url.searchParams.get('includeInactive') !== '0'
+    const filter = includeInactive ? '' : 'active=eq.true&'
+    const rows = await sb(
+      env,
+      `sales_products?${filter}select=id,name,default_price,category,active,description,images,video,created_at,updated_at&order=name.asc`
+    )
+    return json({
+      ok: true,
+      products: (rows || []).map((row) => mapSalesProductRow(row))
+    })
+  }
+
+  if (pathname === '/api/sales/products' && method === 'POST') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
+    const body = await readJson(request)
+    const row = salesProductToDb(body, { isNew: true })
+    if (!row.name) return bad('Product name is required')
+    await sb(env, 'sales_products', {
+      method: 'POST',
+      body: row,
+      prefer: 'return=representation'
+    })
+    const saved = await sb(
+      env,
+      `sales_products?id=eq.${encodeURIComponent(row.id)}&select=id,name,default_price,category,active,description,images,video,created_at,updated_at`
+    )
+    return json({ ok: true, product: mapSalesProductRow(saved?.[0] || row) })
+  }
+
+  const salesProductMatch = pathname.match(/^\/api\/sales\/products\/([^/]+)$/)
+  if (salesProductMatch && method === 'PUT') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
+    const id = decodeURIComponent(salesProductMatch[1])
+    const body = await readJson(request)
+    const row = salesProductToDb({ ...body, id }, { isNew: false })
+    if (!row.name) return bad('Product name is required')
+    await sb(env, `sales_products?id=eq.${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: {
+        name: row.name,
+        default_price: row.default_price,
+        category: row.category,
+        active: row.active,
+        description: row.description,
+        images: row.images,
+        video: row.video,
+        updated_at: new Date().toISOString()
+      },
+      prefer: 'return=minimal'
+    })
+    const saved = await sb(
+      env,
+      `sales_products?id=eq.${encodeURIComponent(id)}&select=id,name,default_price,category,active,description,images,video,created_at,updated_at`
+    )
+    if (!saved?.[0]) return bad('Product not found', 404)
+    return json({ ok: true, product: mapSalesProductRow(saved[0]) })
+  }
+
+  if (salesProductMatch && method === 'DELETE') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
+    const id = decodeURIComponent(salesProductMatch[1])
+    await sb(env, `sales_products?id=eq.${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      prefer: 'return=minimal'
+    })
+    return json({ ok: true, id })
+  }
+
   if (pathname === '/api/admin/overview' && method === 'GET') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
     const [profiles, cards] = await Promise.all([
       sb(env, 'profiles?select=id,card_type,name,title,company,email,phone,address,avatar,logo,disabled,created_at,updated_at&order=created_at.desc&limit=500'),
       sb(env, 'cards?select=slug,kind,status,profile_id,linked_at,created_at&order=created_at.desc&limit=2000')
@@ -713,6 +1161,8 @@ async function handleApi(request, env, url) {
 
   const adminActivitiesMatch = pathname.match(/^\/api\/admin\/profiles\/([^/]+)\/activities$/)
   if (adminActivitiesMatch && method === 'GET') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
     const profileId = decodeURIComponent(adminActivitiesMatch[1])
     const profiles = await sb(env, `profiles?id=eq.${encodeURIComponent(profileId)}&select=*`)
     const profile = profiles?.[0]
@@ -784,10 +1234,120 @@ async function handleApi(request, env, url) {
     })
   }
 
+  const adminProfileMatch = pathname.match(/^\/api\/admin\/profiles\/([^/]+)$/)
+  if (adminProfileMatch && method === 'GET') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
+    const profileId = decodeURIComponent(adminProfileMatch[1])
+    const profiles = await sb(env, `profiles?id=eq.${encodeURIComponent(profileId)}&select=*`)
+    const profile = profiles?.[0]
+    if (!profile) return bad('Profile not found', 404)
+    const cards = await sb(
+      env,
+      `cards?profile_id=eq.${encodeURIComponent(profileId)}&select=slug,kind,status,linked_at&order=slug.asc`
+    )
+    const pub = await publicProfile(env, profile)
+    return json({
+      ok: true,
+      profile: {
+        ...pub,
+        createdAt: profile.created_at,
+        updatedAt: profile.updated_at,
+        loginEmail: profile.login_email || '',
+        loginPhone: profile.login_phone || '',
+        slugs: (cards || []).map((c) => ({
+          slug: c.slug,
+          kind: c.kind === 'personal' ? 'personal' : 'table',
+          status: c.status,
+          linkedAt: c.linked_at || null
+        }))
+      }
+    })
+  }
+
+  if (adminProfileMatch && method === 'PUT') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
+    const profileId = decodeURIComponent(adminProfileMatch[1])
+    const profiles = await sb(env, `profiles?id=eq.${encodeURIComponent(profileId)}&select=*`)
+    const profile = profiles?.[0]
+    if (!profile) return bad('Profile not found', 404)
+    const body = await readJson(request)
+
+    // Card type is fixed at claim/generation — never change via admin edit
+    const patch = {
+      name: body.name !== undefined ? String(body.name || '').trim() : profile.name,
+      title: body.title !== undefined ? String(body.title || '').trim() : profile.title,
+      company: body.company !== undefined ? String(body.company || '').trim() : profile.company,
+      phone: body.phone !== undefined ? String(body.phone || '').trim() : profile.phone,
+      email: body.email !== undefined ? String(body.email || '').trim().toLowerCase() : profile.email,
+      whatsapp: body.whatsapp !== undefined ? String(body.whatsapp || '').trim() : profile.whatsapp,
+      linkedin: body.linkedin !== undefined ? String(body.linkedin || '').trim() : profile.linkedin,
+      youtube: body.youtube !== undefined ? String(body.youtube || '').trim() : profile.youtube,
+      x: body.x !== undefined ? String(body.x || '').trim() : profile.x,
+      instagram: body.instagram !== undefined ? String(body.instagram || '').trim() : profile.instagram,
+      tiktok: body.tiktok !== undefined ? String(body.tiktok || '').trim() : profile.tiktok,
+      website: body.website !== undefined ? String(body.website || '').trim() : profile.website,
+      address: body.address !== undefined ? String(body.address || '').trim() : profile.address,
+      menu_url: body.menuUrl !== undefined ? String(body.menuUrl || '').trim() : profile.menu_url,
+      google_review:
+        body.googleReview !== undefined ? String(body.googleReview || '').trim() : profile.google_review,
+      check_in_url:
+        body.checkInUrl !== undefined ? String(body.checkInUrl || '').trim() : profile.check_in_url,
+      feedback_url:
+        body.feedbackUrl !== undefined ? String(body.feedbackUrl || '').trim() : profile.feedback_url,
+      avatar: body.avatar !== undefined ? String(body.avatar || '').trim() : profile.avatar,
+      logo: body.logo !== undefined ? String(body.logo || '').trim() : profile.logo,
+      video: body.video !== undefined ? String(body.video || '').trim() : profile.video,
+      disabled: body.disabled !== undefined ? !!body.disabled : !!profile.disabled,
+      updated_at: new Date().toISOString()
+    }
+    if (Array.isArray(body.linkOrder)) {
+      patch.link_order = body.linkOrder.map((k) => String(k || '').trim()).filter(Boolean).slice(0, 32)
+    }
+    if (body.menuPdf !== undefined) patch.menu_pdf = String(body.menuPdf || '').trim()
+    if (Array.isArray(body.menuImages)) {
+      patch.menu_images = body.menuImages.map((u) => String(u || '').trim()).filter(Boolean).slice(0, 20)
+    }
+    if (body.showPhone !== undefined) patch.show_phone = !!body.showPhone
+    if (body.showEmail !== undefined) patch.show_email = !!body.showEmail
+    if (body.showCheckin !== undefined) patch.show_checkin = !!body.showCheckin
+    if (body.showFeedback !== undefined) patch.show_feedback = !!body.showFeedback
+
+    await sb(env, `profiles?id=eq.${encodeURIComponent(profileId)}`, {
+      method: 'PATCH',
+      body: patch,
+      prefer: 'return=minimal'
+    })
+    const nextRows = await sb(env, `profiles?id=eq.${encodeURIComponent(profileId)}&select=*`)
+    const next = nextRows?.[0]
+    const cards = await sb(
+      env,
+      `cards?profile_id=eq.${encodeURIComponent(profileId)}&select=slug,kind,status,linked_at&order=slug.asc`
+    )
+    const pub = await publicProfile(env, next)
+    return json({
+      ok: true,
+      profile: {
+        ...pub,
+        createdAt: next.created_at,
+        updatedAt: next.updated_at,
+        loginEmail: next.login_email || '',
+        loginPhone: next.login_phone || '',
+        slugs: (cards || []).map((c) => ({
+          slug: c.slug,
+          kind: c.kind === 'personal' ? 'personal' : 'table',
+          status: c.status,
+          linkedAt: c.linked_at || null
+        }))
+      }
+    })
+  }
 
   if (pathname === '/api/upload' && method === 'POST') {
     const profile = await getSessionProfile(env, request)
-    if (!profile) return bad('Unauthorized', 401)
+    const staff = profile ? null : await getStaffFromRequest(env, request)
+    if (!profile && !staff) return bad('Unauthorized', 401)
 
     const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || '')
       .trim()
@@ -802,17 +1362,37 @@ async function handleApi(request, env, url) {
     if (!file || typeof file === 'string') return bad('file is required')
 
     const kindRaw = String(form.get('kind') || 'avatar').toLowerCase()
-    const kind = ['avatar', 'logo', 'video'].includes(kindRaw) ? kindRaw : 'avatar'
+    const kind = ['avatar', 'logo', 'video', 'product', 'menu'].includes(kindRaw) ? kindRaw : 'avatar'
+    if (staff && !profile && kind !== 'product') {
+      return bad('Staff uploads are limited to product media', 403)
+    }
     const contentType = file.type || 'application/octet-stream'
-    const maxBytes = kind === 'video' ? 8 * 1024 * 1024 : 3 * 1024 * 1024
+    if (kind === 'menu') {
+      const okType =
+        contentType === 'application/pdf' ||
+        contentType.startsWith('image/') ||
+        /\.pdf$/i.test(String(file.name || ''))
+      if (!okType) return bad('Menu uploads must be a PDF or image', 400)
+    }
+    const maxBytes =
+      kind === 'product'
+        ? 20 * 1024 * 1024
+        : kind === 'menu'
+          ? 15 * 1024 * 1024
+          : kind === 'video'
+            ? 8 * 1024 * 1024
+            : 3 * 1024 * 1024
     if (file.size > maxBytes) {
-      return bad(kind === 'video' ? 'Video must be under 8 MB' : 'Image must be under 3 MB', 413)
+      const limitLabel =
+        kind === 'product' ? '20 MB' : kind === 'menu' ? '15 MB' : kind === 'video' ? '8 MB' : '3 MB'
+      return bad(`${kind === 'video' ? 'Video' : kind === 'menu' ? 'Menu file' : 'Image'} must be under ${limitLabel}`, 413)
     }
 
     const extFromName = String(file.name || '').split('.').pop() || ''
     const extFromType = contentType.includes('/') ? contentType.split('/')[1].split(';')[0] : ''
     const ext = (extFromName || extFromType || 'bin').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || 'bin'
-    const path = `profiles/${profile.id}/${kind}-${Date.now()}.${ext}`
+    const ownerId = profile?.id || staff.id || 'staff'
+    const path = `profiles/${ownerId}/${kind}-${Date.now()}.${ext}`
     const bucket = 'assets bucket'
     const bytes = new Uint8Array(await file.arrayBuffer())
 
@@ -858,7 +1438,12 @@ async function handleApi(request, env, url) {
     await sb(env, `profiles?id=eq.${encodeURIComponent(profile.id)}`, {
       method: 'PATCH',
       body: {
-        card_type: body.cardType === 'table' ? 'table' : 'personal',
+        card_type:
+          body.cardType !== undefined
+            ? body.cardType === 'table'
+              ? 'table'
+              : 'personal'
+            : profile.card_type,
         name: body.name ?? profile.name,
         title: body.title ?? profile.title,
         company: body.company ?? profile.company,
@@ -873,13 +1458,24 @@ async function handleApi(request, env, url) {
         website: body.website ?? profile.website,
         address: body.address ?? profile.address,
         menu_url: body.menuUrl ?? profile.menu_url,
+        menu_pdf: body.menuPdf !== undefined ? String(body.menuPdf || '').trim() : (profile.menu_pdf || ''),
+        menu_images: Array.isArray(body.menuImages)
+          ? body.menuImages.map((u) => String(u || '').trim()).filter(Boolean).slice(0, 20)
+          : (Array.isArray(profile.menu_images) ? profile.menu_images : []),
         google_review: body.googleReview ?? profile.google_review,
         check_in_url: body.checkInUrl ?? profile.check_in_url,
         feedback_url: body.feedbackUrl ?? profile.feedback_url,
+        link_order: Array.isArray(body.linkOrder)
+          ? body.linkOrder.map((k) => String(k || '').trim()).filter(Boolean).slice(0, 32)
+          : profile.link_order || [],
+        show_phone: body.showPhone !== undefined ? !!body.showPhone : !!profile.show_phone,
+        show_email: body.showEmail !== undefined ? !!body.showEmail : !!profile.show_email,
+        show_checkin: body.showCheckin !== undefined ? !!body.showCheckin : !!profile.show_checkin,
+        show_feedback: body.showFeedback !== undefined ? !!body.showFeedback : !!profile.show_feedback,
         avatar: body.avatar ?? profile.avatar,
         logo: body.logo ?? profile.logo,
         video: body.video ?? profile.video,
-        disabled: body.disabled ? true : false,
+        disabled: body.disabled !== undefined ? !!body.disabled : !!profile.disabled,
         updated_at: new Date().toISOString()
       },
       prefer: 'return=minimal'
@@ -971,7 +1567,258 @@ async function handleApi(request, env, url) {
     })
   }
 
+  if (pathname === '/api/shop/order-quote' && method === 'POST') {
+    const apiKey = env.RESEND_API_KEY
+    if (!apiKey) return bad('Email is not configured (missing RESEND_API_KEY)', 500)
+
+    const body = await readJson(request)
+    const name = String(body?.name || '').trim()
+    const email = String(body?.email || '').trim().toLowerCase()
+    const phone = String(body?.phone || '').trim()
+    const town = String(body?.town || '').trim().slice(0, 120)
+    const note = String(body?.note || body?.notes || '').trim()
+    const items = Array.isArray(body?.items) ? body.items : []
+
+    if (!name) return bad('Name is required')
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return bad('Valid email is required')
+    if (!phone || phone.replace(/\D/g, '').length < 7) return bad('Valid phone is required')
+    if (!town) return bad('Town is required')
+    if (!items.length) return bad('Cart is empty')
+
+    const lines = items.slice(0, 50).map((item) => {
+      const qty = Math.max(1, Math.min(99, Math.floor(Number(item?.qty) || 1)))
+      const unit = Math.max(0, Number(item?.price) || 0)
+      const lineTotal = Math.round(qty * unit * 100) / 100
+      return {
+        id: String(item?.id || '').slice(0, 80),
+        name: String(item?.name || 'Product').trim().slice(0, 160) || 'Product',
+        qty,
+        price: unit,
+        lineTotal
+      }
+    })
+    const subtotal = Math.round(lines.reduce((s, l) => s + l.lineTotal, 0) * 100) / 100
+    const money = (n) =>
+      'N$ ' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+
+    const quoteRef = `SQ-${Date.now().toString(36).toUpperCase()}`
+    const companyTo = 'auckmund@gmail.com'
+    const from = env.RESEND_FROM || 'tap-na <noreply@no-reply.auckmund.com>'
+    const subject = `Order quote ${quoteRef} — ${name}`
+
+    const rowsHtml = lines
+      .map(
+        (l) => `
+      <tr style="border-bottom:1px solid #eee;">
+        <td style="padding:10px 0;">${escapeHtml(l.name)}</td>
+        <td style="padding:10px 0;">${l.qty}</td>
+        <td style="padding:10px 0;">${escapeHtml(money(l.price))}</td>
+        <td style="padding:10px 0;text-align:right;">${escapeHtml(money(l.lineTotal))}</td>
+      </tr>`
+      )
+      .join('')
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<body style="font-family:Arial,sans-serif;color:#111;line-height:1.5;max-width:560px;margin:0 auto;padding:24px;">
+  <h1 style="font-size:20px;margin:0 0 4px;">tap-na</h1>
+  <p style="margin:0 0 4px;color:#555;font-size:13px;">Auckmund Investment CC</p>
+  <p style="margin:0 0 20px;color:#555;font-size:13px;">Erf: 62, Hosea Kutako Drive, Windhoek North<br>+264 85 792 7373 · auckmund@gmail.com</p>
+  <h2 style="font-size:18px;margin:0 0 8px;">Order quote ${escapeHtml(quoteRef)}</h2>
+  <p style="margin:0 0 16px;color:#555;font-size:13px;">Requested from the online shop</p>
+  <p style="margin:0 0 4px;"><strong>Customer</strong></p>
+  <p style="margin:0 0 16px;">
+    ${escapeHtml(name)}<br>
+    ${escapeHtml(email)}<br>
+    ${escapeHtml(phone)}<br>
+    ${escapeHtml(town)}
+  </p>
+  <table style="width:100%;border-collapse:collapse;margin:0 0 16px;font-size:14px;">
+    <thead>
+      <tr style="border-bottom:1px solid #ddd;text-align:left;">
+        <th style="padding:8px 0;">Item</th>
+        <th style="padding:8px 0;">Qty</th>
+        <th style="padding:8px 0;">Unit</th>
+        <th style="padding:8px 0;text-align:right;">Total</th>
+      </tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+  <p style="font-size:16px;font-weight:700;margin:0 0 16px;">Quoted total: ${escapeHtml(money(subtotal))}</p>
+  ${note ? `<p style="font-size:13px;color:#555;margin:0 0 16px;"><strong>Notes:</strong> ${escapeHtml(note)}</p>` : ''}
+  <p style="font-size:12px;color:#777;margin:0;">This is a quote request from the tap-na shop. Reply to confirm stock, delivery, and payment.</p>
+</body>
+</html>`.trim()
+
+    const text = [
+      `tap-na — Order quote ${quoteRef}`,
+      'Auckmund Investment CC',
+      '',
+      `Customer: ${name}`,
+      `Email: ${email}`,
+      `Phone: ${phone}`,
+      `Town: ${town}`,
+      '',
+      ...lines.map((l) => `${l.name} × ${l.qty} @ ${money(l.price)} = ${money(l.lineTotal)}`),
+      '',
+      `Quoted total: ${money(subtotal)}`,
+      note ? `Notes: ${note}` : '',
+      '',
+      'This is a quote request from the tap-na shop.'
+    ]
+      .filter(Boolean)
+      .join('\n')
+
+    const toList = [companyTo, email].filter((v, i, arr) => arr.indexOf(v) === i)
+    const resendRes = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from,
+        to: toList,
+        reply_to: email,
+        subject,
+        html,
+        text
+      })
+    })
+    const resendData = await resendRes.json().catch(() => ({}))
+    if (!resendRes.ok) {
+      const detail =
+        resendData?.message ||
+        resendData?.error?.message ||
+        (typeof resendData?.error === 'string' ? resendData.error : null) ||
+        `Resend HTTP ${resendRes.status}`
+      return bad(detail, resendRes.status >= 400 && resendRes.status < 600 ? resendRes.status : 502)
+    }
+
+    return json({
+      ok: true,
+      id: resendData?.id || '',
+      quoteRef,
+      to: toList
+    })
+  }
+
+  if (pathname === '/api/email/send' && method === 'POST') {
+    const gate = await requireStaff(env, request, { roles: ['admin', 'sales'] })
+    if (gate.error) return gate.error
+    const apiKey = env.RESEND_API_KEY
+    if (!apiKey) return bad('Email is not configured (missing RESEND_API_KEY)', 500)
+
+    const body = await request.json().catch(() => null)
+    const toRaw = body?.to
+    const toList = Array.isArray(toRaw)
+      ? toRaw.map((x) => String(x || '').trim()).filter(Boolean)
+      : String(toRaw || '')
+          .split(',')
+          .map((x) => x.trim())
+          .filter(Boolean)
+    const subject = String(body?.subject || '').trim()
+    const html = String(body?.html || '')
+    const text = String(body?.text || '')
+    const fromDefault = env.RESEND_FROM || 'tap-na <noreply@no-reply.auckmund.com>'
+    const from = String(body?.from || fromDefault).trim() || fromDefault
+
+    if (!toList.length) return bad('to is required')
+    if (!subject) return bad('subject is required')
+    if (!html && !text) return bad('html or text is required')
+
+    const rawAttachments = Array.isArray(body?.attachments) ? body.attachments : []
+    const attachments = []
+    for (const item of rawAttachments.slice(0, 5)) {
+      const filename = String(item?.filename || '').trim().slice(0, 120)
+      const content = String(item?.content || '').replace(/\s+/g, '')
+      if (!filename || !content) continue
+      // ~4.5MB base64 ≈ 3.3MB binary — keep Worker payloads bounded
+      if (content.length > 6_000_000) {
+        return bad(`Attachment too large: ${filename}`, 413)
+      }
+      const att = { filename, content }
+      if (item?.content_id) att.content_id = String(item.content_id).slice(0, 80)
+      attachments.push(att)
+    }
+
+    const resendRes = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from,
+        to: toList,
+        subject,
+        ...(html ? { html } : {}),
+        ...(text ? { text } : {}),
+        ...(attachments.length ? { attachments } : {})
+      })
+    })
+    const resendData = await resendRes.json().catch(() => ({}))
+    if (!resendRes.ok) {
+      const detail =
+        resendData?.message ||
+        resendData?.error?.message ||
+        (typeof resendData?.error === 'string' ? resendData.error : null) ||
+        `Resend HTTP ${resendRes.status}`
+      return bad(detail, resendRes.status >= 400 && resendRes.status < 600 ? resendRes.status : 502)
+    }
+    return json({
+      ok: true,
+      id: resendData?.id || '',
+      emailId: resendData?.id || '',
+      to: toList
+    })
+  }
+
   return bad('Not found', 404)
+}
+
+async function serveStatic(request, env) {
+  const url = new URL(request.url)
+  const path = url.pathname
+
+  // Look up assets without cache-bust query params
+  const assetUrl = new URL(request.url)
+  assetUrl.search = ''
+  const assetRequest =
+    assetUrl.href === request.url ? request : new Request(assetUrl.toString(), request)
+  const res = await env.ASSETS.fetch(assetRequest)
+  const contentType = res.headers.get('Content-Type') || ''
+  const isHtml = contentType.includes('text/html')
+
+  // Vite hashed bundles must never fall back to index.html — that breaks dynamic imports
+  // after deploys when an old tab requests a removed chunk.
+  if (path.startsWith('/assets/')) {
+    if (!res.ok || isHtml) {
+      return new Response('Not found', {
+        status: 404,
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'CDN-Cache-Control': 'no-store'
+        }
+      })
+    }
+    const headers = new Headers(res.headers)
+    headers.set('Cache-Control', 'public, max-age=31536000, immutable')
+    headers.set('CDN-Cache-Control', 'public, max-age=31536000, immutable')
+    return new Response(res.body, { status: res.status, statusText: res.statusText, headers })
+  }
+
+  // Keep the HTML shell fresh so clients pick up new chunk hashes after deploy
+  if (isHtml || path === '/' || path === '/index.html') {
+    const headers = new Headers(res.headers)
+    headers.set('Cache-Control', 'public, max-age=0, must-revalidate')
+    headers.set('CDN-Cache-Control', 'no-store')
+    return new Response(res.body, { status: res.status, statusText: res.statusText, headers })
+  }
+
+  return res
 }
 
 export default {
@@ -1043,7 +1890,7 @@ export default {
       }
     }
 
-    if (env.ASSETS) return env.ASSETS.fetch(request)
+    if (env.ASSETS) return serveStatic(request, env)
     return new Response('tap-na worker online', { status: 200 })
   }
 }

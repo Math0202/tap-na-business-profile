@@ -20,6 +20,7 @@ import {
 import { apiResolveCard, apiLogCardOpen, apiSignup, setApiToken } from '../lib/api'
 import { LOCAL_ID } from '../lib/adminStore'
 import { hideFloatingChrome } from '../lib/uiChrome'
+import { singleBusinessDestinationHref } from '../lib/businessLinks'
 import BusinessView from './BusinessView.vue'
 import MyCardView from './MyCardView.vue'
 
@@ -52,6 +53,22 @@ const publicUrl = computed(() => cardPublicUrl(serial.value, undefined, { kind: 
 function forceClaimLogout() {
   logout()
   setApiToken('')
+}
+
+/** Business cards with exactly one configured destination skip the profile grid. */
+function redirectIfSingleBusinessDestination(profile) {
+  if (!profile || profile.cardType === 'personal') return false
+  const forceFull =
+    String(route.query.full || '') === '1' || String(route.query.profile || '') === '1'
+  if (forceFull) return false
+  const href = singleBusinessDestinationHref(profile)
+  if (!href) return false
+  if (href.startsWith('/') && !href.startsWith('//')) {
+    router.replace(href)
+  } else {
+    window.location.replace(href)
+  }
+  return true
 }
 
 async function createProfile(e) {
@@ -182,6 +199,11 @@ onMounted(async () => {
       } catch {
         /* ignore */
       }
+      if (redirectIfSingleBusinessDestination(remote.profile)) {
+        mode.value = 'redirect'
+        setClaimChrome(false)
+        return
+      }
       mode.value = 'linked'
       setClaimChrome(false)
       return
@@ -200,6 +222,11 @@ onMounted(async () => {
     const mine = loadProfile()
     linkedType.value = mine.cardType === 'personal' ? 'personal' : 'table'
     setViewedProfile({ ...mine, shareSlug: serial.value })
+    if (redirectIfSingleBusinessDestination({ ...mine, cardType: linkedType.value })) {
+      mode.value = 'redirect'
+      setClaimChrome(false)
+      return
+    }
     mode.value = 'linked'
     setClaimChrome(false)
     return
@@ -256,6 +283,15 @@ onUnmounted(() => setClaimChrome(false))
   <!-- Linked & active: render the owner's profile in place (never redirect) -->
   <BusinessView v-else-if="mode === 'linked' && linkedType === 'table'" />
   <MyCardView v-else-if="mode === 'linked'" />
+  <div
+    v-else-if="mode === 'redirect'"
+    class="min-h-screen flex flex-col items-center justify-center px-5"
+    aria-busy="true"
+    aria-label="Opening link"
+  >
+    <span class="material-symbols-outlined text-4xl text-gray-500 animate-pulse">open_in_new</span>
+    <p class="text-sm text-gray-400 mt-3">Opening…</p>
+  </div>
 
   <!-- Not found / disabled / claim -->
   <div v-else class="min-h-screen flex flex-col items-center justify-center px-5">

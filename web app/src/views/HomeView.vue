@@ -17,11 +17,23 @@ const subscribed = ref(false)
 const email = ref('')
 const toast = ref('')
 const sections = ref([])
+const catalogTick = ref(0)
 let observer = null
 let toastTimer = null
 
-const cards = computed(() => businessCardsList())
-const brochures = computed(() => tableBrochuresList())
+const cards = computed(() => {
+  catalogTick.value
+  return businessCardsList()
+})
+const brochures = computed(() => {
+  catalogTick.value
+  return tableBrochuresList()
+})
+
+async function refreshCatalog() {
+  await loadShopProducts()
+  catalogTick.value += 1
+}
 
 function scrollToShop() {
   menuOpen.value = false
@@ -71,7 +83,7 @@ watch(
 onMounted(async () => {
   document.title = 'tap-na — Shop'
   document.documentElement.classList.add('shop-home')
-  await loadShopProducts()
+  await refreshCatalog()
   await nextTick()
   if (route.hash === '#business-cards') scrollToShop()
   if (route.hash === '#table-brochures') scrollToBrochures()
@@ -134,7 +146,7 @@ onUnmounted(() => {
               <h1
                 class="font-display-lg text-[42px] md:text-[64px] leading-[1.1] md:leading-[1.05] text-on-primary tracking-[-0.02em] font-semibold"
               >
-                The Last Business Card You’ll Ever Buy.
+                Anything NFC <br> You Want.
               </h1>
               <p class="text-on-tertiary-container max-w-[80%] md:max-w-md text-body-md">
                 Tap into the future of connection with professional NFC technology. No apps. No paper. Just
@@ -211,10 +223,16 @@ onUnmounted(() => {
             >
               <div class="aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4">
                 <img
+                  v-if="product.image"
                   :alt="product.alt"
                   class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
                   :src="product.image"
                 >
+                <span
+                  v-else
+                  class="material-symbols-outlined text-on-surface-variant text-[48px] opacity-40"
+                  aria-hidden="true"
+                >image</span>
               </div>
               <div class="flex flex-col gap-1">
                 <div class="flex justify-between items-start gap-3">
@@ -261,10 +279,16 @@ onUnmounted(() => {
             >
               <div class="aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4">
                 <img
+                  v-if="product.image"
                   :alt="product.alt"
                   class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
                   :src="product.image"
                 >
+                <span
+                  v-else
+                  class="material-symbols-outlined text-on-surface-variant text-[48px] opacity-40"
+                  aria-hidden="true"
+                >image</span>
                 <div
                   v-if="product.badge"
                   class="absolute top-4 left-4 bg-primary text-on-primary px-3 py-1 font-label-caps text-[10px] uppercase tracking-widest"

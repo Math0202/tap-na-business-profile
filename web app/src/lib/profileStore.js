@@ -21,9 +21,16 @@ export const DEFAULT_PROFILE = {
   website: '',
   address: '',
   menuUrl: '',
+  menuPdf: '',
+  menuImages: [],
   googleReview: '',
   checkInUrl: '',
   feedbackUrl: '',
+  linkOrder: [],
+  showPhone: false,
+  showEmail: false,
+  showCheckin: false,
+  showFeedback: false,
   avatar: '/images/personal.png',
   logo: '',
   video: '',
@@ -229,9 +236,16 @@ export function deleteProfile() {
     website: '',
     address: '',
     menuUrl: '',
+    menuPdf: '',
+    menuImages: [],
     googleReview: '',
     checkInUrl: '',
     feedbackUrl: '',
+    linkOrder: [],
+    showPhone: false,
+    showEmail: false,
+    showCheckin: false,
+    showFeedback: false,
     avatar: '',
     logo: '',
     video: '',
@@ -294,6 +308,36 @@ export function logoUrl(profile) {
 
 export function publicPage(profile) {
   return isTableBusiness(profile) ? '/business' : '/me'
+}
+
+export function normalizeMenuImages(value) {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((u) => String(u || '').trim())
+    .filter((u) => /^https?:\/\//i.test(u) || u.startsWith('/'))
+    .slice(0, 20)
+}
+
+/** True when the business has any menu content (link, PDF, or images). */
+export function hasMenuContent(profile) {
+  if (!profile) return false
+  if (String(profile.menuUrl || '').trim()) return true
+  if (String(profile.menuPdf || '').trim()) return true
+  return normalizeMenuImages(profile.menuImages).length > 0
+}
+
+/**
+ * Prefer in-app menu viewer when PDF/images exist; otherwise external link.
+ * Returns '' when there is nothing to show.
+ */
+export function menuPageHref(profile) {
+  if (!profile) return ''
+  const images = normalizeMenuImages(profile.menuImages)
+  const pdf = String(profile.menuPdf || '').trim()
+  if (pdf || images.length) return '/menu'
+  const url = String(profile.menuUrl || '').trim()
+  if (!url) return ''
+  return resolveSocialUrl('website', url)
 }
 
 function cleanHandle(value) {

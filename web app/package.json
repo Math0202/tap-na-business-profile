@@ -13,6 +13,7 @@
     "db:migrate:remote": "wrangler d1 execute tap-na --remote --file=./migrations/0001_init.sql"
   },
   "dependencies": {
+    "jspdf": "^4.2.1",
     "jsqr": "^1.4.0",
     "jszip": "^3.10.1",
     "qrcode": "^1.5.4",

@@ -7,7 +7,7 @@ import {
   saveShopProduct,
   deleteShopProduct,
   setShopProductActive,
-  resetShopCatalog,
+  refreshProducts,
   formatPrice,
   SHOP_SECTIONS
 } from '../lib/shopCatalog'
@@ -36,6 +36,11 @@ function emptyForm() {
 
 function refresh() {
   products.value = listShopProducts({ includeInactive: true })
+}
+
+async function refreshFromDb() {
+  await refreshProducts({ includeInactive: true })
+  refresh()
 }
 
 function flash(msg) {
@@ -74,40 +79,46 @@ function openEdit(p) {
   showForm.value = true
 }
 
-function submitForm(e) {
+async function submitForm(e) {
   e.preventDefault()
   if (!form.value.name.trim()) {
     flash('Name is required')
     return
   }
-  saveShopProduct(form.value)
-  showForm.value = false
-  refresh()
-  flash('Product saved — live on the storefront')
+  try {
+    await saveShopProduct(form.value)
+    showForm.value = false
+    await refreshFromDb()
+    flash('Product saved — live on the storefront')
+  } catch (err) {
+    flash(err?.message || 'Could not save product')
+  }
 }
 
-function toggleActive(p) {
-  setShopProductActive(p.id, !p.active)
-  refresh()
-  flash(p.active ? 'Hidden from storefront' : 'Visible on storefront')
+async function toggleActive(p) {
+  try {
+    await setShopProductActive(p.id, !p.active)
+    await refreshFromDb()
+    flash(p.active ? 'Hidden from storefront' : 'Visible on storefront')
+  } catch (err) {
+    flash(err?.message || 'Could not update product')
+  }
 }
 
-function removeProduct(p) {
+async function removeProduct(p) {
   if (!confirm(`Remove “${p.name}” from the shop catalog?`)) return
-  deleteShopProduct(p.id)
-  refresh()
-  flash('Product removed')
+  try {
+    await deleteShopProduct(p.id)
+    await refreshFromDb()
+    flash('Product removed')
+  } catch (err) {
+    flash(err?.message || 'Could not delete product')
+  }
 }
 
-function resetDefaults() {
-  if (!confirm('Reset shop catalog to default products? Your edits will be lost.')) return
-  products.value = resetShopCatalog()
-  flash('Catalog reset to defaults')
-}
-
-onMounted(() => {
+onMounted(async () => {
   document.title = 'Shop management - tap-na'
-  refresh()
+  await refreshFromDb()
 })
 </script>
 
@@ -118,7 +129,7 @@ onMounted(() => {
         <BrandMark size="sm" class="mb-2" />
         <h1 class="text-2xl font-bold tracking-tight mt-1">Shop</h1>
         <p class="text-gray-400 text-sm mt-1">
-          Manage storefront products shown on the public shop
+          Storefront products in Namibian dollars (N$) — synced with Sales products
         </p>
       </header>
 
@@ -209,14 +220,6 @@ onMounted(() => {
           </div>
         </li>
       </ul>
-
-      <button
-        type="button"
-        class="text-xs font-semibold text-gray-400 hover:text-white underline underline-offset-2 self-start"
-        @click="resetDefaults"
-      >
-        Reset to default catalog
-      </button>
     </main>
 
     <!-- Form sheet -->
@@ -236,7 +239,7 @@ onMounted(() => {
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="text-[11px] uppercase tracking-wide text-gray-500">Price (USD)</label>
+            <label class="text-[11px] uppercase tracking-wide text-gray-500">Price (N$)</label>
             <input v-model.number="form.price" type="number" min="0" step="0.01" class="field-input mt-1 w-full">
           </div>
           <div>

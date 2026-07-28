@@ -4,6 +4,8 @@
  * All calls fail soft so the app keeps working offline (localStorage fallback).
  */
 
+import { getStaffAccessToken } from './staffAuth'
+
 const TOKEN_KEY = 'tapna.apiToken'
 
 export const API_BASE =
@@ -28,12 +30,28 @@ export function setApiToken(token) {
   }
 }
 
+function authTokenFor(path) {
+  const staffPaths =
+    path.startsWith('/api/staff') ||
+    path.startsWith('/api/admin') ||
+    path.startsWith('/api/sales/products') ||
+    path === '/api/cards/provision' ||
+    path === '/api/email/send' ||
+    /\/api\/cards\/[^/]+\/unlink$/.test(path) ||
+    (path.startsWith('/api/cards/') && !path.includes('/open') && !path.includes('/event') && !path.includes('/claim'))
+  if (staffPaths) {
+    const staff = getStaffAccessToken()
+    if (staff) return staff
+  }
+  return getApiToken()
+}
+
 async function request(path, { method = 'GET', body, timeoutMs = 8000 } = {}) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const headers = { 'Content-Type': 'application/json' }
-    const token = getApiToken()
+    const token = authTokenFor(path)
     if (token) headers.Authorization = `Bearer ${token}`
     const res = await fetch(`${API_BASE}${path}`, {
       method,
@@ -133,10 +151,12 @@ export function apiGetMe() {
  * Ensure we have a live API session token. If the token is missing/stale but the
  * user has stored login credentials (email/phone + passwordHash), silently
  * re-authenticate so authenticated calls (uploads, profile save) keep working.
+ * Pass `{ force: true }` after a 401 to clear a stale token and re-login.
  * Returns true when a usable token is available afterwards.
  */
-export async function ensureApiSession() {
-  if (getApiToken()) return true
+export async function ensureApiSession({ force = false } = {}) {
+  if (force) setApiToken('')
+  if (!force && getApiToken()) return true
   let profile
   try {
     const mod = await import('./profileStore')
@@ -151,11 +171,40 @@ export async function ensureApiSession() {
   return !!(res.ok && getApiToken())
 }
 
-// ---- Shop ----
+// ---- Shop / sales products (Supabase via Worker) ----
 
-/** Public shop catalog from Supabase via Worker */
+/** Public shop catalog from sales_products */
 export function apiShopProducts() {
   return request('/api/shop/products', { timeoutMs: 10000 })
+}
+
+/** Staff catalog (includes inactive when requested) */
+export function apiSalesProducts({ includeInactive = true } = {}) {
+  const q = includeInactive ? '' : '?includeInactive=0'
+  return request(`/api/sales/products${q}`, { timeoutMs: 12000 })
+}
+
+export function apiSaveSalesProduct(product) {
+  const id = String(product?.id || '').trim()
+  if (id) {
+    return request(`/api/sales/products/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: product,
+      timeoutMs: 20000
+    })
+  }
+  return request('/api/sales/products', {
+    method: 'POST',
+    body: product,
+    timeoutMs: 20000
+  })
+}
+
+export function apiDeleteSalesProduct(id) {
+  return request(`/api/sales/products/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    timeoutMs: 12000
+  })
 }
 
 // ---- Admin ----
@@ -172,6 +221,22 @@ export function apiAdminProfileActivities(profileId) {
   })
 }
 
+/** Full profile for admin edit */
+export function apiAdminGetProfile(profileId) {
+  return request(`/api/admin/profiles/${encodeURIComponent(profileId)}`, {
+    timeoutMs: 12000
+  })
+}
+
+/** Admin update any profile fields (card type stays fixed) */
+export function apiAdminUpdateProfile(profileId, payload) {
+  return request(`/api/admin/profiles/${encodeURIComponent(profileId)}`, {
+    method: 'PUT',
+    body: payload,
+    timeoutMs: 20000
+  })
+}
+
 
 /** Upload an image/video to the Supabase "assets bucket" via the Worker */
 export async function apiUploadAsset(file, { kind = "avatar" } = {}) {
@@ -182,7 +247,7 @@ export async function apiUploadAsset(file, { kind = "avatar" } = {}) {
     form.append("file", file)
     form.append("kind", kind)
     const headers = {}
-    const token = getApiToken()
+    const token = getStaffAccessToken() || getApiToken()
     if (token) headers.Authorization = `Bearer ${token}`
     const res = await fetch(`${API_BASE}/api/upload`, {
       method: "POST",
@@ -226,4 +291,22 @@ export function apiListFeedback() {
 
 export function apiVenueStats() {
   return request('/api/venue/stats')
+}
+
+/** Public shop checkout — emails order quote via Resend */
+export function apiShopOrderQuote(payload) {
+  return request('/api/shop/order-quote', {
+    method: 'POST',
+    body: payload,
+    timeoutMs: 60000
+  })
+}
+
+/** Send transactional email via Worker → Resend (staff only) */
+export function apiSendEmail({ from, to, subject, html, text, attachments }) {
+  return request('/api/email/send', {
+    method: 'POST',
+    body: { from, to, subject, html, text, attachments },
+    timeoutMs: 60000
+  })
 }

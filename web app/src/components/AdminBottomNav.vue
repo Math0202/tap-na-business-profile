@@ -1,22 +1,33 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
+import { isStaffAdmin, isStaffSales, staffLogout } from '../lib/staffAuth'
 
 const route = useRoute()
 
-const items = [
-  { to: '/admin', label: 'Dashboard', icon: 'dashboard', match: (p) => p === '/admin' || p.startsWith('/admin/profiles') },
-  { to: '/admin/slugs', label: 'Slugs', icon: 'qr_code_2', match: (p) => p.startsWith('/admin/slugs') },
-  { to: '/admin/sales', label: 'Sales', icon: 'point_of_sale', match: (p) => p.startsWith('/admin/sales') },
-  { to: '/admin/shop', label: 'Shop', icon: 'storefront', match: (p) => p.startsWith('/admin/shop') },
-  { to: '/', label: 'Storefront', icon: 'shopping_bag', match: (p) => p === '/' || p === '/cart' }
+const allItems = [
+  { to: '/admin', label: 'Dashboard', icon: 'dashboard', adminOnly: true, match: (p) => p === '/admin' || p.startsWith('/admin/profiles') },
+  { to: '/admin/slugs', label: 'Slugs', icon: 'qr_code_2', adminOnly: true, match: (p) => p.startsWith('/admin/slugs') },
+  { to: '/admin/sales', label: 'Sales', icon: 'point_of_sale', adminOnly: false, match: (p) => p.startsWith('/admin/sales') },
+  { to: '/admin/shop', label: 'Shop', icon: 'storefront', adminOnly: true, match: (p) => p.startsWith('/admin/shop') },
+  { to: '/', label: 'Storefront', icon: 'shopping_bag', adminOnly: false, match: (p) => p === '/' || p === '/cart' }
 ]
+
+const items = computed(() => {
+  if (isStaffSales()) return allItems.filter((i) => !i.adminOnly)
+  return allItems
+})
 
 function isActive(item) {
   return item.match(route.path)
 }
 
-const activeLabel = computed(() => items.find((i) => isActive(i))?.label || 'Admin')
+const activeLabel = computed(() => items.value.find((i) => isActive(i))?.label || 'Admin')
+
+async function onLogout() {
+  await staffLogout()
+  window.location.href = '/admin/login'
+}
 </script>
 
 <template>
@@ -31,5 +42,14 @@ const activeLabel = computed(() => items.find((i) => isActive(i))?.label || 'Adm
       <span class="material-symbols-outlined">{{ item.icon }}</span>
       <span>{{ item.label }}</span>
     </RouterLink>
+    <button
+      v-if="isStaffAdmin() || isStaffSales()"
+      type="button"
+      class="admin-nav-item"
+      @click="onLogout"
+    >
+      <span class="material-symbols-outlined">logout</span>
+      <span>Logout</span>
+    </button>
   </nav>
 </template>
