@@ -425,6 +425,8 @@ async function publicProfile(env, row) {
     showEmail: !!row.show_email,
     showCheckin: !!row.show_checkin,
     showFeedback: !!row.show_feedback,
+    checkinForm: row.checkin_form && typeof row.checkin_form === 'object' ? row.checkin_form : {},
+    feedbackForm: row.feedback_form && typeof row.feedback_form === 'object' ? row.feedback_form : {},
     avatar: row.avatar,
     logo: row.logo,
     video: row.video,
@@ -1313,6 +1315,12 @@ async function handleApi(request, env, url) {
     if (body.showEmail !== undefined) patch.show_email = !!body.showEmail
     if (body.showCheckin !== undefined) patch.show_checkin = !!body.showCheckin
     if (body.showFeedback !== undefined) patch.show_feedback = !!body.showFeedback
+    if (body.checkinForm !== undefined && body.checkinForm && typeof body.checkinForm === 'object') {
+      patch.checkin_form = body.checkinForm
+    }
+    if (body.feedbackForm !== undefined && body.feedbackForm && typeof body.feedbackForm === 'object') {
+      patch.feedback_form = body.feedbackForm
+    }
 
     await sb(env, `profiles?id=eq.${encodeURIComponent(profileId)}`, {
       method: 'PATCH',
@@ -1472,6 +1480,14 @@ async function handleApi(request, env, url) {
         show_email: body.showEmail !== undefined ? !!body.showEmail : !!profile.show_email,
         show_checkin: body.showCheckin !== undefined ? !!body.showCheckin : !!profile.show_checkin,
         show_feedback: body.showFeedback !== undefined ? !!body.showFeedback : !!profile.show_feedback,
+        checkin_form:
+          body.checkinForm !== undefined && body.checkinForm && typeof body.checkinForm === 'object'
+            ? body.checkinForm
+            : profile.checkin_form || {},
+        feedback_form:
+          body.feedbackForm !== undefined && body.feedbackForm && typeof body.feedbackForm === 'object'
+            ? body.feedbackForm
+            : profile.feedback_form || {},
         avatar: body.avatar ?? profile.avatar,
         logo: body.logo ?? profile.logo,
         video: body.video ?? profile.video,
@@ -1500,6 +1516,15 @@ async function handleApi(request, env, url) {
     if (!profileId) return bad('profileId required')
     await ensureProfileStub(env, profileId, body?.venue)
     const id = uid('checkin')
+    const answers =
+      body.answers && typeof body.answers === 'object' && !Array.isArray(body.answers)
+        ? body.answers
+        : {}
+    const phone = String(body.phone || '').trim()
+    const email = String(body.email || '').trim()
+    const contact =
+      String(body.contact || '').trim() ||
+      [phone, email].filter(Boolean).join(' · ')
     await sb(env, 'checkins', {
       method: 'POST',
       body: {
@@ -1507,9 +1532,12 @@ async function handleApi(request, env, url) {
         profile_id: profileId,
         venue: body.venue || '',
         name: body.name || '',
-        contact: body.contact || '',
+        contact,
+        phone,
+        email,
         event: body.event || 'General visit',
-        guests: Math.max(1, Number(body.guests) || 1)
+        guests: Math.max(1, Number(body.guests) || 1),
+        answers
       },
       prefer: 'return=minimal'
     })
@@ -1532,6 +1560,15 @@ async function handleApi(request, env, url) {
     if (!profileId) return bad('profileId required')
     await ensureProfileStub(env, profileId, body?.venue)
     const id = uid('feedback')
+    const answers =
+      body.answers && typeof body.answers === 'object' && !Array.isArray(body.answers)
+        ? body.answers
+        : {}
+    const phone = String(body.phone || '').trim()
+    const email = String(body.email || '').trim()
+    const contact =
+      String(body.contact || '').trim() ||
+      [phone, email].filter(Boolean).join(' · ')
     await sb(env, 'feedback', {
       method: 'POST',
       body: {
@@ -1539,9 +1576,12 @@ async function handleApi(request, env, url) {
         profile_id: profileId,
         venue: body.venue || '',
         name: body.name || 'Anonymous',
-        contact: body.contact || '',
+        contact,
+        phone,
+        email,
         rating: Math.min(5, Math.max(0, Number(body.rating) || 0)),
-        message: body.message || ''
+        message: body.message || '',
+        answers
       },
       prefer: 'return=minimal'
     })

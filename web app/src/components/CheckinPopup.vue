@@ -1,12 +1,12 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
 import {
-  normalizeFeedbackForm,
+  normalizeCheckinForm,
   contactFromParts,
   answersFromCustomFields
 } from '../lib/venueForms'
-import { appendFeedback } from '../lib/venueCustomerStore'
-import { apiSubmitFeedback } from '../lib/api'
+import { appendCheckin } from '../lib/venueCustomerStore'
+import { apiSubmitCheckin } from '../lib/api'
 import { LOCAL_ID } from '../lib/adminStore'
 
 const props = defineProps({
@@ -18,28 +18,35 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'submitted'])
 
-const cfg = computed(() => normalizeFeedbackForm(props.form))
-const rating = ref(0)
+const cfg = computed(() => normalizeCheckinForm(props.form))
 const name = ref('')
 const phone = ref('')
 const email = ref('')
-const message = ref('')
+const eventName = ref('')
+const guests = ref(1)
 const custom = reactive({})
 const error = ref('')
 const success = ref(false)
 const submitting = ref(false)
 
 function reset() {
-  rating.value = 0
+  const form = cfg.value
   name.value = ''
   phone.value = ''
   email.value = ''
-  message.value = ''
+  guests.value = 1
   error.value = ''
   success.value = false
   submitting.value = false
+  if (form.eventMode === 'fixed') {
+    eventName.value = form.eventName || 'General visit'
+  } else if (form.eventMode === 'dropdown' && form.events.length) {
+    eventName.value = form.events[0]
+  } else {
+    eventName.value = ''
+  }
   Object.keys(custom).forEach((k) => delete custom[k])
-  for (const field of cfg.value.customFields) {
+  for (const field of form.customFields) {
     custom[field.id] = ''
   }
 }
@@ -61,19 +68,11 @@ watch(
   { immediate: true }
 )
 
-function setRating(n) {
-  rating.value = n
-}
-
 async function onSubmit(e) {
   e.preventDefault()
   error.value = ''
   const form = cfg.value
 
-  if (form.askStars && form.starsRequired && rating.value < 1) {
-    error.value = 'Please choose a star rating.'
-    return
-  }
   if (form.askName && !name.value.trim()) {
     error.value = 'Please enter your name.'
     return
@@ -86,10 +85,20 @@ async function onSubmit(e) {
     error.value = 'Please enter your email.'
     return
   }
-  if (form.askMessage && form.messageRequired && !message.value.trim()) {
-    error.value = 'Please enter your feedback.'
-    return
+
+  let event = ''
+  if (form.eventMode === 'fixed') {
+    event = form.eventName || 'General visit'
+  } else if (form.eventMode === 'dropdown') {
+    event = eventName.value.trim()
+    if (!event) {
+      error.value = 'Please select an event.'
+      return
+    }
+  } else {
+    event = eventName.value.trim() || form.eventName || 'General visit'
   }
+
   for (const field of form.customFields) {
     if (field.required && !String(custom[field.id] || '').trim()) {
       error.value = 'Please fill in: ' + field.label
@@ -101,21 +110,21 @@ async function onSubmit(e) {
   const contact = contactFromParts(phone.value, email.value)
   const payload = {
     venue: props.venueName,
-    name: name.value.trim() || (form.askName ? '' : 'Anonymous'),
+    name: name.value.trim() || 'Guest',
     contact,
     phone: phone.value.trim(),
     email: email.value.trim(),
-    rating: form.askStars ? rating.value : 0,
-    message: form.askMessage ? message.value.trim() : '',
+    event,
+    guests: form.askGuests ? Math.max(1, Number(guests.value) || 1) : 1,
     answers,
     at: new Date().toISOString()
   }
 
   submitting.value = true
   try {
-    appendFeedback(payload)
+    appendCheckin(payload)
     const profileId = props.profileId || LOCAL_ID
-    apiSubmitFeedback({
+    apiSubmitCheckin({
       profileId,
       ...payload
     }).catch(() => {})
@@ -124,15 +133,9 @@ async function onSubmit(e) {
       .then((m) => {
         m.logActivity({
           profileId: m.LOCAL_ID,
-          type: 'feedback',
-          title: 'Feedback',
-          detail: [
-            payload.name,
-            payload.rating ? payload.rating + '★' : '',
-            payload.message
-          ]
-            .filter(Boolean)
-            .join(' · ')
+          type: 'checkin',
+          title: 'Event check-in',
+          detail: [payload.name, payload.event, payload.guests + ' guest(s)'].join(' · ')
         })
       })
       .catch(() => {})
@@ -176,33 +179,44 @@ async function onSubmit(e) {
 
       <div v-if="success" class="px-5 pb-6 pt-2 text-center">
         <span class="material-symbols-outlined text-4xl text-emerald-400">check_circle</span>
-        <p class="text-base font-semibold mt-2">Thanks for your feedback</p>
+        <p class="text-base font-semibold mt-2">You're checked in</p>
+        <p class="text-xs text-gray-400 mt-1">Welcome!</p>
       </div>
 
       <form v-else class="px-5 pb-6 space-y-4" @submit="onSubmit">
-        <div v-if="cfg.askStars">
-          <p class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">
-            Rating{{ cfg.starsRequired ? '' : ' (optional)' }}
-          </p>
-          <div class="flex items-center gap-1">
-            <button
-              v-for="n in 5"
-              :key="n"
-              type="button"
-              class="w-10 h-10 rounded-full flex items-center justify-center transition"
-              :class="n <= rating ? 'text-amber-400' : 'text-zinc-600 hover:text-zinc-400'"
-              :aria-label="n + ' stars'"
-              @click="setRating(n)"
-            >
-              <span class="material-symbols-outlined text-[28px]">star</span>
-            </button>
-          </div>
-        </div>
-
         <div v-if="cfg.askName" class="field-group">
           <label class="field-label">Name</label>
           <div class="field-shell">
             <input v-model="name" type="text" class="field-input" placeholder="Your name" autocomplete="name" />
+          </div>
+        </div>
+
+        <div v-if="cfg.eventMode === 'fixed'" class="rounded-2xl bg-zinc-800/60 px-4 py-3">
+          <p class="text-[11px] uppercase tracking-wide text-gray-500">Event</p>
+          <p class="text-sm font-medium mt-0.5">{{ cfg.eventName }}</p>
+        </div>
+
+        <div v-else-if="cfg.eventMode === 'dropdown'" class="field-group">
+          <label class="field-label">Event</label>
+          <div class="field-shell">
+            <select v-model="eventName" class="field-input">
+              <option v-for="ev in cfg.events" :key="ev" :value="ev">{{ ev }}</option>
+            </select>
+          </div>
+          <p v-if="!cfg.events.length" class="text-xs text-amber-400 mt-1">
+            No events configured yet — add them in Profile.
+          </p>
+        </div>
+
+        <div v-else class="field-group">
+          <label class="field-label">Event name</label>
+          <div class="field-shell">
+            <input
+              v-model="eventName"
+              type="text"
+              class="field-input"
+              :placeholder="cfg.eventName || 'e.g. Friday live music'"
+            />
           </div>
         </div>
 
@@ -217,6 +231,13 @@ async function onSubmit(e) {
           <label class="field-label">Email</label>
           <div class="field-shell">
             <input v-model="email" type="email" class="field-input" placeholder="you@example.com" autocomplete="email" />
+          </div>
+        </div>
+
+        <div v-if="cfg.askGuests" class="field-group">
+          <label class="field-label">Guests</label>
+          <div class="field-shell">
+            <input v-model="guests" type="number" min="1" max="50" class="field-input" />
           </div>
         </div>
 
@@ -238,20 +259,6 @@ async function onSubmit(e) {
           </div>
         </div>
 
-        <div v-if="cfg.askMessage" class="field-group">
-          <label class="field-label">
-            {{ cfg.messageLabel }}{{ cfg.messageRequired ? '' : ' (optional)' }}
-          </label>
-          <div class="field-shell !items-start">
-            <textarea
-              v-model="message"
-              class="field-textarea"
-              rows="3"
-              :placeholder="cfg.messageLabel"
-            />
-          </div>
-        </div>
-
         <p v-if="error" class="text-xs text-red-400">{{ error }}</p>
 
         <div class="flex gap-2 pt-1">
@@ -267,7 +274,7 @@ async function onSubmit(e) {
             class="flex-1 py-3 rounded-2xl bg-white text-black text-sm font-bold disabled:opacity-50"
             :disabled="submitting"
           >
-            {{ submitting ? 'Sending…' : 'Submit' }}
+            {{ submitting ? 'Saving…' : 'Check in' }}
           </button>
         </div>
       </form>

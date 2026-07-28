@@ -5,6 +5,8 @@ import PageBanner from '../components/PageBanner.vue'
 import BrandMark from '../components/BrandMark.vue'
 import LinkRow from '../components/LinkRow.vue'
 import ShareQrModal from '../components/ShareQrModal.vue'
+import CheckinPopup from '../components/CheckinPopup.vue'
+import FeedbackPopup from '../components/FeedbackPopup.vue'
 import {
   loadPublicProfile,
   logoUrl,
@@ -21,12 +23,15 @@ import { preferredShareSlug } from '../lib/cardLinkStore'
 import { trackVisit, trackShare, trackClick, LOCAL_ID } from '../lib/adminStore'
 import { apiLogCardEvent } from '../lib/api'
 import { normalizeLinkOrder, businessLinkDef } from '../lib/businessLinks'
+import { normalizeCheckinForm, normalizeFeedbackForm } from '../lib/venueForms'
 
 const route = useRoute()
 const router = useRouter()
 const profile = ref(loadPublicProfile())
 const shareOpen = ref(false)
 const shareModal = ref(null)
+const activePopup = ref('') // '' | 'checkin' | 'feedback'
+const popupQueue = ref([])
 
 const deleted = computed(() => isProfileDeleted(profile.value))
 const disabled = computed(() => isProfileDisabled(profile.value))
@@ -99,20 +104,31 @@ function hrefOrEmpty(value, network) {
   return resolveSocialUrl(network === 'menu' || network === 'review' || network === 'site' ? 'website' : network, value)
 }
 
-const checkInHref = computed(() => {
-  if (actionsBlocked.value) return ''
-  if (profile.value.checkInUrl) return resolveSocialUrl('website', profile.value.checkInUrl)
-  return '/checkin'
-})
+const checkinForm = computed(() => normalizeCheckinForm(profile.value.checkinForm))
+const feedbackForm = computed(() => normalizeFeedbackForm(profile.value.feedbackForm))
+const popupProfileId = computed(
+  () => profile.value.remoteProfileId || profile.value.id || LOCAL_ID
+)
 
-const feedbackHref = computed(() => {
-  if (actionsBlocked.value) return ''
-  if (profile.value.feedbackUrl) return resolveSocialUrl('website', profile.value.feedbackUrl)
-  return '/feedback'
-})
+function queueVenuePopups() {
+  if (actionsBlocked.value) {
+    activePopup.value = ''
+    popupQueue.value = []
+    return
+  }
+  const p = profile.value
+  const q = []
+  if (p.showCheckin) q.push('checkin')
+  if (p.showFeedback) q.push('feedback')
+  popupQueue.value = q
+  activePopup.value = q[0] || ''
+}
 
-const checkInExternal = computed(() => /^https?:/i.test(checkInHref.value))
-const feedbackExternal = computed(() => /^https?:/i.test(feedbackHref.value))
+function advancePopup() {
+  const q = popupQueue.value.slice(1)
+  popupQueue.value = q
+  activePopup.value = q[0] || ''
+}
 
 const visibleTiles = computed(() => {
   const p = profile.value
@@ -178,24 +194,6 @@ const visibleTiles = computed(() => {
         detail: contactDetail('review', p.googleReview),
         href: hrefOrEmpty(p.googleReview, 'review'),
         external: true
-      }
-    }
-    if (key === 'checkin') {
-      if (!p.showCheckin) return null
-      return {
-        ...def,
-        detail: 'Check in to an event',
-        href: checkInHref.value,
-        external: checkInExternal.value
-      }
-    }
-    if (key === 'feedback') {
-      if (!p.showFeedback) return null
-      return {
-        ...def,
-        detail: 'Leave feedback',
-        href: feedbackHref.value,
-        external: feedbackExternal.value
       }
     }
     if (key === 'x') {
@@ -315,7 +313,12 @@ function onQrDownload() {
 }
 
 function onKeydown(e) {
-  if (e.key === 'Escape') shareOpen.value = false
+  if (e.key !== 'Escape') return
+  if (activePopup.value) {
+    advancePopup()
+    return
+  }
+  shareOpen.value = false
 }
 
 onMounted(() => {
@@ -324,6 +327,7 @@ onMounted(() => {
   if (!deleted.value && !disabled.value) trackVisit(LOCAL_ID)
   window.openShareProfile = openShare
   document.addEventListener('keydown', onKeydown)
+  queueVenuePopups()
 })
 
 onUnmounted(() => {
@@ -432,6 +436,21 @@ onUnmounted(() => {
       @share="onShareChannel"
       @copy="onCopyLink"
       @download="onQrDownload"
+    />
+
+    <CheckinPopup
+      :open="activePopup === 'checkin'"
+      :form="checkinForm"
+      :venue-name="venueName"
+      :profile-id="popupProfileId"
+      @close="advancePopup"
+    />
+    <FeedbackPopup
+      :open="activePopup === 'feedback'"
+      :form="feedbackForm"
+      :venue-name="venueName"
+      :profile-id="popupProfileId"
+      @close="advancePopup"
     />
   </div>
 </template>

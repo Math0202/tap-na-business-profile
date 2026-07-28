@@ -1,5 +1,6 @@
 /**
  * Business / table profile link tile order.
+ * Check-in and feedback are popups (not tiles).
  */
 
 import { resolveSocialUrl, hasMenuContent, menuPageHref } from './profileStore'
@@ -11,8 +12,6 @@ export const BUSINESS_LINK_DEFS = [
   { key: 'website', icon: 'website', label: 'Website', trackKey: 'website', external: true },
   { key: 'menu', icon: 'menu', label: 'Menu', trackKey: 'menu', external: true },
   { key: 'review', icon: 'review', label: 'Google review', trackKey: 'review', external: true },
-  { key: 'checkin', icon: 'checkin', label: 'Events check-in', trackKey: 'checkin' },
-  { key: 'feedback', icon: 'feedback', label: 'Feedback', trackKey: 'feedback' },
   { key: 'x', icon: 'x', label: 'X', trackKey: 'x', external: true },
   { key: 'instagram', icon: 'instagram', label: 'Instagram', trackKey: 'instagram', external: true },
   { key: 'tiktok', icon: 'tiktok', label: 'TikTok', trackKey: 'tiktok', external: true }
@@ -59,7 +58,7 @@ export function moveLinkOrder(order, key, direction) {
 }
 
 /**
- * Configured destinations only (opt-in phone/email, optional check-in/feedback).
+ * Configured destinations only (opt-in phone/email). Check-in/feedback are popups.
  */
 export function listConfiguredBusinessDestinations(profile) {
   if (!profile || profile.disabled) return []
@@ -76,18 +75,6 @@ export function listConfiguredBusinessDestinations(profile) {
   if (filled(profile.website)) add('website', resolveSocialUrl('website', profile.website))
   if (hasMenuContent(profile)) add('menu', menuPageHref(profile))
   if (filled(profile.googleReview)) add('review', resolveSocialUrl('website', profile.googleReview))
-  if (profile.showCheckin) {
-    add(
-      'checkin',
-      filled(profile.checkInUrl) ? resolveSocialUrl('website', profile.checkInUrl) : '/checkin'
-    )
-  }
-  if (profile.showFeedback) {
-    add(
-      'feedback',
-      filled(profile.feedbackUrl) ? resolveSocialUrl('website', profile.feedbackUrl) : '/feedback'
-    )
-  }
   if (filled(profile.x)) add('x', resolveSocialUrl('x', profile.x))
   if (filled(profile.instagram)) add('instagram', resolveSocialUrl('instagram', profile.instagram))
   if (filled(profile.tiktok)) add('tiktok', resolveSocialUrl('tiktok', profile.tiktok))
@@ -99,6 +86,8 @@ export function listConfiguredBusinessDestinations(profile) {
 
 /** If exactly one destination is configured, return its href; otherwise ''. */
 export function singleBusinessDestinationHref(profile) {
+  // Guest popups need the full page — never skip to a single link.
+  if (profile?.showCheckin || profile?.showFeedback) return ''
   const list = listConfiguredBusinessDestinations(profile)
   return list.length === 1 ? list[0].href : ''
 }

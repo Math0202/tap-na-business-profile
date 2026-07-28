@@ -62,6 +62,8 @@ async function onSubmit(e) {
         showEmail: !!p.showEmail,
         showCheckin: !!p.showCheckin,
         showFeedback: !!p.showFeedback,
+        checkinForm: p.checkinForm && typeof p.checkinForm === 'object' ? p.checkinForm : {},
+        feedbackForm: p.feedbackForm && typeof p.feedbackForm === 'object' ? p.feedbackForm : {},
         checkInUrl: p.checkInUrl,
         feedbackUrl: p.feedbackUrl,
         linkOrder: Array.isArray(p.linkOrder) ? p.linkOrder : [],

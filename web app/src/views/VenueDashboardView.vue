@@ -20,6 +20,7 @@ import {
   isLoggedIn
 } from '../lib/profileStore'
 import { apiListCheckins, apiListFeedback, apiVenueStats, getApiToken } from '../lib/api'
+import { formatAnswersLine } from '../lib/venueForms'
 
 const router = useRouter()
 const profile = ref(loadProfile())
@@ -56,9 +57,12 @@ async function refresh() {
         id: c.id,
         venue: c.venue,
         name: c.name,
-        contact: c.contact,
+        contact: c.contact || [c.phone, c.email].filter(Boolean).join(' · '),
+        phone: c.phone || '',
+        email: c.email || '',
         event: c.event,
         guests: c.guests,
+        answers: c.answers || {},
         at: c.created_at
       }))
     }
@@ -67,9 +71,12 @@ async function refresh() {
         id: f.id,
         venue: f.venue,
         name: f.name,
-        contact: f.contact,
+        contact: f.contact || [f.phone, f.email].filter(Boolean).join(' · '),
+        phone: f.phone || '',
+        email: f.email || '',
         rating: f.rating,
         message: f.message,
+        answers: f.answers || {},
         at: f.created_at
       }))
     }
@@ -267,6 +274,9 @@ onMounted(async () => {
               <p class="text-[11px] text-gray-500 mt-1">
                 {{ c.event }} · {{ c.guests }} guest{{ c.guests === 1 ? '' : 's' }} · {{ formatDate(c.at) }}
               </p>
+              <p v-if="formatAnswersLine(c.answers)" class="text-[11px] text-gray-400 mt-1 leading-relaxed">
+                {{ formatAnswersLine(c.answers) }}
+              </p>
             </div>
             <button type="button" class="text-xs font-semibold text-red-400 shrink-0" @click="removeCheckin(c.id)">
               Delete
@@ -284,7 +294,11 @@ onMounted(async () => {
             </div>
             <div class="min-w-0 flex-1">
               <p class="text-sm font-semibold">{{ f.name }}</p>
-              <p class="text-xs text-gray-300 mt-1 leading-relaxed">{{ f.message }}</p>
+              <p v-if="f.contact" class="text-xs text-gray-400 mt-0.5">{{ f.contact }}</p>
+              <p class="text-xs text-gray-300 mt-1 leading-relaxed">{{ f.message || '—' }}</p>
+              <p v-if="formatAnswersLine(f.answers)" class="text-[11px] text-gray-400 mt-1 leading-relaxed">
+                {{ formatAnswersLine(f.answers) }}
+              </p>
               <p class="text-[11px] text-gray-500 mt-1">{{ formatDate(f.at) }}</p>
             </div>
             <button type="button" class="text-xs font-semibold text-red-400 shrink-0" @click="removeFeedback(f.id)">

@@ -26,6 +26,13 @@ import {
   normalizeLinkOrder,
   moveLinkOrder
 } from '../lib/businessLinks'
+import {
+  DEFAULT_CHECKIN_FORM,
+  DEFAULT_FEEDBACK_FORM,
+  normalizeCheckinForm,
+  normalizeFeedbackForm,
+  newCustomField
+} from '../lib/venueForms'
 
 const router = useRouter()
 
@@ -53,6 +60,9 @@ const showPhone = ref(false)
 const showEmail = ref(false)
 const showCheckin = ref(false)
 const showFeedback = ref(false)
+const checkinForm = ref(normalizeCheckinForm(DEFAULT_CHECKIN_FORM))
+const feedbackForm = ref(normalizeFeedbackForm(DEFAULT_FEEDBACK_FORM))
+const checkinEventsText = ref('')
 const whatsapp = ref('')
 const linkedin = ref('')
 const youtube = ref('')
@@ -134,6 +144,9 @@ function fillForm(profile) {
     showEmail.value = false
     showCheckin.value = false
     showFeedback.value = false
+    checkinForm.value = normalizeCheckinForm(DEFAULT_CHECKIN_FORM)
+    feedbackForm.value = normalizeFeedbackForm(DEFAULT_FEEDBACK_FORM)
+    checkinEventsText.value = ''
     whatsapp.value = ''
     linkedin.value = ''
     youtube.value = ''
@@ -167,6 +180,9 @@ function fillForm(profile) {
     showEmail.value = !!profile.showEmail
     showCheckin.value = !!profile.showCheckin
     showFeedback.value = !!profile.showFeedback
+    checkinForm.value = normalizeCheckinForm(profile.checkinForm)
+    feedbackForm.value = normalizeFeedbackForm(profile.feedbackForm)
+    checkinEventsText.value = (checkinForm.value.events || []).join('\n')
     whatsapp.value = profile.whatsapp || ''
     linkedin.value = profile.linkedin || ''
     youtube.value = profile.youtube || ''
@@ -457,6 +473,42 @@ const orderedTileDefs = computed(() =>
     .filter(Boolean)
 )
 
+function syncCheckinEventsFromText() {
+  checkinForm.value.events = String(checkinEventsText.value || '')
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 30)
+}
+
+function addCheckinCustomField() {
+  checkinForm.value.customFields = [...(checkinForm.value.customFields || []), newCustomField()]
+}
+
+function removeCheckinCustomField(id) {
+  checkinForm.value.customFields = (checkinForm.value.customFields || []).filter((f) => f.id !== id)
+}
+
+function addFeedbackCustomField() {
+  feedbackForm.value.customFields = [...(feedbackForm.value.customFields || []), newCustomField()]
+}
+
+function removeFeedbackCustomField(id) {
+  feedbackForm.value.customFields = (feedbackForm.value.customFields || []).filter((f) => f.id !== id)
+}
+
+function customFieldOptionsText(field) {
+  return (field.options || []).join('\n')
+}
+
+function setCustomFieldOptions(field, text) {
+  field.options = String(text || '')
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 20)
+}
+
 function saveLogin() {
   if (!newPassword.value) {
     loginFeedback.value = 'Enter a new password.'
@@ -531,6 +583,10 @@ async function onSave(e) {
   const previous = loadProfile()
 
   try {
+    syncCheckinEventsFromText()
+    const nextCheckinForm = normalizeCheckinForm(checkinForm.value)
+    const nextFeedbackForm = normalizeFeedbackForm(feedbackForm.value)
+
     const saved = saveProfile({
       cardType: cardType.value,
       name: name.value.trim(),
@@ -550,6 +606,8 @@ async function onSave(e) {
       showEmail: !!showEmail.value,
       showCheckin: !!showCheckin.value,
       showFeedback: !!showFeedback.value,
+      checkinForm: nextCheckinForm,
+      feedbackForm: nextFeedbackForm,
       whatsapp: socials.whatsapp,
       linkedin: socials.linkedin,
       youtube: socials.youtube,
@@ -594,6 +652,8 @@ async function onSave(e) {
         showEmail: !!saved.showEmail,
         showCheckin: !!saved.showCheckin,
         showFeedback: !!saved.showFeedback,
+        checkinForm: saved.checkinForm || nextCheckinForm,
+        feedbackForm: saved.feedbackForm || nextFeedbackForm,
         avatar: cloudSafe(saved.avatar, cloudSafe(previous.avatar, '/images/personal.png')),
         logo: cloudSafe(saved.logo, cloudSafe(previous.logo, '')),
         video: cloudSafe(saved.video, cloudSafe(previous.video, '')),
@@ -1030,25 +1090,222 @@ onMounted(() => {
 
       <section v-if="isTable" class="space-y-3">
         <div>
-          <h2 class="text-sm font-semibold">Venue actions</h2>
+          <h2 class="text-sm font-semibold">Guest popups</h2>
           <p class="text-gray-500 text-xs mt-1">
-            Optional. Turn these on only if you want guests to use them.
+            When enabled, these open as dialogs when someone opens your business page. Guests can close them.
           </p>
         </div>
+
         <label class="card-item-bg rounded-2xl px-4 py-3 flex items-center gap-3 cursor-pointer">
           <input v-model="showCheckin" type="checkbox" class="rounded border-zinc-600" />
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-medium">Events check-in</p>
-            <p class="text-xs text-gray-500">Show a check-in tile on your public profile</p>
+            <p class="text-sm font-medium">Events check-in popup</p>
+            <p class="text-xs text-gray-500">Ask guests to check in when they open your page</p>
           </div>
         </label>
+
+        <div v-if="showCheckin" class="card-item-bg rounded-2xl px-4 py-4 space-y-3">
+          <div class="field-group">
+            <label class="field-label">Popup title</label>
+            <div class="field-shell">
+              <input v-model="checkinForm.title" type="text" class="field-input" placeholder="Check in" />
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Intro text</label>
+            <div class="field-shell !items-start">
+              <textarea v-model="checkinForm.intro" class="field-textarea" rows="2" placeholder="Optional short message" />
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Event input</label>
+            <div class="field-shell">
+              <select v-model="checkinForm.eventMode" class="field-input">
+                <option value="fixed">Fixed event name</option>
+                <option value="text">Guest types event name</option>
+                <option value="dropdown">Dropdown of events</option>
+              </select>
+            </div>
+          </div>
+          <div v-if="checkinForm.eventMode === 'fixed'" class="field-group">
+            <label class="field-label">Event name</label>
+            <div class="field-shell">
+              <input v-model="checkinForm.eventName" type="text" class="field-input" placeholder="General visit" />
+            </div>
+          </div>
+          <div v-if="checkinForm.eventMode === 'dropdown'" class="field-group">
+            <label class="field-label">Events (one per line)</label>
+            <div class="field-shell !items-start">
+              <textarea
+                v-model="checkinEventsText"
+                class="field-textarea"
+                rows="3"
+                placeholder="Friday live&#10;Sunday brunch"
+                @blur="syncCheckinEventsFromText"
+              />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="flex items-center gap-2 text-xs cursor-pointer">
+              <input v-model="checkinForm.askName" type="checkbox" class="rounded border-zinc-600" />
+              Collect name
+            </label>
+            <label class="flex items-center gap-2 text-xs cursor-pointer">
+              <input v-model="checkinForm.askPhone" type="checkbox" class="rounded border-zinc-600" />
+              Collect phone
+            </label>
+            <label class="flex items-center gap-2 text-xs cursor-pointer">
+              <input v-model="checkinForm.askEmail" type="checkbox" class="rounded border-zinc-600" />
+              Collect email
+            </label>
+            <label class="flex items-center gap-2 text-xs cursor-pointer">
+              <input v-model="checkinForm.askGuests" type="checkbox" class="rounded border-zinc-600" />
+              Guest count
+            </label>
+          </div>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <p class="text-xs font-semibold text-gray-400">Custom fields</p>
+              <button type="button" class="text-xs font-semibold text-white" @click="addCheckinCustomField">
+                + Add field
+              </button>
+            </div>
+            <div
+              v-for="field in checkinForm.customFields"
+              :key="field.id"
+              class="rounded-xl bg-zinc-800/70 p-3 space-y-2"
+            >
+              <div class="flex gap-2">
+                <input v-model="field.label" type="text" class="field-input flex-1" placeholder="Field label" />
+                <button type="button" class="text-xs text-red-400 shrink-0" @click="removeCheckinCustomField(field.id)">
+                  Remove
+                </button>
+              </div>
+              <div class="flex gap-2 items-center">
+                <select v-model="field.type" class="field-input flex-1">
+                  <option value="text">Text</option>
+                  <option value="textarea">Long text</option>
+                  <option value="select">Dropdown</option>
+                </select>
+                <label class="flex items-center gap-1.5 text-[11px] shrink-0">
+                  <input v-model="field.required" type="checkbox" class="rounded border-zinc-600" />
+                  Required
+                </label>
+              </div>
+              <textarea
+                v-if="field.type === 'select'"
+                class="field-textarea"
+                rows="2"
+                :value="customFieldOptionsText(field)"
+                placeholder="Options, one per line"
+                @input="setCustomFieldOptions(field, $event.target.value)"
+              />
+            </div>
+          </div>
+        </div>
+
         <label class="card-item-bg rounded-2xl px-4 py-3 flex items-center gap-3 cursor-pointer">
           <input v-model="showFeedback" type="checkbox" class="rounded border-zinc-600" />
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-medium">Feedback</p>
-            <p class="text-xs text-gray-500">Show a feedback tile on your public profile</p>
+            <p class="text-sm font-medium">Feedback popup</p>
+            <p class="text-xs text-gray-500">Ask for stars, comments, and guest details</p>
           </div>
         </label>
+
+        <div v-if="showFeedback" class="card-item-bg rounded-2xl px-4 py-4 space-y-3">
+          <div class="field-group">
+            <label class="field-label">Popup title</label>
+            <div class="field-shell">
+              <input v-model="feedbackForm.title" type="text" class="field-input" placeholder="Share your feedback" />
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Intro / question</label>
+            <div class="field-shell !items-start">
+              <textarea
+                v-model="feedbackForm.intro"
+                class="field-textarea"
+                rows="2"
+                placeholder="How was your visit?"
+              />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="flex items-center gap-2 text-xs cursor-pointer">
+              <input v-model="feedbackForm.askStars" type="checkbox" class="rounded border-zinc-600" />
+              Star rating
+            </label>
+            <label v-if="feedbackForm.askStars" class="flex items-center gap-2 text-xs cursor-pointer">
+              <input v-model="feedbackForm.starsRequired" type="checkbox" class="rounded border-zinc-600" />
+              Stars required
+            </label>
+            <label class="flex items-center gap-2 text-xs cursor-pointer">
+              <input v-model="feedbackForm.askMessage" type="checkbox" class="rounded border-zinc-600" />
+              Comment box
+            </label>
+            <label v-if="feedbackForm.askMessage" class="flex items-center gap-2 text-xs cursor-pointer">
+              <input v-model="feedbackForm.messageRequired" type="checkbox" class="rounded border-zinc-600" />
+              Comment required
+            </label>
+            <label class="flex items-center gap-2 text-xs cursor-pointer">
+              <input v-model="feedbackForm.askName" type="checkbox" class="rounded border-zinc-600" />
+              Collect name
+            </label>
+            <label class="flex items-center gap-2 text-xs cursor-pointer">
+              <input v-model="feedbackForm.askPhone" type="checkbox" class="rounded border-zinc-600" />
+              Collect phone
+            </label>
+            <label class="flex items-center gap-2 text-xs cursor-pointer">
+              <input v-model="feedbackForm.askEmail" type="checkbox" class="rounded border-zinc-600" />
+              Collect email
+            </label>
+          </div>
+          <div v-if="feedbackForm.askMessage" class="field-group">
+            <label class="field-label">Comment label</label>
+            <div class="field-shell">
+              <input v-model="feedbackForm.messageLabel" type="text" class="field-input" placeholder="Your feedback" />
+            </div>
+          </div>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <p class="text-xs font-semibold text-gray-400">Custom fields</p>
+              <button type="button" class="text-xs font-semibold text-white" @click="addFeedbackCustomField">
+                + Add field
+              </button>
+            </div>
+            <div
+              v-for="field in feedbackForm.customFields"
+              :key="field.id"
+              class="rounded-xl bg-zinc-800/70 p-3 space-y-2"
+            >
+              <div class="flex gap-2">
+                <input v-model="field.label" type="text" class="field-input flex-1" placeholder="Field label" />
+                <button type="button" class="text-xs text-red-400 shrink-0" @click="removeFeedbackCustomField(field.id)">
+                  Remove
+                </button>
+              </div>
+              <div class="flex gap-2 items-center">
+                <select v-model="field.type" class="field-input flex-1">
+                  <option value="text">Text</option>
+                  <option value="textarea">Long text</option>
+                  <option value="select">Dropdown</option>
+                </select>
+                <label class="flex items-center gap-1.5 text-[11px] shrink-0">
+                  <input v-model="field.required" type="checkbox" class="rounded border-zinc-600" />
+                  Required
+                </label>
+              </div>
+              <textarea
+                v-if="field.type === 'select'"
+                class="field-textarea"
+                rows="2"
+                :value="customFieldOptionsText(field)"
+                placeholder="Options, one per line"
+                @input="setCustomFieldOptions(field, $event.target.value)"
+              />
+            </div>
+          </div>
+        </div>
       </section>
 
       <section v-if="isTable" class="space-y-3">
