@@ -36,6 +36,7 @@ function authTokenFor(path) {
     path.startsWith('/api/admin') ||
     path.startsWith('/api/sales/') ||
     path === '/api/cards/provision' ||
+    path === '/api/cards/bulk-delete' ||
     path === '/api/email/send' ||
     /\/api\/cards\/[^/]+\/unlink$/.test(path) ||
     (path.startsWith('/api/cards/') && !path.includes('/open') && !path.includes('/event') && !path.includes('/claim'))
@@ -53,7 +54,8 @@ function shouldReportClientError(path) {
     path.startsWith('/api/admin') ||
     path.startsWith('/api/sales/') ||
     path.startsWith('/api/email/') ||
-    path === '/api/cards/provision'
+    path === '/api/cards/provision' ||
+    path === '/api/cards/bulk-delete'
   )
 }
 
@@ -164,6 +166,15 @@ export function apiUnlinkCard(slug) {
 /** Delete a card entirely (admin) */
 export function apiDeleteCard(slug) {
   return request(`/api/cards/${encodeURIComponent(slug)}`, { method: 'DELETE' })
+}
+
+/** Bulk-delete cards by slug (admin) */
+export function apiBulkDeleteCards(slugs = []) {
+  return request('/api/cards/bulk-delete', {
+    method: 'POST',
+    body: { slugs: Array.isArray(slugs) ? slugs : [] },
+    timeoutMs: 120000
+  })
 }
 
 /** Change a card's kind (admin) */

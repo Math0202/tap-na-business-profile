@@ -1975,6 +1975,50 @@ async function handleApi(request, env, url) {
     return json({ ok: true, slug, kind })
   }
 
+  if (pathname === '/api/cards/bulk-delete' && method === 'POST') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
+    const body = await readJson(request)
+    const raw = Array.isArray(body?.slugs) ? body.slugs : []
+    const slugs = [...new Set(raw.map((s) => String(s || '').trim()).filter(Boolean))].slice(0, 500)
+    if (!slugs.length) return bad('slugs required')
+
+    const deleted = []
+    const failed = []
+    for (const slug of slugs) {
+      try {
+        const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&select=id`)
+        const card = cards?.[0]
+        if (!card) {
+          failed.push({ slug, error: 'not found' })
+          continue
+        }
+        await sb(env, `card_opens?card_id=eq.${encodeURIComponent(card.id)}`, {
+          method: 'DELETE',
+          prefer: 'return=minimal'
+        })
+        await sb(env, `cards?id=eq.${encodeURIComponent(card.id)}`, {
+          method: 'DELETE',
+          prefer: 'return=minimal'
+        })
+        deleted.push(slug)
+      } catch (err) {
+        failed.push({ slug, error: err?.message || 'delete failed' })
+        if (!err?._logged) {
+          await logAppError(env, {
+            source: 'api',
+            message: err?.message || 'bulk card delete failed',
+            stack: err?.stack || '',
+            path: pathname,
+            method,
+            context: { slug }
+          })
+        }
+      }
+    }
+    return json({ ok: true, deleted, failed, deletedCount: deleted.length, failedCount: failed.length })
+  }
+
   const deleteMatch = pathname.match(/^\/api\/cards\/([^/]+)$/)
   if (deleteMatch && method === 'DELETE') {
     const gate = await requireStaff(env, request, { roles: ['admin'] })

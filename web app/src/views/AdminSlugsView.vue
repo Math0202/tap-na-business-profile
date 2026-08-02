@@ -21,6 +21,7 @@ import {
   apiAdminOverview,
   apiUnlinkCard,
   apiDeleteCard,
+  apiBulkDeleteCards,
   apiUpdateCardKind
 } from '../lib/api'
 import { downloadSlugQrPng, downloadSlugsQrZip } from '../lib/qrExport'
@@ -35,6 +36,7 @@ const slugFilter = ref('all')
 const slugKindFilter = ref('all')
 const slugGenerating = ref(false)
 const slugExporting = ref(false)
+const slugDeleting = ref(false)
 const slugForm = ref({ count: 10, kind: 'table' })
 const dateFrom = ref('')
 const dateTo = ref('')
@@ -233,6 +235,44 @@ async function removeSlug(serial) {
   slugQrMap.value = map
   await refresh()
   flash(res.ok ? 'Slug deleted' : `Deleted locally (${res.error || 'offline'})`)
+}
+
+async function removeSelectedSlugs() {
+  const serials = [...selected.value]
+  if (!serials.length) {
+    flash('Select at least one slug to delete')
+    return
+  }
+  const linked = filteredSlugs.value.filter((c) => selected.value.has(c.serial) && c.profileId).length
+  const msg = linked
+    ? `Delete ${serials.length} selected slug(s)? ${linked} are still linked to profiles. This cannot be undone.`
+    : `Delete ${serials.length} selected slug(s)? This cannot be undone.`
+  if (!confirm(msg)) return
+
+  slugDeleting.value = true
+  try {
+    for (const serial of serials) deleteCard(serial)
+    const res = await apiBulkDeleteCards(serials)
+    const map = { ...slugQrMap.value }
+    const deleted = res.ok ? (res.data?.deleted || serials) : serials
+    for (const serial of deleted) delete map[serial]
+    slugQrMap.value = map
+    clearSelection()
+    selectMode.value = false
+    await refresh()
+    if (res.ok) {
+      const failed = Number(res.data?.failedCount || 0)
+      flash(
+        failed
+          ? `Deleted ${res.data?.deletedCount || deleted.length}; ${failed} failed`
+          : `Deleted ${res.data?.deletedCount || deleted.length} slug(s)`
+      )
+    } else {
+      flash(`Deleted locally (${res.error || 'offline'})`)
+    }
+  } finally {
+    slugDeleting.value = false
+  }
 }
 
 function exportSlugsCsv() {
@@ -454,6 +494,14 @@ watch(filteredSlugs, (rows) => {
               @click="clearSelection"
             >
               Clear ({{ selectedCount }})
+            </button>
+            <button
+              type="button"
+              class="px-3 py-1.5 rounded-full text-[11px] font-semibold border border-red-500/40 text-red-300 disabled:opacity-50"
+              :disabled="!selectedCount || slugDeleting"
+              @click="removeSelectedSlugs"
+            >
+              {{ slugDeleting ? 'Deleting…' : `Delete selected (${selectedCount})` }}
             </button>
           </template>
         </div>
