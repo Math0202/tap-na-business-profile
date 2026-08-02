@@ -1,0 +1,21 @@
+---
+description: Always commit and push finished work to GitHub for rollback safety
+alwaysApply: true
+---
+
+# Always commit to GitHub
+
+After completing a meaningful change set (features, fixes, migrations, deploys), **commit and push to GitHub** without waiting to be asked.
+
+## Required workflow
+
+1. Stage only source/config that belongs in the repo (never secrets, `.env`, credentials, or disposable build/tmp artifacts like `dist/`, `.wrangler/tmp/`, `.wrangler-deploy-tmp/` unless the project intentionally tracks them).
+2. Create a concise commit focused on **why**.
+3. **Push** to `origin` on the current branch so history is on GitHub for rollback.
+4. Report the commit hash (and that it was pushed) in the reply.
+
+## Exceptions
+
+- Do not commit if there are no real changes.
+- Do not use destructive git commands (`push --force` to main/master, hard reset) unless the user explicitly asks.
+- If push fails (auth/network), say so and leave the local commit ready to push.
