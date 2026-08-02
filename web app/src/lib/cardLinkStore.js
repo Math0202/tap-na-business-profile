@@ -107,6 +107,7 @@ function normalizeCard(c) {
   const kind = normalizeKind(
     CARD_KINDS[c.kind] ? c.kind : kindFromProductId(c.productId)
   )
+  const deleted = c.deleted === true
   return {
     id: c.id || uid('card'),
     serial: String(c.serial || '').trim(),
@@ -118,9 +119,12 @@ function normalizeCard(c) {
     profileId: c.profileId || '',
     profileName: c.profileName || '',
     destinationUrl: c.destinationUrl || '',
-    status: c.profileId ? 'linked' : 'unlinked',
+    status: deleted ? 'disabled' : (c.profileId ? 'linked' : 'unlinked'),
     linkedAt: c.linkedAt || '',
-    createdAt: c.createdAt || new Date().toISOString()
+    createdAt: c.createdAt || new Date().toISOString(),
+    deleted,
+    deletedAt: c.deletedAt || '',
+    deletedBy: c.deletedBy || ''
   }
 }
 
@@ -293,10 +297,12 @@ export function updateCard(serial, patch = {}) {
 }
 
 export function slugStats(cards = listCards()) {
+  const active = cards.filter((c) => !c.deleted)
   return {
-    total: cards.length,
-    linked: cards.filter((c) => c.profileId).length,
-    unlinked: cards.filter((c) => !c.profileId).length
+    total: active.length,
+    linked: active.filter((c) => c.profileId).length,
+    unlinked: active.filter((c) => !c.profileId).length,
+    deleted: cards.filter((c) => c.deleted).length
   }
 }
 
@@ -405,7 +411,33 @@ export function unlinkCard(serial) {
 
 export function deleteCard(serial) {
   const code = String(serial || '').trim().toLowerCase()
-  saveAll(listCards().filter((c) => c.serial.toLowerCase() !== code))
+  const list = listCards()
+  const idx = list.findIndex((c) => c.serial.toLowerCase() === code)
+  if (idx < 0) return null
+  list[idx] = {
+    ...list[idx],
+    deleted: true,
+    deletedAt: new Date().toISOString(),
+    status: 'disabled'
+  }
+  saveAll(list)
+  return list[idx]
+}
+
+export function restoreCard(serial) {
+  const code = String(serial || '').trim().toLowerCase()
+  const list = listCards()
+  const idx = list.findIndex((c) => c.serial.toLowerCase() === code)
+  if (idx < 0) return null
+  list[idx] = {
+    ...list[idx],
+    deleted: false,
+    deletedAt: '',
+    deletedBy: '',
+    status: list[idx].profileId ? 'linked' : 'unlinked'
+  }
+  saveAll(list)
+  return list[idx]
 }
 
 export function assignSaleCardsToProfile(saleId, profileOpts) {
@@ -424,7 +456,7 @@ export function assignSaleCardsToProfile(saleId, profileOpts) {
 
 export function getCardTapAction(serial) {
   const card = getCard(serial)
-  if (!card) {
+  if (!card || card.deleted) {
     return { ok: false, status: 'missing', message: 'Unknown card code' }
   }
   if (!card.profileId) {

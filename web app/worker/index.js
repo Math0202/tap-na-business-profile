@@ -62,7 +62,7 @@ function requestGeo(request) {
 async function recordCardActivity(env, request, { slug, channel = 'nfc', action = 'open' }) {
   const code = String(slug || '').trim()
   if (!code) return null
-  const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(code)}&select=id,profile_id`)
+  const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(code)}&deleted=eq.false&select=id,profile_id`)
   const card = cards?.[0]
   if (!card) return null
   const ua = request.headers.get('User-Agent') || ''
@@ -241,7 +241,7 @@ async function sb(env, path, { method = 'GET', body, prefer, skipErrorLog = fals
 async function uniqueSlug(env) {
   for (let i = 0; i < 12; i++) {
     const slug = randomSlug(6)
-    const rows = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&select=id`)
+    const rows = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&deleted=eq.false&select=id`)
     if (!rows?.length) return slug
   }
   throw new Error('Could not allocate slug')
@@ -335,6 +335,16 @@ async function authAdminFetch(env, path, { method = 'GET', body } = {}) {
     const err = new Error(msg)
     err.status = res.status
     err.data = data
+    await logAppError(env, {
+      source: 'auth_admin',
+      message: msg,
+      stack: err.stack || '',
+      path: String(path || '').split('?')[0],
+      method,
+      status: res.status,
+      context: { kind: 'supabase_auth_admin' }
+    })
+    err._logged = true
     throw err
   }
   return data
@@ -952,6 +962,55 @@ async function restoreSalesEntity(env, {
   return json({ ok: true, id, deleted: false })
 }
 
+
+async function softDeleteRow(env, {
+  table,
+  id,
+  idField = 'id',
+  staff = null,
+  actor = '',
+  extra = {}
+} = {}) {
+  const patch = {
+    deleted: true,
+    deleted_at: new Date().toISOString(),
+    deleted_by: String(actor || staff?.email || staff?.id || 'system'),
+    ...extra
+  }
+  if (table !== 'sales_cashflow' && table !== 'card_opens' && table !== 'sessions') {
+    // many tables have updated_at; ignore if missing via prefer
+    if (extra.updated_at === undefined && table !== 'cards') {
+      // cards may not have updated_at
+    }
+  }
+  await sb(env, `${table}?${idField}=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: patch,
+    prefer: 'return=minimal'
+  })
+  return patch
+}
+
+async function restoreRow(env, {
+  table,
+  id,
+  idField = 'id',
+  extra = {}
+} = {}) {
+  const patch = {
+    deleted: false,
+    deleted_at: null,
+    deleted_by: '',
+    ...extra
+  }
+  await sb(env, `${table}?${idField}=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: patch,
+    prefer: 'return=minimal'
+  })
+  return patch
+}
+
 function mapChangeLogRow(row) {
   return {
     id: row.id,
@@ -975,7 +1034,7 @@ async function preferredShareSlug(env, profileId, cardType = 'personal') {
   if (!profileId) return ''
   const cards = await sb(
     env,
-    `cards?profile_id=eq.${encodeURIComponent(profileId)}&status=eq.linked&select=slug,kind`
+    `cards?profile_id=eq.${encodeURIComponent(profileId)}&status=eq.linked&deleted=eq.false&select=slug,kind`
   )
   if (!cards?.length) return ''
   const want = cardType === 'table' ? 'table' : 'personal'
@@ -1468,7 +1527,7 @@ function ogHtml({ title, description, url, image, site = 'tap-na' }) {
 }
 
 async function serveOgImage(env, origin, slug) {
-  const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&select=*`)
+  const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&deleted=eq.false&select=*`)
   const card = cards?.[0]
   if (!card?.profile_id) {
     return Response.redirect(`${origin}/images/personal.png`, 302)
@@ -1833,7 +1892,7 @@ async function handleApi(request, env, url) {
   const cardMatch = pathname.match(/^\/api\/cards\/([^/]+)$/)
   if (cardMatch && method === 'GET') {
     const slug = decodeURIComponent(cardMatch[1])
-    const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&select=*`)
+    const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&deleted=eq.false&select=*`)
     const card = cards?.[0]
     if (!card) return bad('Card not found', 404)
     let profile = null
@@ -1896,7 +1955,7 @@ async function handleApi(request, env, url) {
     const profileId = body?.profileId || sessionProfile?.id
     if (!profileId) return bad('Login or provide profileId', 401)
 
-    const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&select=*`)
+    const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&deleted=eq.false&select=*`)
     const card = cards?.[0]
     if (!card) return bad('Card not found', 404)
     if (card.profile_id && card.profile_id !== profileId) {
@@ -1917,7 +1976,7 @@ async function handleApi(request, env, url) {
     // Every profile may only link one card slug
     const linked = await sb(
       env,
-      `cards?profile_id=eq.${encodeURIComponent(profileId)}&status=eq.linked&select=slug,kind`
+      `cards?profile_id=eq.${encodeURIComponent(profileId)}&status=eq.linked&deleted=eq.false&select=slug,kind`
     )
     const other = (linked || []).find((c) => c.slug !== slug)
     if (other) {
@@ -1987,19 +2046,17 @@ async function handleApi(request, env, url) {
     const failed = []
     for (const slug of slugs) {
       try {
-        const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&select=id`)
+        const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&deleted=eq.false&select=id,slug`)
         const card = cards?.[0]
         if (!card) {
           failed.push({ slug, error: 'not found' })
           continue
         }
-        await sb(env, `card_opens?card_id=eq.${encodeURIComponent(card.id)}`, {
-          method: 'DELETE',
-          prefer: 'return=minimal'
-        })
-        await sb(env, `cards?id=eq.${encodeURIComponent(card.id)}`, {
-          method: 'DELETE',
-          prefer: 'return=minimal'
+        await softDeleteRow(env, {
+          table: 'cards',
+          id: card.id,
+          staff: gate.staff,
+          extra: { status: 'disabled' }
         })
         deleted.push(slug)
       } catch (err) {
@@ -2007,7 +2064,7 @@ async function handleApi(request, env, url) {
         if (!err?._logged) {
           await logAppError(env, {
             source: 'api',
-            message: err?.message || 'bulk card delete failed',
+            message: err?.message || 'bulk card soft-delete failed',
             stack: err?.stack || '',
             path: pathname,
             method,
@@ -2024,18 +2081,33 @@ async function handleApi(request, env, url) {
     const gate = await requireStaff(env, request, { roles: ['admin'] })
     if (gate.error) return gate.error
     const slug = decodeURIComponent(deleteMatch[1])
-    const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&select=id`)
+    const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&deleted=eq.false&select=id,slug`)
     const card = cards?.[0]
     if (!card) return bad('Card not found', 404)
-    await sb(env, `card_opens?card_id=eq.${encodeURIComponent(card.id)}`, {
-      method: 'DELETE',
-      prefer: 'return=minimal'
+    await softDeleteRow(env, {
+      table: 'cards',
+      id: card.id,
+      staff: gate.staff,
+      extra: { status: 'disabled' }
     })
-    await sb(env, `cards?id=eq.${encodeURIComponent(card.id)}`, {
-      method: 'DELETE',
-      prefer: 'return=minimal'
+    return json({ ok: true, slug, deleted: true })
+  }
+
+  const cardRestoreMatch = pathname.match(/^\/api\/cards\/([^/]+)\/restore$/)
+  if (cardRestoreMatch && method === 'POST') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
+    const slug = decodeURIComponent(cardRestoreMatch[1])
+    const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&select=id,status,profile_id`)
+    const card = cards?.[0]
+    if (!card) return bad('Card not found', 404)
+    const status = card.profile_id ? 'linked' : 'unlinked'
+    await restoreRow(env, {
+      table: 'cards',
+      id: card.id,
+      extra: { status }
     })
-    return json({ ok: true, slug })
+    return json({ ok: true, slug, deleted: false, status })
   }
 
   if (pathname === '/api/auth/signup' && method === 'POST') {
@@ -2049,7 +2121,7 @@ async function handleApi(request, env, url) {
 
     let claimCard = null
     if (slug) {
-      const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&select=*`)
+      const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&deleted=eq.false&select=*`)
       claimCard = cards?.[0]
       if (!claimCard) return bad('Card not found', 404)
       if (claimCard.profile_id || claimCard.status === 'linked') {
@@ -2098,9 +2170,11 @@ async function handleApi(request, env, url) {
         }
       )
       if (!claimed?.length) {
-        await sb(env, `profiles?id=eq.${encodeURIComponent(id)}`, {
-          method: 'DELETE',
-          prefer: 'return=minimal'
+        await softDeleteRow(env, {
+          table: 'profiles',
+          id,
+          actor: 'signup_claim_conflict',
+          extra: { updated_at: new Date().toISOString() }
         })
         return bad('Card was claimed by another profile', 409)
       }
@@ -2381,6 +2455,21 @@ async function handleApi(request, env, url) {
       status: body?.status == null ? null : Number(body.status) || null,
       context: body?.context && typeof body.context === 'object' ? body.context : {},
       actor: gate.staff
+    })
+    return json({ ok: true })
+  }
+
+  // Public client error sink (no auth) so every frontend failure can be logged.
+  if (pathname === '/api/client-errors' && method === 'POST') {
+    const body = await readJson(request)
+    await logAppError(env, {
+      source: 'client',
+      message: String(body?.message || 'Client error').slice(0, 4000),
+      stack: String(body?.stack || '').slice(0, 8000),
+      path: String(body?.path || '').slice(0, 500),
+      method: String(body?.method || '').slice(0, 16),
+      status: body?.status == null ? null : Number(body.status) || null,
+      context: body?.context && typeof body.context === 'object' ? body.context : {}
     })
     return json({ ok: true })
   }
@@ -2809,12 +2898,12 @@ async function handleApi(request, env, url) {
     const gate = await requireStaff(env, request, { roles: ['admin'] })
     if (gate.error) return gate.error
     const [profiles, cards] = await Promise.all([
-      sb(env, 'profiles?select=id,card_type,name,title,company,email,phone,address,avatar,logo,disabled,created_at,updated_at&order=created_at.desc&limit=500'),
-      sb(env, 'cards?select=slug,kind,status,profile_id,linked_at,created_at&order=created_at.desc&limit=2000')
+      sb(env, 'profiles?deleted=eq.false&select=id,card_type,name,title,company,email,phone,address,avatar,logo,disabled,created_at,updated_at&order=created_at.desc&limit=500'),
+      sb(env, 'cards?select=slug,kind,status,profile_id,linked_at,created_at,deleted,deleted_at,deleted_by&order=created_at.desc&limit=2000')
     ])
     const cardsByProfile = {}
     for (const c of cards || []) {
-      if (!c.profile_id) continue
+      if (!c.profile_id || c.deleted === true) continue
       if (!cardsByProfile[c.profile_id]) cardsByProfile[c.profile_id] = []
       cardsByProfile[c.profile_id].push(c)
     }
@@ -2849,7 +2938,10 @@ async function handleApi(request, env, url) {
         profileId: c.profile_id || '',
         profileName: c.profile_id ? nameByProfile[c.profile_id] || '' : '',
         linkedAt: c.linked_at,
-        createdAt: c.created_at
+        createdAt: c.created_at,
+        deleted: c.deleted === true,
+        deletedAt: c.deleted_at || '',
+        deletedBy: c.deleted_by || ''
       }))
     })
   }
@@ -3565,7 +3657,7 @@ async function handleApi(request, env, url) {
     if (!profile) return bad('Unauthorized', 401)
     const rows = await sb(
       env,
-      'meetings?profile_id=eq.' + encodeURIComponent(profile.id) + '&order=created_at.desc&limit=500'
+      'meetings?profile_id=eq.' + encodeURIComponent(profile.id) + '&deleted=eq.false&order=created_at.desc&limit=500'
     )
     return json({ ok: true, meetings: rows || [] })
   }
@@ -3575,11 +3667,11 @@ async function handleApi(request, env, url) {
     if (!profile) return bad('Unauthorized', 401)
     const meetings = await sb(
       env,
-      'meetings?profile_id=eq.' + encodeURIComponent(profile.id) + '&status=eq.new&select=id'
+      'meetings?profile_id=eq.' + encodeURIComponent(profile.id) + '&deleted=eq.false&status=eq.new&select=id'
     )
     const followups = await sb(
       env,
-      'followups?profile_id=eq.' + encodeURIComponent(profile.id) + '&status=eq.open&select=id,due_at'
+      'followups?profile_id=eq.' + encodeURIComponent(profile.id) + '&deleted=eq.false&status=eq.open&select=id,due_at'
     )
     const now = Date.now()
     const overdueFollowups = (followups || []).filter((f) => {
@@ -3624,7 +3716,7 @@ async function handleApi(request, env, url) {
     if (!profile) return bad('Unauthorized', 401)
     const rows = await sb(
       env,
-      'followups?profile_id=eq.' + encodeURIComponent(profile.id) + '&order=due_at.asc.nullslast&limit=500'
+      'followups?profile_id=eq.' + encodeURIComponent(profile.id) + '&deleted=eq.false&order=due_at.asc.nullslast&limit=500'
     )
     return json({ ok: true, followups: rows || [] })
   }
@@ -3720,14 +3812,16 @@ async function handleApi(request, env, url) {
     const followupId = decodeURIComponent(followupMatch[1])
     const existing = await sb(
       env,
-      'followups?id=eq.' + encodeURIComponent(followupId) + '&profile_id=eq.' + encodeURIComponent(profile.id) + '&select=id'
+      'followups?id=eq.' + encodeURIComponent(followupId) + '&profile_id=eq.' + encodeURIComponent(profile.id) + '&deleted=eq.false&select=id'
     )
     if (!existing?.length) return bad('Follow-up not found', 404)
-    await sb(env, 'followups?id=eq.' + encodeURIComponent(followupId), {
-      method: 'DELETE',
-      prefer: 'return=minimal'
+    await softDeleteRow(env, {
+      table: 'followups',
+      id: followupId,
+      actor: profile.email || profile.id,
+      extra: { updated_at: new Date().toISOString() }
     })
-    return json({ ok: true, id: followupId })
+    return json({ ok: true, id: followupId, deleted: true })
   }
 
   if (pathname === '/api/shop/order-quote' && method === 'POST') {
@@ -4045,7 +4139,7 @@ export default {
       // Social crawlers get Open Graph HTML with the profile photo (WhatsApp, etc.)
       if (isCrawler(ua)) {
         try {
-          const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&select=*`)
+          const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&deleted=eq.false&select=*`)
           const card = cards?.[0]
           let profile = null
           if (card?.profile_id) {
@@ -4099,8 +4193,17 @@ export default {
         const via = String(url.searchParams.get('via') || '').toLowerCase()
         const channel = via === 'qr' ? 'qr' : 'nfc'
         await recordCardActivity(env, request, { slug, channel, action: 'open' })
-      } catch {
-        /* non-fatal */
+      } catch (err) {
+        if (!err?._logged) {
+          await logAppError(env, {
+            source: 'card_open',
+            message: err?.message || String(err),
+            stack: err?.stack || '',
+            path: url.pathname,
+            method: 'GET',
+            context: { kind: 'record_card_activity', slug }
+          })
+        }
       }
     }
 

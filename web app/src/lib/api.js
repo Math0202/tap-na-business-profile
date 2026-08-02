@@ -48,23 +48,20 @@ function authTokenFor(path) {
 }
 
 function shouldReportClientError(path) {
-  if (!path || path.startsWith('/api/admin/errors')) return false
-  return (
-    path.startsWith('/api/staff') ||
-    path.startsWith('/api/admin') ||
-    path.startsWith('/api/sales/') ||
-    path.startsWith('/api/email/') ||
-    path === '/api/cards/provision' ||
-    path === '/api/cards/bulk-delete'
-  )
+  // Log every API failure path except error sinks (avoid recursion).
+  if (!path) return false
+  if (path.startsWith('/api/admin/errors') || path.startsWith('/api/client-errors')) return false
+  return path.startsWith('/api/')
 }
 
 function fireClientErrorReport({ path, method, status, message, stack, context }) {
   try {
+    const headers = { 'Content-Type': 'application/json' }
     const token = authTokenFor('/api/admin/errors')
-    if (!token) return
-    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
-    fetch(`${API_BASE}/api/admin/errors`, {
+    // Prefer authenticated admin errors when staff is logged in; otherwise public sink.
+    const endpoint = token ? '/api/admin/errors' : '/api/client-errors'
+    if (token) headers.Authorization = `Bearer ${token}`
+    fetch(`${API_BASE}${endpoint}`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -97,7 +94,12 @@ async function request(path, { method = 'GET', body, timeoutMs = 8000 } = {}) {
     })
     const data = await res.json().catch(() => null)
     if (!res.ok) {
-      if (res.status >= 500 && shouldReportClientError(path)) {
+      const skipExpected =
+        (res.status === 401 || res.status === 403 || res.status === 404) &&
+        (path.startsWith('/api/staff/login') ||
+          path.startsWith('/api/auth/login') ||
+          path.startsWith('/api/cards/') && path.includes('/claim'))
+      if (shouldReportClientError(path) && !skipExpected && res.status >= 400) {
         fireClientErrorReport({
           path,
           method,
@@ -163,9 +165,14 @@ export function apiUnlinkCard(slug) {
   return request(`/api/cards/${encodeURIComponent(slug)}/unlink`, { method: 'POST' })
 }
 
-/** Delete a card entirely (admin) */
+/** Soft-delete a card (admin) */
 export function apiDeleteCard(slug) {
   return request(`/api/cards/${encodeURIComponent(slug)}`, { method: 'DELETE' })
+}
+
+/** Restore a soft-deleted card (admin) */
+export function apiRestoreCard(slug) {
+  return request(`/api/cards/${encodeURIComponent(slug)}/restore`, { method: 'POST', timeoutMs: 12000 })
 }
 
 /** Bulk-delete cards by slug (admin) */
@@ -297,17 +304,20 @@ export function apiAdminErrors({ limit = 200, source = '' } = {}) {
 }
 
 export function apiReportClientError(payload = {}) {
-  return request('/api/admin/errors', {
+  const body = {
+    source: payload.source || 'client',
+    message: payload.message || 'Client error',
+    stack: payload.stack || '',
+    path: payload.path || (typeof window !== 'undefined' ? window.location.pathname : ''),
+    method: payload.method || '',
+    status: payload.status ?? null,
+    context: payload.context && typeof payload.context === 'object' ? payload.context : {}
+  }
+  // Staff sessions use authenticated endpoint; everyone else uses public sink.
+  const staff = authTokenFor('/api/admin/errors')
+  return request(staff ? '/api/admin/errors' : '/api/client-errors', {
     method: 'POST',
-    body: {
-      source: payload.source || 'client',
-      message: payload.message || 'Client error',
-      stack: payload.stack || '',
-      path: payload.path || (typeof window !== 'undefined' ? window.location.pathname : ''),
-      method: payload.method || '',
-      status: payload.status ?? null,
-      context: payload.context && typeof payload.context === 'object' ? payload.context : {}
-    },
+    body,
     timeoutMs: 8000
   })
 }

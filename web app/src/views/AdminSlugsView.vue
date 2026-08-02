@@ -12,6 +12,7 @@ import {
   CARD_KINDS,
   unlinkCard,
   deleteCard,
+  restoreCard,
   updateCard,
   slugStats,
   kindLabel
@@ -22,6 +23,7 @@ import {
   apiUnlinkCard,
   apiDeleteCard,
   apiBulkDeleteCards,
+  apiRestoreCard,
   apiUpdateCardKind
 } from '../lib/api'
 import { downloadSlugQrPng, downloadSlugsQrZip } from '../lib/qrExport'
@@ -31,8 +33,8 @@ const query = ref('')
 const toast = ref('')
 const allSlugs = ref([])
 const slugQrMap = ref({})
-const slugStatsSummary = ref({ total: 0, linked: 0, unlinked: 0 })
-const slugFilter = ref('all')
+const slugStatsSummary = ref({ total: 0, linked: 0, unlinked: 0, deleted: 0 })
+const slugFilter = ref('all') // all | linked | unlinked | deleted
 const slugKindFilter = ref('all')
 const slugGenerating = ref(false)
 const slugExporting = ref(false)
@@ -69,8 +71,13 @@ const filteredSlugs = computed(() => {
   const from = dateFrom.value
   const to = dateTo.value
   return allSlugs.value.filter((c) => {
-    if (slugFilter.value === 'linked' && !c.profileId) return false
-    if (slugFilter.value === 'unlinked' && c.profileId) return false
+    if (slugFilter.value === 'deleted') {
+      if (!c.deleted) return false
+    } else {
+      if (c.deleted) return false
+      if (slugFilter.value === 'linked' && !c.profileId) return false
+      if (slugFilter.value === 'unlinked' && c.profileId) return false
+    }
     if (slugKindFilter.value !== 'all' && c.kind !== slugKindFilter.value) return false
     const created = dayStamp(c.createdAt || c.linkedAt)
     if (from && (!created || created < from)) return false
@@ -119,10 +126,12 @@ function toggleSelectMode() {
 }
 
 function applyStats(list) {
+  const active = list.filter((c) => !c.deleted)
   slugStatsSummary.value = {
-    total: list.length,
-    linked: list.filter((c) => c.profileId).length,
-    unlinked: list.filter((c) => !c.profileId).length
+    total: active.length,
+    linked: active.filter((c) => c.profileId).length,
+    unlinked: active.filter((c) => !c.profileId).length,
+    deleted: list.filter((c) => c.deleted).length
   }
 }
 
@@ -142,7 +151,11 @@ async function refresh() {
     profileName: c.profileName || local[c.slug]?.profileName || '',
     productName: local[c.slug]?.productName || kindLabel(c.kind),
     createdAt: c.createdAt || local[c.slug]?.createdAt || '',
-    linkedAt: c.linkedAt || ''
+    linkedAt: c.linkedAt || '',
+    deleted: c.deleted === true,
+    deletedAt: c.deletedAt || '',
+    deletedBy: c.deletedBy || '',
+    status: c.deleted ? 'disabled' : (c.profileId ? 'linked' : 'unlinked')
   }))
   applyStats(allSlugs.value)
 }
@@ -227,14 +240,18 @@ async function unlinkSlug(serial) {
 }
 
 async function removeSlug(serial) {
-  if (!confirm(`Delete slug ${serial}? This cannot be undone.`)) return
+  if (!confirm(`Mark slug ${serial} as deleted? You can restore it later.`)) return
   deleteCard(serial)
   const res = await apiDeleteCard(serial)
-  const map = { ...slugQrMap.value }
-  delete map[serial]
-  slugQrMap.value = map
   await refresh()
-  flash(res.ok ? 'Slug deleted' : `Deleted locally (${res.error || 'offline'})`)
+  flash(res.ok ? 'Slug marked deleted' : `Marked deleted locally (${res.error || 'offline'})`)
+}
+
+async function undeleteSlug(serial) {
+  restoreCard(serial)
+  const res = await apiRestoreCard(serial)
+  await refresh()
+  flash(res.ok ? 'Slug restored' : `Restored locally (${res.error || 'offline'})`)
 }
 
 async function removeSelectedSlugs() {
@@ -245,30 +262,23 @@ async function removeSelectedSlugs() {
   }
   const linked = filteredSlugs.value.filter((c) => selected.value.has(c.serial) && c.profileId).length
   const msg = linked
-    ? `Delete ${serials.length} selected slug(s)? ${linked} are still linked to profiles. This cannot be undone.`
-    : `Delete ${serials.length} selected slug(s)? This cannot be undone.`
+    ? `Mark ${serials.length} selected slug(s) as deleted? ${linked} are still linked to profiles. You can restore later.`
+    : `Mark ${serials.length} selected slug(s) as deleted? You can restore them later.`
   if (!confirm(msg)) return
 
   slugDeleting.value = true
   try {
     for (const serial of serials) deleteCard(serial)
     const res = await apiBulkDeleteCards(serials)
-    const map = { ...slugQrMap.value }
-    const deleted = res.ok ? (res.data?.deleted || serials) : serials
-    for (const serial of deleted) delete map[serial]
-    slugQrMap.value = map
     clearSelection()
     selectMode.value = false
     await refresh()
     if (res.ok) {
       const failed = Number(res.data?.failedCount || 0)
-      flash(
-        failed
-          ? `Deleted ${res.data?.deletedCount || deleted.length}; ${failed} failed`
-          : `Deleted ${res.data?.deletedCount || deleted.length} slug(s)`
-      )
+      const n = res.data?.deletedCount || serials.length
+      flash(failed ? `Marked ${n} deleted; ${failed} failed` : `Marked ${n} slug(s) deleted`)
     } else {
-      flash(`Deleted locally (${res.error || 'offline'})`)
+      flash(`Marked deleted locally (${res.error || 'offline'})`)
     }
   } finally {
     slugDeleting.value = false
@@ -368,7 +378,7 @@ watch(filteredSlugs, (rows) => {
       </header>
 
       <section class="mb-8 space-y-4">
-        <div class="grid grid-cols-3 gap-3">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div class="card-item-bg rounded-2xl p-3">
             <p class="text-[10px] uppercase tracking-wide text-gray-500">Total</p>
             <p class="text-lg font-bold">{{ slugStatsSummary.total }}</p>
@@ -380,6 +390,10 @@ watch(filteredSlugs, (rows) => {
           <div class="card-item-bg rounded-2xl p-3">
             <p class="text-[10px] uppercase tracking-wide text-gray-500">Blank</p>
             <p class="text-lg font-bold text-amber-300">{{ slugStatsSummary.unlinked }}</p>
+          </div>
+          <div class="card-item-bg rounded-2xl p-3">
+            <p class="text-[10px] uppercase tracking-wide text-gray-500">Deleted</p>
+            <p class="text-lg font-bold text-red-300">{{ slugStatsSummary.deleted || 0 }}</p>
           </div>
         </div>
 
@@ -463,7 +477,7 @@ watch(filteredSlugs, (rows) => {
 
         <div class="flex flex-wrap gap-2 items-center">
           <button
-            v-for="f in [{ id: 'all', label: 'All' }, { id: 'unlinked', label: 'Blank' }, { id: 'linked', label: 'Linked' }]"
+            v-for="f in [{ id: 'all', label: 'All' }, { id: 'unlinked', label: 'Blank' }, { id: 'linked', label: 'Linked' }, { id: 'deleted', label: 'Deleted' }]"
             :key="f.id"
             type="button"
             class="px-3 py-1.5 rounded-full text-[11px] font-semibold transition-colors"
@@ -544,9 +558,11 @@ watch(filteredSlugs, (rows) => {
                 <p class="text-sm font-mono font-semibold">{{ c.serial }}</p>
                 <span
                   class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
-                  :class="c.profileId ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'"
+                  :class="c.deleted
+                    ? 'bg-red-500/15 text-red-300'
+                    : c.profileId ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'"
                 >
-                  {{ c.profileId ? 'Linked' : 'Blank' }}
+                  {{ c.deleted ? 'Deleted' : (c.profileId ? 'Linked' : 'Blank') }}
                 </span>
               </div>
               <div class="flex items-center gap-1.5 mt-1">
@@ -590,8 +606,21 @@ watch(filteredSlugs, (rows) => {
                 <button v-if="c.profileId" type="button" class="text-[11px] font-semibold text-amber-300" @click="unlinkSlug(c.serial)">
                   Unlink
                 </button>
-                <button type="button" class="text-[11px] font-semibold text-red-400" @click="removeSlug(c.serial)">
+                <button
+                  v-if="!c.deleted"
+                  type="button"
+                  class="text-[11px] font-semibold text-red-400"
+                  @click="removeSlug(c.serial)"
+                >
                   Delete
+                </button>
+                <button
+                  v-else
+                  type="button"
+                  class="text-[11px] font-semibold text-emerald-300"
+                  @click="undeleteSlug(c.serial)"
+                >
+                  Restore
                 </button>
               </div>
             </div>
