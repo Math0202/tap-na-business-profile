@@ -577,6 +577,11 @@ input.field-input:-webkit-autofill:focus {
     0 10px 30px rgba(0,0,0,0.25),
     inset 0 1px 0 rgba(255,255,255,0.75);
 }
+
+/* Dialogs teleported to body — always above bottom nav / FAB (z 80) */
+.app-dialog-overlay {
+  z-index: 200;
+}
 .admin-nav-item,
 .sales-nav-item {
   flex: 1;

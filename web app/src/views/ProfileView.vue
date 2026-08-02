@@ -1379,68 +1379,74 @@ onMounted(() => {
     </form>
   </main>
 
-  <div v-if="showPasswordModal" class="fixed inset-0 z-[100] flex items-center justify-center p-6">
-    <div class="absolute inset-0 bg-black/70" @click="showPasswordModal = false" />
-    <div class="relative w-full max-w-sm card-item-bg rounded-3xl p-6 shadow-2xl space-y-4">
-      <div class="flex items-center justify-between gap-3">
-        <h2 class="text-lg font-bold">Change password</h2>
+  <Teleport to="body">
+    <div v-if="showPasswordModal" class="app-dialog-overlay fixed inset-0 z-[200] flex items-center justify-center p-6">
+      <div class="absolute inset-0 bg-black/70" @click="showPasswordModal = false" />
+      <div class="relative w-full max-w-sm card-item-bg rounded-3xl p-6 shadow-2xl space-y-4">
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="text-lg font-bold">Change password</h2>
+          <button
+            type="button"
+            class="w-9 h-9 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center"
+            aria-label="Close"
+            @click="showPasswordModal = false"
+          >
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="field-current-password">Current password</label>
+          <div class="field-shell">
+            <span class="material-symbols-outlined field-icon">lock</span>
+            <input id="field-current-password" v-model="currentPassword" type="password" class="field-input" placeholder="Leave blank if not set yet" />
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="field-new-password">New password</label>
+          <div class="field-shell">
+            <span class="material-symbols-outlined field-icon">key</span>
+            <input id="field-new-password" v-model="newPassword" type="password" class="field-input" placeholder="At least 6 characters" />
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="field-confirm-password">Confirm new password</label>
+          <div class="field-shell">
+            <span class="material-symbols-outlined field-icon">verified_user</span>
+            <input id="field-confirm-password" v-model="confirmPassword" type="password" class="field-input" placeholder="Repeat new password" />
+          </div>
+        </div>
+        <p :class="loginFeedbackClass">{{ loginFeedback }}</p>
         <button
           type="button"
-          class="w-9 h-9 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center"
-          aria-label="Close"
-          @click="showPasswordModal = false"
+          class="w-full py-3.5 rounded-full bg-white text-black font-bold text-sm hover:bg-gray-200 transition-colors"
+          @click="saveLogin"
         >
-          <span class="material-symbols-outlined text-[20px]">close</span>
+          Update password
         </button>
       </div>
-      <div class="field-group">
-        <label class="field-label" for="field-current-password">Current password</label>
-        <div class="field-shell">
-          <span class="material-symbols-outlined field-icon">lock</span>
-          <input id="field-current-password" v-model="currentPassword" type="password" class="field-input" placeholder="Leave blank if not set yet" />
-        </div>
-      </div>
-      <div class="field-group">
-        <label class="field-label" for="field-new-password">New password</label>
-        <div class="field-shell">
-          <span class="material-symbols-outlined field-icon">key</span>
-          <input id="field-new-password" v-model="newPassword" type="password" class="field-input" placeholder="At least 6 characters" />
-        </div>
-      </div>
-      <div class="field-group">
-        <label class="field-label" for="field-confirm-password">Confirm new password</label>
-        <div class="field-shell">
-          <span class="material-symbols-outlined field-icon">verified_user</span>
-          <input id="field-confirm-password" v-model="confirmPassword" type="password" class="field-input" placeholder="Repeat new password" />
-        </div>
-      </div>
-      <p :class="loginFeedbackClass">{{ loginFeedback }}</p>
-      <button
-        type="button"
-        class="w-full py-3.5 rounded-full bg-white text-black font-bold text-sm hover:bg-gray-200 transition-colors"
-        @click="saveLogin"
-      >
-        Update password
-      </button>
     </div>
-  </div>
+  </Teleport>
 
-  <div v-if="showDeleteModal" class="fixed inset-0 z-[100] flex items-center justify-center p-6">
-    <div class="absolute inset-0 bg-black/70" @click="showDeleteModal = false" />
-    <div class="relative w-full max-w-sm card-item-bg rounded-3xl p-6 shadow-2xl">
-      <h2 class="text-lg font-bold">Delete profile?</h2>
-      <p class="text-gray-400 text-sm mt-2">This removes your profile data from this device. You can create a new one later.</p>
-      <div class="mt-5 flex gap-3">
-        <button type="button" class="flex-1 py-3 rounded-full bg-zinc-700 hover:bg-zinc-600 font-semibold text-sm" @click="showDeleteModal = false">Cancel</button>
-        <button type="button" class="flex-1 py-3 rounded-full bg-red-500 hover:bg-red-600 text-white font-semibold text-sm" @click="confirmDelete">Delete</button>
+  <Teleport to="body">
+    <div v-if="showDeleteModal" class="app-dialog-overlay fixed inset-0 z-[200] flex items-center justify-center p-6">
+      <div class="absolute inset-0 bg-black/70" @click="showDeleteModal = false" />
+      <div class="relative w-full max-w-sm card-item-bg rounded-3xl p-6 shadow-2xl">
+        <h2 class="text-lg font-bold">Delete profile?</h2>
+        <p class="text-gray-400 text-sm mt-2">This removes your profile data from this device. You can create a new one later.</p>
+        <div class="mt-5 flex gap-3">
+          <button type="button" class="flex-1 py-3 rounded-full bg-zinc-700 hover:bg-zinc-600 font-semibold text-sm" @click="showDeleteModal = false">Cancel</button>
+          <button type="button" class="flex-1 py-3 rounded-full bg-red-500 hover:bg-red-600 text-white font-semibold text-sm" @click="confirmDelete">Delete</button>
+        </div>
       </div>
     </div>
-  </div>
+  </Teleport>
 
-  <div
-    v-show="showToast"
-    class="fixed left-1/2 -translate-x-1/2 bottom-24 z-[60] px-4 py-3 rounded-2xl bg-white text-black text-sm font-medium shadow-xl"
-  >
-    Profile saved
-  </div>
+  <Teleport to="body">
+    <div
+      v-show="showToast"
+      class="fixed left-1/2 -translate-x-1/2 bottom-24 z-[210] px-4 py-3 rounded-2xl bg-white text-black text-sm font-medium shadow-xl"
+    >
+      Profile saved
+    </div>
+  </Teleport>
 </template>

@@ -563,35 +563,37 @@ watch(() => route.path, () => {
       @close="bookOpen = false"
     />
 
-    <div
-      v-if="videoOpen"
-      class="fixed inset-0 z-[100] flex items-center justify-center p-4"
-    >
-      <div class="absolute inset-0 bg-black/80" @click="closeVideo" />
-      <div class="relative w-full max-w-md card-item-bg rounded-3xl p-4 shadow-2xl">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="text-lg font-bold">Profile video</h2>
-          <button
-            type="button"
-            aria-label="Close"
-            class="w-9 h-9 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center"
-            @click="closeVideo"
-          >
-            <span class="material-symbols-outlined text-[20px]">close</span>
-          </button>
-        </div>
-        <div class="rounded-2xl overflow-hidden bg-black aspect-video">
-          <iframe
-            v-if="useEmbed"
-            :src="embedSrc"
-            class="w-full h-full"
-            title="Profile video"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowfullscreen
-          />
-          <video v-else ref="videoEl" class="w-full h-full" controls playsinline />
+    <Teleport to="body">
+      <div
+        v-if="videoOpen"
+        class="app-dialog-overlay fixed inset-0 z-[200] flex items-center justify-center p-4"
+      >
+        <div class="absolute inset-0 bg-black/80" @click="closeVideo" />
+        <div class="relative w-full max-w-md card-item-bg rounded-3xl p-4 shadow-2xl">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-bold">Profile video</h2>
+            <button
+              type="button"
+              aria-label="Close"
+              class="w-9 h-9 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center"
+              @click="closeVideo"
+            >
+              <span class="material-symbols-outlined text-[20px]">close</span>
+            </button>
+          </div>
+          <div class="rounded-2xl overflow-hidden bg-black aspect-video">
+            <iframe
+              v-if="useEmbed"
+              :src="embedSrc"
+              class="w-full h-full"
+              title="Profile video"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowfullscreen
+            />
+            <video v-else ref="videoEl" class="w-full h-full" controls playsinline />
+          </div>
         </div>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>

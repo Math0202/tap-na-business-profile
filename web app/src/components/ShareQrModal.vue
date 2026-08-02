@@ -127,24 +127,25 @@ defineExpose({ downloadQr, renderQr, qrDataUrl })
 </script>
 
 <template>
-  <div
-    v-if="open"
-    class="fixed inset-0 z-[100] flex items-center justify-center p-6"
-    aria-hidden="false"
-  >
-    <div class="absolute inset-0 bg-black/70" @click="emit('close')" />
-    <div class="relative w-full max-w-sm card-item-bg rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-bold">{{ title }}</h2>
-        <button
-          type="button"
-          aria-label="Close"
-          class="w-9 h-9 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center transition-colors"
-          @click="emit('close')"
-        >
-          <span class="material-symbols-outlined text-[20px]">close</span>
-        </button>
-      </div>
+  <Teleport to="body">
+    <div
+      v-if="open"
+      class="app-dialog-overlay fixed inset-0 z-[200] flex items-center justify-center p-6"
+      aria-hidden="false"
+    >
+      <div class="absolute inset-0 bg-black/70" @click="emit('close')" />
+      <div class="relative w-full max-w-sm card-item-bg rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-bold">{{ title }}</h2>
+          <button
+            type="button"
+            aria-label="Close"
+            class="w-9 h-9 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center transition-colors"
+            @click="emit('close')"
+          >
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
       <p class="text-gray-400 text-sm mb-5">{{ copyText }}</p>
       <div class="bg-white rounded-2xl p-4 flex items-center justify-center">
         <img v-if="qrDataUrl" :src="qrDataUrl" alt="QR code" class="w-[200px] h-[200px]" />
@@ -211,5 +212,6 @@ defineExpose({ downloadQr, renderQr, qrDataUrl })
         {{ copyLabel }}
       </button>
     </div>
-  </div>
+    </div>
+  </Teleport>
 </template>

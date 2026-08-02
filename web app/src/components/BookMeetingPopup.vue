@@ -86,25 +86,26 @@ async function onSubmit(e) {
 </script>
 
 <template>
-  <div v-if="open" class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4">
-    <div class="absolute inset-0 bg-black/70" @click="emit('close')" />
-    <div class="relative w-full max-w-md card-item-bg rounded-3xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
-      <div class="flex items-center justify-between mb-3">
-        <div>
-          <h2 class="text-lg font-bold">Book a meeting</h2>
-          <p class="text-gray-400 text-xs mt-0.5">
-            Request time with {{ ownerName || 'this person' }}
-          </p>
+  <Teleport to="body">
+    <div v-if="open" class="app-dialog-overlay fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4">
+      <div class="absolute inset-0 bg-black/70" @click="emit('close')" />
+      <div class="relative w-full max-w-md card-item-bg rounded-3xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-3">
+          <div>
+            <h2 class="text-lg font-bold">Book a meeting</h2>
+            <p class="text-gray-400 text-xs mt-0.5">
+              Request time with {{ ownerName || 'this person' }}
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="Close"
+            class="w-9 h-9 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center"
+            @click="emit('close')"
+          >
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
         </div>
-        <button
-          type="button"
-          aria-label="Close"
-          class="w-9 h-9 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center"
-          @click="emit('close')"
-        >
-          <span class="material-symbols-outlined text-[20px]">close</span>
-        </button>
-      </div>
 
       <div
         v-if="success"
@@ -151,6 +152,7 @@ async function onSubmit(e) {
           {{ submitting ? 'Sending…' : 'Send request' }}
         </button>
       </form>
+      </div>
     </div>
-  </div>
+  </Teleport>
 </template>
