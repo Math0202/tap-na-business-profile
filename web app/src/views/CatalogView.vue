@@ -587,185 +587,191 @@ onUnmounted(() => {
       </template>
 
       <!-- Owner edit modal -->
-      <div v-if="editing && isOwner" class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4">
-        <div class="absolute inset-0 bg-black/70" @click="closeForm" />
-        <div class="relative w-full max-w-md card-item-bg rounded-3xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="text-lg font-bold">{{ editing === 'new' ? 'Add offering' : 'Edit offering' }}</h2>
-            <button type="button" class="w-9 h-9 rounded-full bg-zinc-700 flex items-center justify-center" @click="closeForm">
-              <span class="material-symbols-outlined text-[20px]">close</span>
-            </button>
-          </div>
-          <div class="space-y-3">
-            <div>
-              <label class="field-label" for="cat-name">Name</label>
-              <input id="cat-name" v-model="form.name" type="text" class="field-input w-full" placeholder="Consulting hour" maxlength="120">
+      <Teleport to="body">
+        <div v-if="editing && isOwner" class="app-dialog-overlay fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4">
+          <div class="absolute inset-0 bg-black/70" @click="closeForm" />
+          <div class="relative w-full max-w-md card-item-bg rounded-3xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-lg font-bold">{{ editing === 'new' ? 'Add offering' : 'Edit offering' }}</h2>
+              <button type="button" class="w-9 h-9 rounded-full bg-zinc-700 flex items-center justify-center" @click="closeForm">
+                <span class="material-symbols-outlined text-[20px]">close</span>
+              </button>
             </div>
-            <div>
-              <label class="field-label" for="cat-desc">Description</label>
-              <textarea id="cat-desc" v-model="form.description" rows="2" class="field-input w-full resize-none" placeholder="Optional details" maxlength="400" />
-            </div>
-            <div>
-              <label class="field-label" for="cat-price">Price (optional)</label>
-              <input id="cat-price" v-model="form.price" type="text" inputmode="decimal" class="field-input w-full" placeholder="e.g. 450">
-            </div>
+            <div class="space-y-3">
+              <div>
+                <label class="field-label" for="cat-name">Name</label>
+                <input id="cat-name" v-model="form.name" type="text" class="field-input w-full" placeholder="Consulting hour" maxlength="120">
+              </div>
+              <div>
+                <label class="field-label" for="cat-desc">Description</label>
+                <textarea id="cat-desc" v-model="form.description" rows="2" class="field-input w-full resize-none" placeholder="Optional details" maxlength="400" />
+              </div>
+              <div>
+                <label class="field-label" for="cat-price">Price (optional)</label>
+                <input id="cat-price" v-model="form.price" type="text" inputmode="decimal" class="field-input w-full" placeholder="e.g. 450">
+              </div>
 
-            <div>
-              <p class="field-label">Images</p>
-              <div class="flex flex-wrap gap-2 mb-2">
-                <div v-for="url in form.images" :key="url" class="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-900">
-                  <img :src="url" alt="" class="w-full h-full object-cover">
-                  <button type="button" class="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/70 text-[10px]" @click="removeImage(url)">×</button>
+              <div>
+                <p class="field-label">Images</p>
+                <div class="flex flex-wrap gap-2 mb-2">
+                  <div v-for="url in form.images" :key="url" class="relative w-16 h-16 rounded-xl overflow-hidden bg-zinc-900">
+                    <img :src="url" alt="" class="w-full h-full object-cover">
+                    <button type="button" class="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/70 text-[10px]" @click="removeImage(url)">×</button>
+                  </div>
+                </div>
+                <label class="inline-flex px-3 py-2 rounded-xl bg-zinc-800 text-sm cursor-pointer">
+                  {{ uploading ? 'Uploading…' : 'Attach image' }}
+                  <input type="file" accept="image/*" class="hidden" :disabled="uploading" @change="onImagePick">
+                </label>
+              </div>
+
+              <div>
+                <p class="field-label">PDFs</p>
+                <ul class="space-y-1 mb-2">
+                  <li v-for="pdf in form.pdfs" :key="pdf.url" class="flex items-center gap-2 text-xs text-gray-300">
+                    <span class="truncate flex-1">{{ pdf.name }}</span>
+                    <button type="button" class="text-red-300" @click="removePdf(pdf.url)">Remove</button>
+                  </li>
+                </ul>
+                <label class="inline-flex px-3 py-2 rounded-xl bg-zinc-800 text-sm cursor-pointer">
+                  Attach PDF
+                  <input type="file" accept="application/pdf,.pdf" class="hidden" :disabled="uploading" @change="onPdfPick">
+                </label>
+              </div>
+
+              <div>
+                <p class="field-label">Links</p>
+                <ul class="space-y-1 mb-2">
+                  <li v-for="link in form.links" :key="link.url" class="flex items-center gap-2 text-xs text-gray-300">
+                    <span class="truncate flex-1">{{ link.label }}</span>
+                    <button type="button" class="text-red-300" @click="removeLink(link.url)">Remove</button>
+                  </li>
+                </ul>
+                <div class="flex flex-col gap-2">
+                  <input v-model="linkDraft.label" type="text" class="field-input w-full" placeholder="Label (optional)" maxlength="120">
+                  <input v-model="linkDraft.url" type="url" class="field-input w-full" placeholder="https://…">
+                  <button type="button" class="py-2 rounded-xl bg-zinc-800 text-sm" @click="addLink">Add link</button>
                 </div>
               </div>
-              <label class="inline-flex px-3 py-2 rounded-xl bg-zinc-800 text-sm cursor-pointer">
-                {{ uploading ? 'Uploading…' : 'Attach image' }}
-                <input type="file" accept="image/*" class="hidden" :disabled="uploading" @change="onImagePick">
+
+              <label class="flex items-center gap-3 cursor-pointer">
+                <input v-model="form.active" type="checkbox" class="rounded border-zinc-600">
+                <span class="text-sm">Show on public card</span>
               </label>
+              <button
+                type="button"
+                class="w-full py-3.5 rounded-full bg-white text-black font-bold text-sm hover:bg-gray-200 disabled:opacity-50"
+                :disabled="saving || uploading"
+                @click="saveItem"
+              >
+                {{ saving ? 'Saving…' : 'Save' }}
+              </button>
             </div>
-
-            <div>
-              <p class="field-label">PDFs</p>
-              <ul class="space-y-1 mb-2">
-                <li v-for="pdf in form.pdfs" :key="pdf.url" class="flex items-center gap-2 text-xs text-gray-300">
-                  <span class="truncate flex-1">{{ pdf.name }}</span>
-                  <button type="button" class="text-red-300" @click="removePdf(pdf.url)">Remove</button>
-                </li>
-              </ul>
-              <label class="inline-flex px-3 py-2 rounded-xl bg-zinc-800 text-sm cursor-pointer">
-                Attach PDF
-                <input type="file" accept="application/pdf,.pdf" class="hidden" :disabled="uploading" @change="onPdfPick">
-              </label>
-            </div>
-
-            <div>
-              <p class="field-label">Links</p>
-              <ul class="space-y-1 mb-2">
-                <li v-for="link in form.links" :key="link.url" class="flex items-center gap-2 text-xs text-gray-300">
-                  <span class="truncate flex-1">{{ link.label }}</span>
-                  <button type="button" class="text-red-300" @click="removeLink(link.url)">Remove</button>
-                </li>
-              </ul>
-              <div class="flex flex-col gap-2">
-                <input v-model="linkDraft.label" type="text" class="field-input w-full" placeholder="Label (optional)" maxlength="120">
-                <input v-model="linkDraft.url" type="url" class="field-input w-full" placeholder="https://…">
-                <button type="button" class="py-2 rounded-xl bg-zinc-800 text-sm" @click="addLink">Add link</button>
-              </div>
-            </div>
-
-            <label class="flex items-center gap-3 cursor-pointer">
-              <input v-model="form.active" type="checkbox" class="rounded border-zinc-600">
-              <span class="text-sm">Show on public card</span>
-            </label>
-            <button
-              type="button"
-              class="w-full py-3.5 rounded-full bg-white text-black font-bold text-sm hover:bg-gray-200 disabled:opacity-50"
-              :disabled="saving || uploading"
-              @click="saveItem"
-            >
-              {{ saving ? 'Saving…' : 'Save' }}
-            </button>
           </div>
         </div>
-      </div>
+      </Teleport>
 
       <!-- Guest cart sheet -->
-      <div v-if="cartOpen && showGuestCart" class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4">
-        <div class="absolute inset-0 bg-black/70" @click="cartOpen = false" />
-        <div class="relative w-full max-w-md card-item-bg rounded-3xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="text-lg font-bold">Your cart</h2>
-            <button type="button" class="w-9 h-9 rounded-full bg-zinc-700 flex items-center justify-center" @click="cartOpen = false">
-              <span class="material-symbols-outlined text-[20px]">close</span>
-            </button>
-          </div>
+      <Teleport to="body">
+        <div v-if="cartOpen && showGuestCart" class="app-dialog-overlay fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4">
+          <div class="absolute inset-0 bg-black/70" @click="cartOpen = false" />
+          <div class="relative w-full max-w-md card-item-bg rounded-3xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-lg font-bold">Your cart</h2>
+              <button type="button" class="w-9 h-9 rounded-full bg-zinc-700 flex items-center justify-center" @click="cartOpen = false">
+                <span class="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
 
-          <p v-if="!cartLines.length" class="text-sm text-gray-400 py-6 text-center">Cart is empty</p>
-          <ul v-else class="space-y-3 mb-4">
-            <li v-for="line in cartLines" :key="line.id" class="flex items-start gap-3">
-              <div class="min-w-0 flex-1">
-                <p class="text-sm font-medium">{{ line.name }}</p>
-                <p class="text-xs text-gray-500">
-                  {{ formatPrice(line.price) || 'Ask for quote' }}
-                </p>
-              </div>
-              <div class="flex items-center gap-2">
-                <button type="button" class="w-8 h-8 rounded-full bg-zinc-800" @click="setCatalogCartQty(line.id, line.qty - 1)">−</button>
-                <span class="text-sm w-5 text-center">{{ line.qty }}</span>
-                <button type="button" class="w-8 h-8 rounded-full bg-zinc-800" @click="setCatalogCartQty(line.id, line.qty + 1)">+</button>
-                <button type="button" class="text-red-300 text-xs ml-1" @click="removeCatalogCartItem(line.id)">Remove</button>
-              </div>
-            </li>
-          </ul>
+            <p v-if="!cartLines.length" class="text-sm text-gray-400 py-6 text-center">Cart is empty</p>
+            <ul v-else class="space-y-3 mb-4">
+              <li v-for="line in cartLines" :key="line.id" class="flex items-start gap-3">
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm font-medium">{{ line.name }}</p>
+                  <p class="text-xs text-gray-500">
+                    {{ formatPrice(line.price) || 'Ask for quote' }}
+                  </p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button type="button" class="w-8 h-8 rounded-full bg-zinc-800" @click="setCatalogCartQty(line.id, line.qty - 1)">−</button>
+                  <span class="text-sm w-5 text-center">{{ line.qty }}</span>
+                  <button type="button" class="w-8 h-8 rounded-full bg-zinc-800" @click="setCatalogCartQty(line.id, line.qty + 1)">+</button>
+                  <button type="button" class="text-red-300 text-xs ml-1" @click="removeCatalogCartItem(line.id)">Remove</button>
+                </div>
+              </li>
+            </ul>
 
-          <div v-if="cartLines.length" class="space-y-2">
-            <button
-              type="button"
-              class="w-full py-3 rounded-full bg-white text-black text-sm font-bold"
-              @click="openCheckout"
-            >
-              Get quote on email
-            </button>
-            <button
-              type="button"
-              class="w-full py-3 rounded-full bg-zinc-800 text-sm font-semibold"
-              @click="openMeetingFromCart"
-            >
-              Book a meeting
-            </button>
-            <RouterLink
-              to="/catalog-cart"
-              class="block w-full py-3 rounded-full bg-zinc-900 text-sm font-semibold text-center no-underline text-inherit"
-              @click="cartOpen = false"
-            >
-              Open full cart
-            </RouterLink>
+            <div v-if="cartLines.length" class="space-y-2">
+              <button
+                type="button"
+                class="w-full py-3 rounded-full bg-white text-black text-sm font-bold"
+                @click="openCheckout"
+              >
+                Get quote on email
+              </button>
+              <button
+                type="button"
+                class="w-full py-3 rounded-full bg-zinc-800 text-sm font-semibold"
+                @click="openMeetingFromCart"
+              >
+                Book a meeting
+              </button>
+              <RouterLink
+                to="/catalog-cart"
+                class="block w-full py-3 rounded-full bg-zinc-900 text-sm font-semibold text-center no-underline text-inherit"
+                @click="cartOpen = false"
+              >
+                Open full cart
+              </RouterLink>
+            </div>
           </div>
         </div>
-      </div>
+      </Teleport>
 
       <!-- Quote checkout -->
-      <div v-if="checkoutOpen && showGuestCart" class="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-4">
-        <div class="absolute inset-0 bg-black/70" @click="checkoutOpen = false" />
-        <div class="relative w-full max-w-md card-item-bg rounded-3xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="text-lg font-bold">Request a quote</h2>
-            <button type="button" class="w-9 h-9 rounded-full bg-zinc-700 flex items-center justify-center" @click="checkoutOpen = false">
-              <span class="material-symbols-outlined text-[20px]">close</span>
-            </button>
-          </div>
-          <p class="text-xs text-gray-400 mb-3">
-            We’ll email the quote details to you and {{ ownerName }}.
-          </p>
-          <div class="space-y-3">
-            <div>
-              <label class="field-label" for="guest-name">Name</label>
-              <input id="guest-name" v-model="guestName" type="text" class="field-input w-full" autocomplete="name">
+      <Teleport to="body">
+        <div v-if="checkoutOpen && showGuestCart" class="app-dialog-overlay fixed inset-0 z-[210] flex items-end sm:items-center justify-center p-4">
+          <div class="absolute inset-0 bg-black/70" @click="checkoutOpen = false" />
+          <div class="relative w-full max-w-md card-item-bg rounded-3xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-lg font-bold">Request a quote</h2>
+              <button type="button" class="w-9 h-9 rounded-full bg-zinc-700 flex items-center justify-center" @click="checkoutOpen = false">
+                <span class="material-symbols-outlined text-[20px]">close</span>
+              </button>
             </div>
-            <div>
-              <label class="field-label" for="guest-email">Email</label>
-              <input id="guest-email" v-model="guestEmail" type="email" class="field-input w-full" autocomplete="email">
+            <p class="text-xs text-gray-400 mb-3">
+              We’ll email the quote details to you and {{ ownerName }}.
+            </p>
+            <div class="space-y-3">
+              <div>
+                <label class="field-label" for="guest-name">Name</label>
+                <input id="guest-name" v-model="guestName" type="text" class="field-input w-full" autocomplete="name">
+              </div>
+              <div>
+                <label class="field-label" for="guest-email">Email</label>
+                <input id="guest-email" v-model="guestEmail" type="email" class="field-input w-full" autocomplete="email">
+              </div>
+              <div>
+                <label class="field-label" for="guest-phone">Phone (optional)</label>
+                <input id="guest-phone" v-model="guestPhone" type="tel" class="field-input w-full" autocomplete="tel">
+              </div>
+              <div>
+                <label class="field-label" for="guest-note">Note (optional)</label>
+                <textarea id="guest-note" v-model="guestNote" rows="2" class="field-input w-full resize-none" />
+              </div>
+              <p v-if="checkoutError" class="text-sm text-red-300">{{ checkoutError }}</p>
+              <button
+                type="button"
+                class="w-full py-3.5 rounded-full bg-white text-black font-bold text-sm disabled:opacity-50"
+                :disabled="submitting"
+                @click="submitQuote"
+              >
+                {{ submitting ? 'Sending…' : 'Email me a quote' }}
+              </button>
             </div>
-            <div>
-              <label class="field-label" for="guest-phone">Phone (optional)</label>
-              <input id="guest-phone" v-model="guestPhone" type="tel" class="field-input w-full" autocomplete="tel">
-            </div>
-            <div>
-              <label class="field-label" for="guest-note">Note (optional)</label>
-              <textarea id="guest-note" v-model="guestNote" rows="2" class="field-input w-full resize-none" />
-            </div>
-            <p v-if="checkoutError" class="text-sm text-red-300">{{ checkoutError }}</p>
-            <button
-              type="button"
-              class="w-full py-3.5 rounded-full bg-white text-black font-bold text-sm disabled:opacity-50"
-              :disabled="submitting"
-              @click="submitQuote"
-            >
-              {{ submitting ? 'Sending…' : 'Email me a quote' }}
-            </button>
           </div>
         </div>
-      </div>
+      </Teleport>
 
       <BookMeetingPopup
         :open="meetingOpen"
@@ -775,12 +781,14 @@ onUnmounted(() => {
         @submitted="onMeetingSubmitted"
       />
 
-      <p
-        v-if="toast"
-        class="fixed bottom-24 left-1/2 -translate-x-1/2 z-[120] px-4 py-2 rounded-full bg-zinc-800 text-sm shadow-lg"
-      >
-        {{ toast }}
-      </p>
+      <Teleport to="body">
+        <p
+          v-if="toast"
+          class="fixed bottom-24 left-1/2 -translate-x-1/2 z-[220] px-4 py-2 rounded-full bg-zinc-800 text-sm shadow-lg"
+        >
+          {{ toast }}
+        </p>
+      </Teleport>
     </main>
   </div>
 </template>
