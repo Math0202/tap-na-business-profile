@@ -480,14 +480,24 @@ watch(() => route.path, () => {
           class="px-6 mt-6 space-y-3"
           :class="{ 'opacity-40 pointer-events-none': disabled }"
         >
-          <p class="text-[10px] uppercase tracking-wide text-gray-500 px-1">Offers</p>
-          <div
+          <div class="flex items-center justify-between px-1">
+            <p class="text-[10px] uppercase tracking-wide text-gray-500">Offers</p>
+            <RouterLink to="/catalog" class="text-[11px] text-emerald-400 no-underline">View catalog</RouterLink>
+          </div>
+          <RouterLink
             v-for="item in catalogItems"
             :key="item.id"
-            class="card-item-bg rounded-2xl flex items-center p-4"
+            to="/catalog"
+            class="card-item-bg rounded-2xl flex items-center p-4 no-underline text-inherit"
           >
-            <div class="w-12 h-12 rounded-full bg-white flex items-center justify-center text-black mr-4 shadow-lg shrink-0">
-              <span class="material-symbols-outlined text-[24px]">inventory_2</span>
+            <div class="w-12 h-12 rounded-full bg-white overflow-hidden flex items-center justify-center text-black mr-4 shadow-lg shrink-0">
+              <img
+                v-if="item.images?.[0]"
+                :src="item.images[0]"
+                :alt="item.name"
+                class="w-full h-full object-cover"
+              >
+              <span v-else class="material-symbols-outlined text-[24px]">inventory_2</span>
             </div>
             <div class="min-w-0 flex-1 text-left">
               <template v-if="catalogDetail(item)">
@@ -496,7 +506,8 @@ watch(() => route.path, () => {
               </template>
               <span v-else class="link-row-detail text-gray-300 font-medium text-sm">{{ item.name }}</span>
             </div>
-          </div>
+            <span class="material-symbols-outlined text-gray-500 text-[22px] shrink-0 ml-2">chevron_right</span>
+          </RouterLink>
         </section>
 
         <div class="px-6 mt-8 mb-4 space-y-3">

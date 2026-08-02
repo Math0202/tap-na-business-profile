@@ -9,17 +9,20 @@ import {
   logout
 } from '../lib/profileStore'
 import { setApiToken } from '../lib/api'
+import { anyCatalogCartCount, catalogCartCount } from '../lib/profileCatalogCart'
 
 const route = useRoute()
 const router = useRouter()
 const loggedIn = ref(isLoggedIn())
 const isTableOwner = ref(isTableBusiness(loadProfile()))
 const viewedIsTable = ref(isTableBusiness(loadViewedProfile()))
+const guestCartCount = ref(anyCatalogCartCount())
 
 function refreshAuth() {
   loggedIn.value = isLoggedIn()
   isTableOwner.value = isTableBusiness(loadProfile())
   viewedIsTable.value = isTableBusiness(loadViewedProfile())
+  guestCartCount.value = anyCatalogCartCount()
 }
 
 /** Personal-card chrome — guests and owners. Never for business/table. */
@@ -28,7 +31,13 @@ const visible = computed(() => {
 
   const p = route.path
   if (p === '/business' || p.startsWith('/venue') || p === '/table') return false
-  if (p === '/me' || p === '/profile' || p === '/cards') {
+  if (
+    p === '/me' ||
+    p === '/profile' ||
+    p === '/cards' ||
+    p === '/catalog' ||
+    p === '/catalog-cart'
+  ) {
     return true
   }
   if (p.startsWith('/c/')) {
@@ -38,21 +47,43 @@ const visible = computed(() => {
   return false
 })
 
-/** Business/personal card nav — Meetings & Catalog are hidden. */
-const navItems = computed(() => [
-  {
-    to: '/me',
-    label: 'Profile',
-    icon: 'badge',
-    match: (p) => p === '/me' || p.startsWith('/c/')
-  },
-  {
-    action: 'share',
-    label: 'Share',
-    icon: 'ios_share',
-    match: () => false
+const showCartNav = computed(() => {
+  if (loggedIn.value) return true
+  return guestCartCount.value > 0 || catalogCartCount.value > 0
+})
+
+const navItems = computed(() => {
+  const items = [
+    {
+      to: '/me',
+      label: 'Profile',
+      icon: 'badge',
+      match: (p) => p === '/me' || p.startsWith('/c/')
+    },
+    {
+      to: '/catalog',
+      label: 'Catalog',
+      icon: 'inventory_2',
+      match: (p) => p === '/catalog'
+    },
+    {
+      action: 'share',
+      label: 'Share',
+      icon: 'ios_share',
+      match: () => false
+    }
+  ]
+  if (showCartNav.value) {
+    items.splice(2, 0, {
+      to: '/catalog-cart',
+      label: 'Cart',
+      icon: 'shopping_cart',
+      match: (p) => p === '/catalog-cart',
+      badge: loggedIn.value ? 0 : guestCartCount.value || catalogCartCount.value
+    })
   }
-])
+  return items
+})
 
 function isActive(item) {
   return item.match?.(route.path)
@@ -88,11 +119,13 @@ watch(
 onMounted(() => {
   refreshAuth()
   window.addEventListener('tapna-view-profile-changed', refreshAuth)
+  window.addEventListener('tapna-profile-catalog-cart-changed', refreshAuth)
   window.addEventListener('storage', refreshAuth)
 })
 
 onUnmounted(() => {
   window.removeEventListener('tapna-view-profile-changed', refreshAuth)
+  window.removeEventListener('tapna-profile-catalog-cart-changed', refreshAuth)
   window.removeEventListener('storage', refreshAuth)
 })
 </script>
@@ -119,7 +152,15 @@ onUnmounted(() => {
         class="admin-nav-item"
         :class="{ 'admin-nav-item--active': isActive(item) }"
       >
-        <span class="material-symbols-outlined">{{ item.icon }}</span>
+        <span class="relative inline-flex">
+          <span class="material-symbols-outlined">{{ item.icon }}</span>
+          <span
+            v-if="item.badge > 0"
+            class="absolute -top-1 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-emerald-500 text-[10px] font-bold text-black flex items-center justify-center"
+          >
+            {{ item.badge > 9 ? '9+' : item.badge }}
+          </span>
+        </span>
         <span>{{ item.label }}</span>
       </RouterLink>
     </template>

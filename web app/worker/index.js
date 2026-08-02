@@ -1088,6 +1088,44 @@ async function publicProfile(env, row) {
   }
 }
 
+function isHttpUrl(value) {
+  try {
+    const u = new URL(String(value || '').trim())
+    return u.protocol === 'http:' || u.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function normalizeCatalogAttachments(item) {
+  const images = (Array.isArray(item?.images) ? item.images : [])
+    .map((u) => String(u || '').trim())
+    .filter(isHttpUrl)
+    .slice(0, 8)
+
+  const pdfs = (Array.isArray(item?.pdfs) ? item.pdfs : [])
+    .map((row) => {
+      const url = String(row?.url || row || '').trim()
+      if (!isHttpUrl(url)) return null
+      const name = String(row?.name || 'Document').trim().slice(0, 120) || 'Document'
+      return { name, url }
+    })
+    .filter(Boolean)
+    .slice(0, 5)
+
+  const links = (Array.isArray(item?.links) ? item.links : [])
+    .map((row) => {
+      const url = String(row?.url || '').trim()
+      if (!isHttpUrl(url)) return null
+      const label = String(row?.label || row?.name || url).trim().slice(0, 120) || url
+      return { label, url }
+    })
+    .filter(Boolean)
+    .slice(0, 10)
+
+  return { images, pdfs, links }
+}
+
 function normalizeCatalogItems(raw) {
   if (!Array.isArray(raw)) return []
   return raw
@@ -1101,15 +1139,54 @@ function normalizeCatalogItems(raw) {
         const n = Number(priceRaw)
         if (Number.isFinite(n) && n >= 0) price = Math.round(n * 100) / 100
       }
+      const attachments = normalizeCatalogAttachments(item)
       return {
         id: String(item?.id || `cat_${i + 1}`).trim().slice(0, 64) || `cat_${i + 1}`,
         name,
         description: String(item?.description || '').trim().slice(0, 400),
         price,
-        active: item?.active !== false
+        active: item?.active !== false,
+        images: attachments.images,
+        pdfs: attachments.pdfs,
+        links: attachments.links
       }
     })
     .filter(Boolean)
+}
+
+function normalizeCatalogCartItems(raw) {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .slice(0, 40)
+    .map((item) => {
+      const id = String(item?.id || '').trim().slice(0, 64)
+      const name = String(item?.name || 'Item').trim().slice(0, 160) || 'Item'
+      const qty = Math.max(1, Math.min(99, Math.floor(Number(item?.qty) || 1)))
+      let price = null
+      if (item?.price !== null && item?.price !== undefined && item?.price !== '') {
+        const n = Number(item.price)
+        if (Number.isFinite(n) && n >= 0) price = Math.round(n * 100) / 100
+      }
+      return { id: id || `item_${qty}`, name, qty, price }
+    })
+    .filter((x) => x.name)
+}
+
+function mapCatalogCartRow(row) {
+  return {
+    id: row.id,
+    profileId: row.profile_id,
+    visitorName: row.visitor_name || '',
+    visitorEmail: row.visitor_email || '',
+    visitorPhone: row.visitor_phone || '',
+    items: Array.isArray(row.items) ? row.items : [],
+    note: row.note || '',
+    status: row.status || 'open',
+    source: row.source || 'catalog',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deleted: !!row.deleted
+  }
 }
 
 function isCrawler(ua = '') {
@@ -3157,30 +3234,51 @@ async function handleApi(request, env, url) {
     if (!file || typeof file === 'string') return bad('file is required')
 
     const kindRaw = String(form.get('kind') || 'avatar').toLowerCase()
-    const kind = ['avatar', 'logo', 'video', 'product', 'menu'].includes(kindRaw) ? kindRaw : 'avatar'
+    const kind = ['avatar', 'logo', 'video', 'product', 'menu', 'catalog'].includes(kindRaw)
+      ? kindRaw
+      : 'avatar'
     if (staff && !profile && kind !== 'product') {
       return bad('Staff uploads are limited to product media', 403)
     }
     const contentType = file.type || 'application/octet-stream'
-    if (kind === 'menu') {
+    if (kind === 'menu' || kind === 'catalog') {
       const okType =
         contentType === 'application/pdf' ||
         contentType.startsWith('image/') ||
         /\.pdf$/i.test(String(file.name || ''))
-      if (!okType) return bad('Menu uploads must be a PDF or image', 400)
+      if (!okType) {
+        return bad(
+          kind === 'catalog' ? 'Catalog uploads must be a PDF or image' : 'Menu uploads must be a PDF or image',
+          400
+        )
+      }
     }
     const maxBytes =
       kind === 'product'
         ? 20 * 1024 * 1024
-        : kind === 'menu'
+        : kind === 'menu' || kind === 'catalog'
           ? 15 * 1024 * 1024
           : kind === 'video'
             ? 8 * 1024 * 1024
             : 3 * 1024 * 1024
     if (file.size > maxBytes) {
       const limitLabel =
-        kind === 'product' ? '20 MB' : kind === 'menu' ? '15 MB' : kind === 'video' ? '8 MB' : '3 MB'
-      return bad(`${kind === 'video' ? 'Video' : kind === 'menu' ? 'Menu file' : 'Image'} must be under ${limitLabel}`, 413)
+        kind === 'product'
+          ? '20 MB'
+          : kind === 'menu' || kind === 'catalog'
+            ? '15 MB'
+            : kind === 'video'
+              ? '8 MB'
+              : '3 MB'
+      const label =
+        kind === 'video'
+          ? 'Video'
+          : kind === 'menu'
+            ? 'Menu file'
+            : kind === 'catalog'
+              ? 'Catalog file'
+              : 'Image'
+      return bad(`${label} must be under ${limitLabel}`, 413)
     }
 
     const extFromName = String(file.name || '').split('.').pop() || ''
@@ -3412,6 +3510,218 @@ async function handleApi(request, env, url) {
     const items = normalizeCatalogItems(row.catalog_items).filter((x) => x.active !== false)
     const ownerName = String(row.name || row.company || '').trim() || 'This person'
     return json({ ok: true, profileId: row.id, ownerName, catalogItems: items })
+  }
+
+  const catalogCartSubmitMatch = pathname.match(/^\/api\/profiles\/([^/]+)\/catalog-cart$/)
+  if (catalogCartSubmitMatch && method === 'POST') {
+    const profileId = decodeURIComponent(catalogCartSubmitMatch[1])
+    const body = await readJson(request)
+    const rows = await sb(
+      env,
+      `profiles?id=eq.${encodeURIComponent(profileId)}&select=id,name,company,email,login_email,disabled`
+    )
+    const owner = rows?.[0]
+    if (!owner) return bad('Profile not found', 404)
+    if (owner.disabled) return bad('This profile is disabled', 403)
+
+    const name = String(body?.name || '').trim().slice(0, 120)
+    const email = String(body?.email || '').trim().toLowerCase().slice(0, 200)
+    const phone = String(body?.phone || '').trim().slice(0, 40)
+    const note = String(body?.note || '').trim().slice(0, 2000)
+    const action = String(body?.action || 'quote').trim().toLowerCase()
+    const status =
+      action === 'meeting' ? 'meeting_booked' : action === 'interest' ? 'open' : 'quote_requested'
+    const cartItems = normalizeCatalogCartItems(body?.items)
+
+    if (!name) return bad('Name is required')
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return bad('Valid email is required')
+    if (!cartItems.length) return bad('Cart is empty')
+
+    const id = uid('pcart')
+    const now = new Date().toISOString()
+    await sb(env, 'profile_catalog_carts', {
+      method: 'POST',
+      body: {
+        id,
+        profile_id: profileId,
+        visitor_name: name,
+        visitor_email: email,
+        visitor_phone: phone,
+        items: cartItems,
+        note,
+        status,
+        source: 'catalog',
+        created_at: now,
+        updated_at: now
+      },
+      prefer: 'return=minimal'
+    })
+
+    const ownerName = String(owner.name || owner.company || 'tap-na host').trim() || 'tap-na host'
+    const ownerEmail = String(owner.login_email || owner.email || '')
+      .trim()
+      .toLowerCase()
+    const money = (n) =>
+      n === null || n === undefined
+        ? 'Quote'
+        : 'N$ ' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+    const subtotal = Math.round(
+      cartItems.reduce((s, l) => s + (Number(l.price) || 0) * l.qty, 0) * 100
+    ) / 100
+    const linesHtml = cartItems
+      .map(
+        (l) =>
+          `<tr style="border-bottom:1px solid #eee;"><td style="padding:8px 0;">${escapeHtml(l.name)}</td><td style="padding:8px 0;">${l.qty}</td><td style="padding:8px 0;text-align:right;">${escapeHtml(money(l.price))}</td></tr>`
+      )
+      .join('')
+    const linesText = cartItems
+      .map((l) => `${l.name} × ${l.qty}${l.price != null ? ` @ ${money(l.price)}` : ''}`)
+      .join('\n')
+
+    const quoteRef = id.replace('pcart_', 'CQ-').toUpperCase()
+    const subject =
+      status === 'meeting_booked'
+        ? `Catalog meeting interest ${quoteRef} — ${name}`
+        : `Catalog quote ${quoteRef} — ${name}`
+
+    try {
+      const sends = []
+      sends.push(
+        sendCloudflareEmail(env, {
+          to: email,
+          replyTo: ownerEmail.includes('@') ? ownerEmail : undefined,
+          subject:
+            status === 'meeting_booked'
+              ? `Your interest with ${ownerName}`
+              : `Your quote request for ${ownerName}`,
+          html: transactionalShell({
+            title: status === 'meeting_booked' ? 'Interest received' : 'Quote request sent',
+            intro: `Hi ${name}, ${ownerName} has received your catalog request.`,
+            bodyHtml: `
+              <table style="width:100%;border-collapse:collapse;font-size:14px;margin:0 0 12px;">${linesHtml}</table>
+              <p style="margin:0 0 8px;"><strong>Estimated total:</strong> ${escapeHtml(money(subtotal || null))}</p>
+              ${note ? `<p style="margin:0 0 8px;"><strong>Your note:</strong> ${escapeHtml(note)}</p>` : ''}
+              <p style="margin:12px 0 0;">They will follow up by email${phone ? ' or phone' : ''}.</p>`,
+            footerNote: 'Sent via tap-na catalog.'
+          }),
+          text: [
+            `Request for ${ownerName}`,
+            linesText,
+            `Estimated total: ${money(subtotal || null)}`,
+            note ? `Note: ${note}` : ''
+          ]
+            .filter(Boolean)
+            .join('\n')
+        })
+      )
+      if (ownerEmail.includes('@')) {
+        sends.push(
+          sendCloudflareEmail(env, {
+            to: ownerEmail,
+            replyTo: email,
+            subject,
+            html: transactionalShell({
+              title: status === 'meeting_booked' ? 'Catalog meeting interest' : 'New catalog quote request',
+              intro: `${name} submitted items from your catalog.`,
+              bodyHtml: `
+                <p style="margin:0 0 8px;"><strong>Guest:</strong> ${escapeHtml(name)}</p>
+                <p style="margin:0 0 8px;"><strong>Email:</strong> ${escapeHtml(email)}</p>
+                <p style="margin:0 0 8px;"><strong>Phone:</strong> ${escapeHtml(phone || '—')}</p>
+                <table style="width:100%;border-collapse:collapse;font-size:14px;margin:12px 0;">${linesHtml}</table>
+                <p style="margin:0 0 8px;"><strong>Estimated total:</strong> ${escapeHtml(money(subtotal || null))}</p>
+                ${note ? `<p style="margin:0 0 8px;"><strong>Note:</strong> ${escapeHtml(note)}</p>` : ''}
+                <p style="margin:12px 0 0;"><a href="https://tapnam.com/catalog-cart">Open catalog cart inbox</a></p>`,
+              footerNote: 'Reply to this email to contact the guest.'
+            }),
+            text: [
+              subject,
+              `Guest: ${name}`,
+              `Email: ${email}`,
+              `Phone: ${phone || '—'}`,
+              linesText,
+              note ? `Note: ${note}` : '',
+              'Open: https://tapnam.com/catalog-cart'
+            ]
+              .filter(Boolean)
+              .join('\n')
+          })
+        )
+      }
+      await Promise.all(
+        sends.map((p) =>
+          p.catch((err) =>
+            logAppError(env, {
+              source: 'email',
+              message: err?.message || String(err),
+              stack: err?.stack || '',
+              path: pathname,
+              method,
+              context: { kind: 'catalog_cart_email', cartId: id }
+            })
+          )
+        )
+      )
+    } catch (err) {
+      await logAppError(env, {
+        source: 'email',
+        message: err?.message || String(err),
+        stack: err?.stack || '',
+        path: pathname,
+        method,
+        context: { kind: 'catalog_cart_email_build', cartId: id }
+      })
+    }
+
+    return json({ ok: true, id, status, quoteRef })
+  }
+
+  if (pathname === '/api/me/catalog-carts' && method === 'GET') {
+    const profile = await getSessionProfile(env, request)
+    if (!profile) return bad('Unauthorized', 401)
+    const includeDeleted = url.searchParams.get('deleted') === '1'
+    let q =
+      `profile_catalog_carts?profile_id=eq.${encodeURIComponent(profile.id)}` +
+      `&select=*&order=created_at.desc&limit=200`
+    if (!includeDeleted) q += '&deleted=eq.false'
+    const rows = await sb(env, q)
+    return json({ ok: true, carts: (rows || []).map(mapCatalogCartRow) })
+  }
+
+  const catalogCartPatchMatch = pathname.match(/^\/api\/me\/catalog-carts\/([^/]+)$/)
+  if (catalogCartPatchMatch && method === 'PATCH') {
+    const profile = await getSessionProfile(env, request)
+    if (!profile) return bad('Unauthorized', 401)
+    const cartId = decodeURIComponent(catalogCartPatchMatch[1])
+    const body = await readJson(request)
+    const existing = await sb(
+      env,
+      `profile_catalog_carts?id=eq.${encodeURIComponent(cartId)}&profile_id=eq.${encodeURIComponent(profile.id)}&select=id,status,deleted`
+    )
+    if (!existing?.[0]) return bad('Not found', 404)
+    const patch = { updated_at: new Date().toISOString() }
+    if (body?.status !== undefined) {
+      const st = String(body.status || '').trim().toLowerCase()
+      if (!['open', 'quote_requested', 'meeting_booked', 'closed'].includes(st)) {
+        return bad('Invalid status')
+      }
+      patch.status = st
+    }
+    if (body?.deleted === true) {
+      patch.deleted = true
+      patch.deleted_at = new Date().toISOString()
+      patch.deleted_by = profile.email || profile.id || ''
+    }
+    if (body?.deleted === false) {
+      patch.deleted = false
+      patch.deleted_at = null
+      patch.deleted_by = ''
+    }
+    await sb(env, `profile_catalog_carts?id=eq.${encodeURIComponent(cartId)}`, {
+      method: 'PATCH',
+      body: patch,
+      prefer: 'return=minimal'
+    })
+    return json({ ok: true, id: cartId })
   }
 
   const availabilityMatch = pathname.match(/^\/api\/profiles\/([^/]+)\/availability$/)

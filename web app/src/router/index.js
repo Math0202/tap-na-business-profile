@@ -147,6 +147,11 @@ const routes = [
     component: () => import('../views/CatalogView.vue')
   },
   {
+    path: '/catalog-cart',
+    name: 'catalog-cart',
+    component: () => import('../views/ProfileCatalogCartView.vue')
+  },
+  {
     path: '/c/:serial',
     name: 'card-tap',
     component: () => import('../views/CardTapView.vue')

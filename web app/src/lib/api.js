@@ -492,6 +492,28 @@ export function apiPublicCatalog(profileId) {
   return request(`/api/profiles/${encodeURIComponent(profileId)}/catalog`, { timeoutMs: 10000 })
 }
 
+/** Guest submits catalog cart quote / interest (emails owner + guest, stores for owner inbox) */
+export function apiSubmitCatalogCart(profileId, payload) {
+  return request(`/api/profiles/${encodeURIComponent(profileId)}/catalog-cart`, {
+    method: 'POST',
+    body: payload,
+    timeoutMs: 60000
+  })
+}
+
+/** Owner inbox of visitor catalog carts */
+export function apiListCatalogCarts({ includeDeleted = false } = {}) {
+  const q = includeDeleted ? '?deleted=1' : ''
+  return request(`/api/me/catalog-carts${q}`, { timeoutMs: 15000 })
+}
+
+export function apiUpdateCatalogCart(id, payload) {
+  return request(`/api/me/catalog-carts/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: payload
+  })
+}
+
 /** Public availability calendar — taken slots; owner also gets meeting details */
 export function apiProfileAvailability(profileId, { from, to } = {}) {
   const q = new URLSearchParams()
