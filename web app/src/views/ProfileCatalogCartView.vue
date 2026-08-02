@@ -369,27 +369,29 @@ onUnmounted(() => {
         </template>
       </template>
 
-      <div v-if="checkoutOpen" class="fixed inset-0 z-[110] flex items-end sm:items-center justify-center p-4">
-        <div class="absolute inset-0 bg-black/70" @click="checkoutOpen = false" />
-        <div class="relative w-full max-w-md card-item-bg rounded-3xl p-5 shadow-2xl">
-          <h2 class="text-lg font-bold mb-3">Request a quote</h2>
-          <div class="space-y-3">
-            <input v-model="guestName" type="text" class="field-input w-full" placeholder="Name" autocomplete="name">
-            <input v-model="guestEmail" type="email" class="field-input w-full" placeholder="Email" autocomplete="email">
-            <input v-model="guestPhone" type="tel" class="field-input w-full" placeholder="Phone (optional)" autocomplete="tel">
-            <textarea v-model="guestNote" rows="2" class="field-input w-full resize-none" placeholder="Note (optional)" />
-            <p v-if="checkoutError" class="text-sm text-red-300">{{ checkoutError }}</p>
-            <button
-              type="button"
-              class="w-full py-3.5 rounded-full bg-white text-black font-bold text-sm disabled:opacity-50"
-              :disabled="submitting"
-              @click="submitQuote"
-            >
-              {{ submitting ? 'Sending…' : 'Email me a quote' }}
-            </button>
+            <Teleport to="body">
+        <div v-if="checkoutOpen" class="app-dialog-overlay fixed inset-0 z-[210] flex items-end sm:items-center justify-center p-4">
+          <div class="absolute inset-0 bg-black/70" @click="checkoutOpen = false" />
+          <div class="relative w-full max-w-md card-item-bg rounded-3xl p-5 shadow-2xl">
+            <h2 class="text-lg font-bold mb-3">Request a quote</h2>
+            <div class="space-y-3">
+              <input v-model="guestName" type="text" class="field-input w-full" placeholder="Name" autocomplete="name">
+              <input v-model="guestEmail" type="email" class="field-input w-full" placeholder="Email" autocomplete="email">
+              <input v-model="guestPhone" type="tel" class="field-input w-full" placeholder="Phone (optional)" autocomplete="tel">
+              <textarea v-model="guestNote" rows="2" class="field-input w-full resize-none" placeholder="Note (optional)" />
+              <p v-if="checkoutError" class="text-sm text-red-300">{{ checkoutError }}</p>
+              <button
+                type="button"
+                class="w-full py-3.5 rounded-full bg-white text-black font-bold text-sm disabled:opacity-50"
+                :disabled="submitting"
+                @click="submitQuote"
+              >
+                {{ submitting ? 'Sending…' : 'Email me a quote' }}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      </Teleport>
 
       <BookMeetingPopup
         :open="meetingOpen"
@@ -399,12 +401,14 @@ onUnmounted(() => {
         @submitted="onMeetingSubmitted"
       />
 
-      <p
-        v-if="toast"
-        class="fixed bottom-24 left-1/2 -translate-x-1/2 z-[120] px-4 py-2 rounded-full bg-zinc-800 text-sm shadow-lg"
-      >
-        {{ toast }}
-      </p>
+      <Teleport to="body">
+        <p
+          v-if="toast"
+          class="fixed bottom-24 left-1/2 -translate-x-1/2 z-[220] px-4 py-2 rounded-full bg-zinc-800 text-sm shadow-lg"
+        >
+          {{ toast }}
+        </p>
+      </Teleport>
     </main>
   </div>
 </template>
