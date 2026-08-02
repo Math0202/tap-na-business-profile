@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
-import { isStaffAdmin, isStaffSales, staffLogout } from '../lib/staffAuth'
+import { isStaffAdmin, isStaffSalesTeam, staffLogout } from '../lib/staffAuth'
 
 const route = useRoute()
 
@@ -14,7 +14,7 @@ const allItems = [
 ]
 
 const items = computed(() => {
-  if (isStaffSales()) return allItems.filter((i) => !i.adminOnly)
+  if (isStaffSalesTeam()) return allItems.filter((i) => !i.adminOnly)
   return allItems
 })
 
@@ -43,7 +43,7 @@ async function onLogout() {
       <span>{{ item.label }}</span>
     </RouterLink>
     <button
-      v-if="isStaffAdmin() || isStaffSales()"
+      v-if="isStaffAdmin() || isStaffSalesTeam()"
       type="button"
       class="admin-nav-item"
       @click="onLogout"

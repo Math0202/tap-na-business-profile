@@ -68,6 +68,7 @@ import { downloadInvoicePdf, downloadQuotePdf } from '../lib/salesDocuments'
 import {
   isStaffAdmin,
   isStaffSales,
+  canManageSalesOrg,
   staffAgentId,
   getStaffUser,
   staffLogout,
@@ -91,15 +92,16 @@ const query = ref('')
 const agentFilter = ref('')
 const toast = ref('')
 
-const canManageAgents = computed(() => isStaffAdmin())
-const canManageProducts = computed(() => isStaffAdmin())
-/** Sales logins only see their own agent data; admins see every agent’s finances. */
-const isSalesScoped = computed(() => isStaffSales() && !isStaffAdmin())
+const canManageAgents = computed(() => canManageSalesOrg())
+const canManageProducts = computed(() => canManageSalesOrg())
+/** Sales agents only see their own data; admins and managers see every agent. */
+const isSalesScoped = computed(() => isStaffSales() && !canManageSalesOrg())
 const myAgentId = computed(() => staffAgentId())
 const staffLabel = computed(() => {
   const u = getStaffUser()
   if (!u) return ''
   if (u.role === 'admin') return 'Admin'
+  if (u.role === 'manager') return 'Manager'
   return u.name || u.email || 'Sales'
 })
 
@@ -253,6 +255,7 @@ function emptyAgent() {
     commissionRate: 10,
     active: true,
     notes: '',
+    accessRole: 'sales',
     authUserId: '',
     loginEmail: '',
     loginPassword: ''
@@ -1192,6 +1195,7 @@ function openEditAgent(a) {
     commissionRate: a.commissionRate,
     active: a.active,
     notes: a.notes,
+    accessRole: a.accessRole === 'manager' ? 'manager' : 'sales',
     authUserId: a.authUserId || '',
     loginEmail: a.loginEmail || a.email || '',
     loginPassword: ''
@@ -1222,11 +1226,14 @@ async function submitAgent(e) {
     }
   }
 
+  const accessRole =
+    isStaffAdmin() && agentForm.value.accessRole === 'manager' ? 'manager' : 'sales'
   const cloud = await saveAgentToCloud({
     ...agentForm.value,
     id: editingAgentId.value || undefined,
     commissionRate: Number(agentForm.value.commissionRate) || 0,
-    loginEmail
+    loginEmail,
+    accessRole
   })
   if (!cloud.ok) {
     flash(cloud.error || 'Could not save agent to database')
@@ -1235,13 +1242,16 @@ async function submitAgent(e) {
   let saved = cloud.agent
 
   if (loginEmail && (loginPassword || saved.authUserId)) {
+    const staffRole =
+      isStaffAdmin() && agentForm.value.accessRole === 'manager' ? 'manager' : 'sales'
     const result = await upsertStaffSalesUser({
       email: loginEmail,
       password: loginPassword || undefined,
       agentId: saved.id,
       name: saved.name,
       authUserId: saved.authUserId || undefined,
-      sendCredentialsEmail: Boolean(loginPassword)
+      sendCredentialsEmail: Boolean(loginPassword),
+      role: staffRole
     })
     if (!result.ok) {
       flash(result.error || 'Agent saved, but login could not be set')
@@ -1919,7 +1929,13 @@ onMounted(async () => {
                     Deleted
                   </span>
                   <span
-                    v-else
+                    v-if="!a.deleted && a.accessRole === 'manager'"
+                    class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300"
+                  >
+                    Manager
+                  </span>
+                  <span
+                    v-else-if="!a.deleted"
                     class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
                     :class="a.active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-500/20 text-gray-400'"
                   >
@@ -2612,6 +2628,14 @@ onMounted(async () => {
             <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Commission %</label>
             <div class="field-shell"><input v-model.number="agentForm.commissionRate" type="number" min="0" max="100" step="0.5" class="field-input"></div>
           </div>
+        </div>
+        <div v-if="isStaffAdmin()">
+          <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Access role</label>
+          <select v-model="agentForm.accessRole" class="field-shell w-full field-input !py-3">
+            <option value="sales">Sales agent (own data only)</option>
+            <option value="manager">Manager (all agents + full sales module)</option>
+          </select>
+          <p class="text-[11px] text-gray-500 mt-1">Managers can view and manage every agent sales data.</p>
         </div>
         <label class="flex items-center gap-2 text-sm">
           <input v-model="agentForm.active" type="checkbox" class="rounded">

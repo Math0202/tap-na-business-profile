@@ -131,6 +131,7 @@ function normalizeAgent(a) {
     notes: a.notes || '',
     authUserId: a.authUserId || '',
     loginEmail: a.loginEmail || a.email || '',
+    accessRole: a.accessRole === 'manager' ? 'manager' : 'sales',
     deleted: a.deleted === true,
     deletedAt: a.deletedAt || '',
     deletedBy: a.deletedBy || '',

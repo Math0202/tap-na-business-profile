@@ -283,9 +283,20 @@ function bearerToken(request) {
   return auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
 }
 
+function normalizeStaffRole(role) {
+  const r = String(role || '').trim().toLowerCase()
+  if (r === 'admin' || r === 'manager' || r === 'sales') return r
+  return ''
+}
+
+/** Admin + manager can see/manage all sales data (not agent-scoped). */
+function isSalesElevated(staff) {
+  return staff?.role === 'admin' || staff?.role === 'manager'
+}
+
 function staffClaimsFromUser(user) {
   const meta = user?.app_metadata || {}
-  const role = meta.role === 'sales' ? 'sales' : meta.role === 'admin' ? 'admin' : ''
+  const role = normalizeStaffRole(meta.role)
   return {
     id: user?.id || '',
     email: user?.email || '',
@@ -390,7 +401,7 @@ async function getStaffFromRequest(env, request) {
   }
 }
 
-async function requireStaff(env, request, { roles = ['admin', 'sales'] } = {}) {
+async function requireStaff(env, request, { roles = ['admin', 'manager', 'sales'] } = {}) {
   const staff = await getStaffFromRequest(env, request)
   if (!staff) return { error: bad('Staff login required', 401) }
   if (!roles.includes(staff.role)) return { error: bad('Forbidden', 403) }
@@ -491,6 +502,7 @@ function mapSalesAgentRow(row) {
       notes: row.notes || '',
       loginEmail: row.login_email || '',
       authUserId: row.auth_user_id || '',
+      accessRole: row.access_role === 'manager' ? 'manager' : 'sales',
       createdAt: row.created_at || '',
       updatedAt: row.updated_at || ''
     },
@@ -511,6 +523,7 @@ function salesAgentToDb(body, { isNew = false } = {}) {
     notes: String(body?.notes || '').trim(),
     login_email: String(body?.loginEmail || body?.email || '').trim().toLowerCase(),
     auth_user_id: String(body?.authUserId || '').trim(),
+    access_role: String(body?.accessRole || body?.access_role || 'sales').toLowerCase() === 'manager' ? 'manager' : 'sales',
     updated_at: new Date().toISOString(),
     ...(isNew ? { created_at: body?.createdAt || new Date().toISOString() } : {})
   }
@@ -815,7 +828,7 @@ async function ensurePaidSaleCashRows(env, orderRow) {
 }
 
 function assertAgentAccess(staff, agentId) {
-  if (staff.role === 'admin') return null
+  if (isSalesElevated(staff)) return null
   if (!staff.agentId) return bad('Sales account is not linked to an agent', 403)
   if (agentId && agentId !== staff.agentId) return bad('Forbidden: other agent data', 403)
   return null
@@ -1635,17 +1648,23 @@ async function handleApi(request, env, url) {
   }
 
   if (pathname === '/api/staff/users' && method === 'POST') {
-    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    const gate = await requireStaff(env, request, { roles: ['admin', 'manager'] })
     if (gate.error) return gate.error
     const body = await readJson(request)
     const email = String(body?.email || '').trim().toLowerCase()
     const password = String(body?.password || '')
     const agentId = String(body?.agentId || '').trim()
     const name = String(body?.name || '').trim()
-    const role = body?.role === 'admin' ? 'admin' : 'sales'
+    let role = normalizeStaffRole(body?.role) || 'sales'
+    if (role === 'admin' && !isSalesElevated(gate.staff)) {
+      return bad('Only admins can create admin users', 403)
+    }
+    if (role === 'manager' && !isSalesElevated(gate.staff)) {
+      return bad('Only admins can create managers', 403)
+    }
     const sendCredentialsEmail = body?.sendCredentialsEmail !== false
     if (!email) return bad('Email required')
-    if (role === 'sales' && !agentId) return bad('agentId required for sales users')
+    if ((role === 'sales' || role === 'manager') && !agentId) return bad('agentId required for sales/manager users')
     if (!password && !body?.authUserId) return bad('Password required for new login')
 
     try {
@@ -1659,7 +1678,7 @@ async function handleApi(request, env, url) {
           email_confirm: true,
           app_metadata: {
             role,
-            agent_id: role === 'sales' ? agentId : ''
+            agent_id: role === 'sales' || role === 'manager' ? agentId : ''
           },
           user_metadata: { name: name || email }
         }
@@ -1682,7 +1701,7 @@ async function handleApi(request, env, url) {
             app_metadata: {
               ...(existing.app_metadata || {}),
               role,
-              agent_id: role === 'sales' ? agentId : ''
+              agent_id: role === 'sales' || role === 'manager' ? agentId : ''
             },
             user_metadata: {
               ...(existing.user_metadata || {}),
@@ -1707,7 +1726,7 @@ async function handleApi(request, env, url) {
               email_confirm: true,
               app_metadata: {
                 role,
-                agent_id: role === 'sales' ? agentId : ''
+                agent_id: role === 'sales' || role === 'manager' ? agentId : ''
               },
               user_metadata: { name: name || email }
             }
@@ -1717,12 +1736,13 @@ async function handleApi(request, env, url) {
         }
       }
 
-      if (role === 'sales' && agentId && claims?.id) {
+      if ((role === 'sales' || role === 'manager') && agentId && claims?.id) {
         try {
           await upsertSalesRow(env, 'sales_agents', {
             id: agentId,
             login_email: email,
             auth_user_id: claims.id,
+            access_role: role === 'manager' ? 'manager' : 'sales',
             updated_at: new Date().toISOString()
           })
         } catch {
@@ -1732,7 +1752,7 @@ async function handleApi(request, env, url) {
 
       let emailSent = false
       let emailError = ''
-      if (role === 'sales' && sendCredentialsEmail && password) {
+      if ((role === 'sales' || role === 'manager') && sendCredentialsEmail && password) {
         try {
           const sent = await sendSalesAgentCredentialsEmail(env, {
             email,
@@ -1779,7 +1799,7 @@ async function handleApi(request, env, url) {
   }
 
   if (pathname === '/api/cards/provision' && method === 'POST') {
-    const gate = await requireStaff(env, request, { roles: ['admin', 'sales'] })
+    const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
     if (gate.error) return gate.error
     const body = await readJson(request)
     const count = Math.min(500, Math.max(1, Number(body?.count) || 1))
@@ -2117,10 +2137,10 @@ async function handleApi(request, env, url) {
   }
 
   if (pathname === '/api/sales/products' && method === 'GET') {
-  const gate = await requireStaff(env, request, { roles: ['admin', 'sales'] })
+  const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
   if (gate.error) return gate.error
   const includeInactive = url.searchParams.get('includeInactive') !== '0'
-  const includeDeleted = gate.staff.role === 'admin' && url.searchParams.get('includeDeleted') === '1'
+  const includeDeleted = isSalesElevated(gate.staff) && url.searchParams.get('includeDeleted') === '1'
   const filters = []
   if (includeInactive) {
     // no active filter
@@ -2142,7 +2162,7 @@ async function handleApi(request, env, url) {
   }
 
   if (pathname === '/api/sales/products' && method === 'POST') {
-  const gate = await requireStaff(env, request, { roles: ['admin'] })
+  const gate = await requireStaff(env, request, { roles: ['admin', 'manager'] })
   if (gate.error) return gate.error
   const body = await readJson(request)
   const row = salesProductToDb(body, { isNew: true })
@@ -2168,7 +2188,7 @@ async function handleApi(request, env, url) {
 
   const salesProductMatch = pathname.match(/^\/api\/sales\/products\/([^/]+)$/)
   if (salesProductMatch && method === 'PUT') {
-  const gate = await requireStaff(env, request, { roles: ['admin'] })
+  const gate = await requireStaff(env, request, { roles: ['admin', 'manager'] })
   if (gate.error) return gate.error
   const id = decodeURIComponent(salesProductMatch[1])
   const body = await readJson(request)
@@ -2210,7 +2230,7 @@ async function handleApi(request, env, url) {
   }
 
   if (salesProductMatch && method === 'DELETE') {
-  const gate = await requireStaff(env, request, { roles: ['admin'] })
+  const gate = await requireStaff(env, request, { roles: ['admin', 'manager'] })
   if (gate.error) return gate.error
   const id = decodeURIComponent(salesProductMatch[1])
   const existing = await sb(env, `sales_products?id=eq.${encodeURIComponent(id)}&select=*`)
@@ -2228,7 +2248,7 @@ async function handleApi(request, env, url) {
 
   const salesProductRestoreMatch = pathname.match(/^\/api\/sales\/products\/([^/]+)\/restore$/)
   if (salesProductRestoreMatch && method === 'POST') {
-  const gate = await requireStaff(env, request, { roles: ['admin'] })
+  const gate = await requireStaff(env, request, { roles: ['admin', 'manager'] })
   if (gate.error) return gate.error
   const id = decodeURIComponent(salesProductRestoreMatch[1])
   const existing = await sb(env, `sales_products?id=eq.${encodeURIComponent(id)}&select=*`)
@@ -2245,17 +2265,17 @@ async function handleApi(request, env, url) {
   }
 
   if (pathname === '/api/sales/finance' && method === 'GET') {
-  const gate = await requireStaff(env, request, { roles: ['admin', 'sales'] })
+  const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
   if (gate.error) return gate.error
   const staff = gate.staff
-  const isAdmin = staff.role === 'admin'
+  const isElevated = isSalesElevated(staff)
   const agentId = String(staff.agentId || '').trim()
-  if (!isAdmin && !agentId) return bad('Sales account is not linked to an agent', 403)
+  if (!isElevated && !agentId) return bad('Sales account is not linked to an agent', 403)
 
-  const agentQ = isAdmin
+  const agentQ = isElevated
     ? 'sales_agents?select=*&order=name.asc&limit=1000'
     : 'sales_agents?deleted=eq.false&id=eq.' + encodeURIComponent(agentId) + '&select=*&limit=1'
-  const scope = isAdmin
+  const scope = isElevated
     ? ''
     : 'deleted=eq.false&agent_id=eq.' + encodeURIComponent(agentId) + '&'
   const [agents, orders, quotes, invoices, cash] = await Promise.all([
@@ -2267,7 +2287,7 @@ async function handleApi(request, env, url) {
   ])
   return json({
     ok: true,
-    scope: isAdmin ? 'all' : 'agent',
+    scope: isElevated ? 'all' : 'agent',
     agents: (agents || []).map(mapSalesAgentRow),
     orders: (orders || []).map(mapSalesOrderRow),
     quotes: (quotes || []).map(mapSalesQuoteRow),
@@ -2277,7 +2297,7 @@ async function handleApi(request, env, url) {
   }
 
   if (pathname === '/api/sales/changelog' && method === 'GET') {
-  const gate = await requireStaff(env, request, { roles: ['admin'] })
+  const gate = await requireStaff(env, request, { roles: ['admin', 'manager'] })
   if (gate.error) return gate.error
   const limit = Math.min(1000, Math.max(1, Number(url.searchParams.get('limit') || 200) || 200))
   const rows = await sb(
@@ -2305,7 +2325,7 @@ async function handleApi(request, env, url) {
   }
 
   if (pathname === '/api/admin/errors' && method === 'POST') {
-    const gate = await requireStaff(env, request, { roles: ['admin', 'sales'] })
+    const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
     if (gate.error) return gate.error
     const body = await readJson(request)
     await logAppError(env, {
@@ -2322,7 +2342,7 @@ async function handleApi(request, env, url) {
   }
 
   if (pathname === '/api/sales/agents' && method === 'PUT') {
-  const gate = await requireStaff(env, request, { roles: ['admin'] })
+  const gate = await requireStaff(env, request, { roles: ['admin', 'manager'] })
   if (gate.error) return gate.error
   const body = await readJson(request)
   const existingId = String(body?.id || '').trim()
@@ -2355,7 +2375,7 @@ async function handleApi(request, env, url) {
 
   const salesAgentMatch = pathname.match(/^\/api\/sales\/agents\/([^/]+)$/)
   if (salesAgentMatch && method === 'DELETE') {
-  const gate = await requireStaff(env, request, { roles: ['admin'] })
+  const gate = await requireStaff(env, request, { roles: ['admin', 'manager'] })
   if (gate.error) return gate.error
   const id = decodeURIComponent(salesAgentMatch[1])
   const existing = await sb(env, 'sales_agents?id=eq.' + encodeURIComponent(id) + '&select=*')
@@ -2373,7 +2393,7 @@ async function handleApi(request, env, url) {
 
   const salesAgentRestoreMatch = pathname.match(/^\/api\/sales\/agents\/([^/]+)\/restore$/)
   if (salesAgentRestoreMatch && method === 'POST') {
-  const gate = await requireStaff(env, request, { roles: ['admin'] })
+  const gate = await requireStaff(env, request, { roles: ['admin', 'manager'] })
   if (gate.error) return gate.error
   const id = decodeURIComponent(salesAgentRestoreMatch[1])
   const existing = await sb(env, 'sales_agents?id=eq.' + encodeURIComponent(id) + '&select=*')
@@ -2390,7 +2410,7 @@ async function handleApi(request, env, url) {
   }
 
   if (pathname === '/api/sales/orders' && method === 'PUT') {
-  const gate = await requireStaff(env, request, { roles: ['admin', 'sales'] })
+  const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
   if (gate.error) return gate.error
   const body = await readJson(request)
   const existingId = String(body?.id || '').trim()
@@ -2398,7 +2418,7 @@ async function handleApi(request, env, url) {
     ? await sb(env, 'sales_orders?id=eq.' + encodeURIComponent(existingId) + '&select=*')
     : []
   const beforeRow = existing?.[0] || null
-  if (beforeRow && beforeRow.deleted === true && gate.staff.role !== 'admin') {
+  if (beforeRow && beforeRow.deleted === true && !isSalesElevated(gate.staff)) {
     return bad('Cannot update deleted order', 403)
   }
   const row = salesOrderToDb(body, { isNew: !beforeRow })
@@ -2448,7 +2468,7 @@ async function handleApi(request, env, url) {
 
   const salesOrderMatch = pathname.match(/^\/api\/sales\/orders\/([^/]+)$/)
   if (salesOrderMatch && method === 'DELETE') {
-  const gate = await requireStaff(env, request, { roles: ['admin', 'sales'] })
+  const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
   if (gate.error) return gate.error
   const id = decodeURIComponent(salesOrderMatch[1])
   const existing = await sb(env, 'sales_orders?id=eq.' + encodeURIComponent(id) + '&select=*')
@@ -2468,7 +2488,7 @@ async function handleApi(request, env, url) {
 
   const salesOrderRestoreMatch = pathname.match(/^\/api\/sales\/orders\/([^/]+)\/restore$/)
   if (salesOrderRestoreMatch && method === 'POST') {
-  const gate = await requireStaff(env, request, { roles: ['admin', 'sales'] })
+  const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
   if (gate.error) return gate.error
   const id = decodeURIComponent(salesOrderRestoreMatch[1])
   const existing = await sb(env, 'sales_orders?id=eq.' + encodeURIComponent(id) + '&select=*')
@@ -2487,7 +2507,7 @@ async function handleApi(request, env, url) {
   }
 
   if (pathname === '/api/sales/quotes' && method === 'PUT') {
-  const gate = await requireStaff(env, request, { roles: ['admin', 'sales'] })
+  const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
   if (gate.error) return gate.error
   const body = await readJson(request)
   const existingId = String(body?.id || '').trim()
@@ -2495,7 +2515,7 @@ async function handleApi(request, env, url) {
     ? await sb(env, 'sales_quotes?id=eq.' + encodeURIComponent(existingId) + '&select=*')
     : []
   const beforeRow = existing?.[0] || null
-  if (beforeRow && beforeRow.deleted === true && gate.staff.role !== 'admin') {
+  if (beforeRow && beforeRow.deleted === true && !isSalesElevated(gate.staff)) {
     return bad('Cannot update deleted quote', 403)
   }
   const row = salesQuoteToDb(body, { isNew: !beforeRow })
@@ -2527,7 +2547,7 @@ async function handleApi(request, env, url) {
 
   const salesQuoteMatch = pathname.match(/^\/api\/sales\/quotes\/([^/]+)$/)
   if (salesQuoteMatch && method === 'DELETE') {
-  const gate = await requireStaff(env, request, { roles: ['admin', 'sales'] })
+  const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
   if (gate.error) return gate.error
   const id = decodeURIComponent(salesQuoteMatch[1])
   const existing = await sb(env, 'sales_quotes?id=eq.' + encodeURIComponent(id) + '&select=*')
@@ -2547,7 +2567,7 @@ async function handleApi(request, env, url) {
 
   const salesQuoteRestoreMatch = pathname.match(/^\/api\/sales\/quotes\/([^/]+)\/restore$/)
   if (salesQuoteRestoreMatch && method === 'POST') {
-  const gate = await requireStaff(env, request, { roles: ['admin', 'sales'] })
+  const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
   if (gate.error) return gate.error
   const id = decodeURIComponent(salesQuoteRestoreMatch[1])
   const existing = await sb(env, 'sales_quotes?id=eq.' + encodeURIComponent(id) + '&select=*')
@@ -2566,7 +2586,7 @@ async function handleApi(request, env, url) {
   }
 
   if (pathname === '/api/sales/invoices' && method === 'PUT') {
-  const gate = await requireStaff(env, request, { roles: ['admin', 'sales'] })
+  const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
   if (gate.error) return gate.error
   const body = await readJson(request)
   const existingId = String(body?.id || '').trim()
@@ -2574,7 +2594,7 @@ async function handleApi(request, env, url) {
     ? await sb(env, 'sales_invoices?id=eq.' + encodeURIComponent(existingId) + '&select=*')
     : []
   const beforeRow = existing?.[0] || null
-  if (beforeRow && beforeRow.deleted === true && gate.staff.role !== 'admin') {
+  if (beforeRow && beforeRow.deleted === true && !isSalesElevated(gate.staff)) {
     return bad('Cannot update deleted invoice', 403)
   }
   const row = salesInvoiceToDb(body, { isNew: !beforeRow })
@@ -2606,7 +2626,7 @@ async function handleApi(request, env, url) {
 
   const salesInvoiceMatch = pathname.match(/^\/api\/sales\/invoices\/([^/]+)$/)
   if (salesInvoiceMatch && method === 'DELETE') {
-  const gate = await requireStaff(env, request, { roles: ['admin', 'sales'] })
+  const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
   if (gate.error) return gate.error
   const id = decodeURIComponent(salesInvoiceMatch[1])
   const existing = await sb(env, 'sales_invoices?id=eq.' + encodeURIComponent(id) + '&select=*')
@@ -2626,7 +2646,7 @@ async function handleApi(request, env, url) {
 
   const salesInvoiceRestoreMatch = pathname.match(/^\/api\/sales\/invoices\/([^/]+)\/restore$/)
   if (salesInvoiceRestoreMatch && method === 'POST') {
-  const gate = await requireStaff(env, request, { roles: ['admin', 'sales'] })
+  const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
   if (gate.error) return gate.error
   const id = decodeURIComponent(salesInvoiceRestoreMatch[1])
   const existing = await sb(env, 'sales_invoices?id=eq.' + encodeURIComponent(id) + '&select=*')
@@ -2645,7 +2665,7 @@ async function handleApi(request, env, url) {
   }
 
   if (pathname === '/api/sales/cashflow' && method === 'PUT') {
-  const gate = await requireStaff(env, request, { roles: ['admin', 'sales'] })
+  const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
   if (gate.error) return gate.error
   const body = await readJson(request)
   const existingId = String(body?.id || '').trim()
@@ -2656,7 +2676,7 @@ async function handleApi(request, env, url) {
       )
     : []
   const beforeRow = existing?.[0] || null
-  if (beforeRow && beforeRow.deleted === true && gate.staff.role !== 'admin') {
+  if (beforeRow && beforeRow.deleted === true && !isSalesElevated(gate.staff)) {
     return bad('Cannot update deleted cash entry', 403)
   }
   const createdAt = beforeRow?.created_at || body?.createdAt || new Date().toISOString()
@@ -2705,7 +2725,7 @@ async function handleApi(request, env, url) {
 
   const salesCashMatch = pathname.match(/^\/api\/sales\/cashflow\/([^/]+)$/)
   if (salesCashMatch && method === 'DELETE') {
-  const gate = await requireStaff(env, request, { roles: ['admin', 'sales'] })
+  const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
   if (gate.error) return gate.error
   const id = decodeURIComponent(salesCashMatch[1])
   const existing = await sb(env, 'sales_cashflow?id=eq.' + encodeURIComponent(id) + '&select=*')
@@ -2725,7 +2745,7 @@ async function handleApi(request, env, url) {
 
   const salesCashRestoreMatch = pathname.match(/^\/api\/sales\/cashflow\/([^/]+)\/restore$/)
   if (salesCashRestoreMatch && method === 'POST') {
-  const gate = await requireStaff(env, request, { roles: ['admin'] })
+  const gate = await requireStaff(env, request, { roles: ['admin', 'manager'] })
   if (gate.error) return gate.error
   const id = decodeURIComponent(salesCashRestoreMatch[1])
   const existing = await sb(env, 'sales_cashflow?id=eq.' + encodeURIComponent(id) + '&select=*')
@@ -3801,7 +3821,7 @@ async function handleApi(request, env, url) {
   }
 
   if (pathname === '/api/email/send' && method === 'POST') {
-    const gate = await requireStaff(env, request, { roles: ['admin', 'sales'] })
+    const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
     if (gate.error) return gate.error
 
     const body = await request.json().catch(() => null)
@@ -3859,7 +3879,7 @@ async function handleApi(request, env, url) {
   }
 
   if (pathname === '/api/email/test' && method === 'POST') {
-    const gate = await requireStaff(env, request, { roles: ['admin', 'sales'] })
+    const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
     // Allow unauthenticated test only when explicitly enabled via secret flag — skip; staff preferred
     // For deploy verification, also allow with matching internal test key
     const body = await readJson(request)

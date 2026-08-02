@@ -9,7 +9,7 @@ import {
 } from '../lib/profileStore'
 import {
   isStaffLoggedIn,
-  isStaffSales,
+  isStaffSalesTeam,
   staffCanAccessAdminPath
 } from '../lib/staffAuth'
 
@@ -183,10 +183,10 @@ router.beforeEach((to) => {
       return { path: '/login', query: { next: to.fullPath } }
     }
     if (!staffCanAccessAdminPath(to.path)) {
-      return isStaffSales() ? '/admin/sales' : '/login'
+      return isStaffSalesTeam() ? '/admin/sales' : '/login'
     }
     if (to.meta.staffRoles?.length) {
-      const role = isStaffSales() ? 'sales' : 'admin'
+      const role = isStaffSalesTeam() ? 'sales' : 'admin'
       if (!to.meta.staffRoles.includes(role)) {
         return role === 'sales' ? '/admin/sales' : '/admin'
       }

@@ -55,6 +55,21 @@ export function isStaffSales() {
   return getStaffUser()?.role === 'sales'
 }
 
+export function isStaffManager() {
+  return getStaffUser()?.role === 'manager'
+}
+
+/** Sales agents + managers (staff who use the sales module). */
+export function isStaffSalesTeam() {
+  const role = getStaffUser()?.role
+  return role === 'sales' || role === 'manager'
+}
+
+/** Admin or manager — full sales data + agent management. */
+export function canManageSalesOrg() {
+  return isStaffAdmin() || isStaffManager()
+}
+
 export function staffAgentId() {
   return String(getStaffUser()?.agentId || '')
 }
@@ -62,7 +77,7 @@ export function staffAgentId() {
 export function staffCanAccessAdminPath(path) {
   if (!isStaffLoggedIn()) return false
   if (isStaffAdmin()) return true
-  if (isStaffSales()) {
+  if (isStaffSalesTeam()) {
     return path === '/admin/sales' || path.startsWith('/admin/sales/')
   }
   return false
@@ -155,8 +170,10 @@ export async function upsertStaffSalesUser({
   agentId,
   name,
   authUserId,
-  sendCredentialsEmail
+  sendCredentialsEmail,
+  role = 'sales'
 }) {
+  const staffRole = role === 'manager' ? 'manager' : 'sales'
   return staffRequest('/api/staff/users', {
     method: 'POST',
     body: {
@@ -164,7 +181,7 @@ export async function upsertStaffSalesUser({
       password: password || undefined,
       agentId,
       name,
-      role: 'sales',
+      role: staffRole,
       authUserId: authUserId || undefined,
       sendCredentialsEmail: sendCredentialsEmail !== false
     }

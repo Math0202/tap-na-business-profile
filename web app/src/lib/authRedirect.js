@@ -2,7 +2,7 @@
  * Post-login home paths for card owners and staff.
  */
 
-import { isStaffAdmin, isStaffSales } from './staffAuth'
+import { isStaffAdmin, isStaffSalesTeam } from './staffAuth'
 
 export function profileHomePath(cardType) {
   return cardType === 'table' ? '/venue' : '/profile'
@@ -10,7 +10,7 @@ export function profileHomePath(cardType) {
 
 export function staffHomePath() {
   if (isStaffAdmin()) return '/admin'
-  if (isStaffSales()) return '/admin/sales'
+  if (isStaffSalesTeam()) return '/admin/sales'
   return '/admin'
 }
 
@@ -24,7 +24,7 @@ export function resolvePostLoginPath(kind, opts = {}) {
 
   if (kind === 'staff') {
     if (next.startsWith('/admin') && next !== '/admin/login' && next !== '/login') {
-      if (isStaffSales() && !next.startsWith('/admin/sales')) {
+      if (isStaffSalesTeam() && !next.startsWith('/admin/sales')) {
         return '/admin/sales'
       }
       return next
