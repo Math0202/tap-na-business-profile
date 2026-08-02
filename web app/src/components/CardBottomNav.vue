@@ -8,11 +8,10 @@ import {
   loadViewedProfile,
   logout
 } from '../lib/profileStore'
-import { setApiToken, apiMeetingStats, getApiToken } from '../lib/api'
+import { setApiToken } from '../lib/api'
 
 const route = useRoute()
 const router = useRouter()
-const badge = ref(0)
 const loggedIn = ref(isLoggedIn())
 const isTableOwner = ref(isTableBusiness(loadProfile()))
 const viewedIsTable = ref(isTableBusiness(loadViewedProfile()))
@@ -29,14 +28,7 @@ const visible = computed(() => {
 
   const p = route.path
   if (p === '/business' || p.startsWith('/venue') || p === '/table') return false
-  if (
-    p === '/me' ||
-    p === '/profile' ||
-    p === '/meetings' ||
-    p.startsWith('/meetings/') ||
-    p === '/catalog' ||
-    p === '/cards'
-  ) {
+  if (p === '/me' || p === '/profile' || p === '/cards') {
     return true
   }
   if (p.startsWith('/c/')) {
@@ -46,25 +38,13 @@ const visible = computed(() => {
   return false
 })
 
-/** Same items for guests and owners — auth routes redirect to login when needed. */
+/** Business/personal card nav — Meetings & Catalog are hidden. */
 const navItems = computed(() => [
   {
     to: '/me',
     label: 'Profile',
     icon: 'badge',
     match: (p) => p === '/me' || p.startsWith('/c/')
-  },
-  {
-    to: '/meetings',
-    label: 'Meetings',
-    icon: 'event',
-    match: (p) => p === '/meetings' || p.startsWith('/meetings/')
-  },
-  {
-    to: '/catalog',
-    label: 'Catalog',
-    icon: 'inventory_2',
-    match: (p) => p === '/catalog'
   },
   {
     action: 'share',
@@ -92,18 +72,6 @@ function onShare() {
   router.push({ path: '/me', hash: '#share' })
 }
 
-async function refreshBadge() {
-  if (!visible.value || !loggedIn.value || !getApiToken()) {
-    badge.value = 0
-    return
-  }
-  const res = await apiMeetingStats()
-  if (res.ok && res.data?.stats) {
-    const s = res.data.stats
-    badge.value = Number(s.newMeetings || 0) + Number(s.overdueFollowups || 0)
-  }
-}
-
 function onLogout() {
   logout()
   setApiToken('')
@@ -114,20 +82,16 @@ watch(
   () => route.fullPath,
   () => {
     refreshAuth()
-    refreshBadge()
   }
 )
 
 onMounted(() => {
   refreshAuth()
-  refreshBadge()
-  window.addEventListener('tapna-meetings-changed', refreshBadge)
   window.addEventListener('tapna-view-profile-changed', refreshAuth)
   window.addEventListener('storage', refreshAuth)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('tapna-meetings-changed', refreshBadge)
   window.removeEventListener('tapna-view-profile-changed', refreshAuth)
   window.removeEventListener('storage', refreshAuth)
 })
@@ -155,15 +119,7 @@ onUnmounted(() => {
         class="admin-nav-item"
         :class="{ 'admin-nav-item--active': isActive(item) }"
       >
-        <span class="relative inline-flex">
-          <span class="material-symbols-outlined">{{ item.icon }}</span>
-          <span
-            v-if="item.to === '/meetings' && badge > 0"
-            class="absolute -top-1 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-emerald-500 text-[10px] font-bold text-black flex items-center justify-center"
-          >
-            {{ badge > 9 ? '9+' : badge }}
-          </span>
-        </span>
+        <span class="material-symbols-outlined">{{ item.icon }}</span>
         <span>{{ item.label }}</span>
       </RouterLink>
     </template>
