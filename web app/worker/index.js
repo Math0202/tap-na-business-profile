@@ -881,8 +881,11 @@ async function softDeleteSalesEntity(env, {
   const patch = {
     deleted: true,
     deleted_at: new Date().toISOString(),
-    deleted_by: String(staff?.email || staff?.id || ''),
-    updated_at: new Date().toISOString()
+    deleted_by: String(staff?.email || staff?.id || '')
+  }
+  // sales_cashflow historically had no updated_at; only set when the table supports it
+  if (table !== 'sales_cashflow') {
+    patch.updated_at = new Date().toISOString()
   }
   await sb(env, `${table}?id=eq.${encodeURIComponent(id)}`, {
     method: 'PATCH',
@@ -913,8 +916,10 @@ async function restoreSalesEntity(env, {
   const patch = {
     deleted: false,
     deleted_at: null,
-    deleted_by: '',
-    updated_at: new Date().toISOString()
+    deleted_by: ''
+  }
+  if (table !== 'sales_cashflow') {
+    patch.updated_at = new Date().toISOString()
   }
   await sb(env, `${table}?id=eq.${encodeURIComponent(id)}`, {
     method: 'PATCH',
