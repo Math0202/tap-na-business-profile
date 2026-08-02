@@ -36,15 +36,43 @@ const slugKindFilter = ref('all')
 const slugGenerating = ref(false)
 const slugExporting = ref(false)
 const slugForm = ref({ count: 10, kind: 'table' })
+const dateFrom = ref('')
+const dateTo = ref('')
+const selected = ref(new Set())
+const selectMode = ref(false)
 
 const kindOptions = computed(() => Object.values(CARD_KINDS))
 
+function dayStamp(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+function formatSlugDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  })
+}
+
 const filteredSlugs = computed(() => {
   const q = query.value.trim().toLowerCase()
+  const from = dateFrom.value
+  const to = dateTo.value
   return allSlugs.value.filter((c) => {
     if (slugFilter.value === 'linked' && !c.profileId) return false
     if (slugFilter.value === 'unlinked' && c.profileId) return false
     if (slugKindFilter.value !== 'all' && c.kind !== slugKindFilter.value) return false
+    const created = dayStamp(c.createdAt || c.linkedAt)
+    if (from && (!created || created < from)) return false
+    if (to && (!created || created > to)) return false
     if (!q) return true
     return [c.serial, c.kind, c.productName, c.customerName, c.profileName, c.saleId, c.profileId]
       .join(' ')
@@ -52,6 +80,41 @@ const filteredSlugs = computed(() => {
       .includes(q)
   })
 })
+
+const selectedCount = computed(() => selected.value.size)
+
+const exportRows = computed(() => {
+  if (selected.value.size) {
+    return filteredSlugs.value.filter((c) => selected.value.has(c.serial))
+  }
+  return filteredSlugs.value
+})
+
+function isSelected(serial) {
+  return selected.value.has(serial)
+}
+
+function toggleSelect(serial) {
+  const next = new Set(selected.value)
+  if (next.has(serial)) next.delete(serial)
+  else next.add(serial)
+  selected.value = next
+  selectMode.value = next.size > 0
+}
+
+function selectAllFiltered() {
+  selected.value = new Set(filteredSlugs.value.map((c) => c.serial))
+  selectMode.value = true
+}
+
+function clearSelection() {
+  selected.value = new Set()
+}
+
+function toggleSelectMode() {
+  selectMode.value = !selectMode.value
+  if (!selectMode.value) clearSelection()
+}
 
 function applyStats(list) {
   slugStatsSummary.value = {
@@ -144,7 +207,7 @@ async function changeSlugKind(card, kind) {
   const next = kind === 'personal' ? 'personal' : 'table'
   updateCard(card.serial, { kind: next, productName: kindLabel(next) })
   const res = await apiUpdateCardKind(card.serial, next)
-  // URLs and QR change with kind (cards.redirct.link vs redirct.link)
+  // URLs stay on tapnam.com for both personal and table cards
   const map = { ...slugQrMap.value }
   delete map[card.serial]
   slugQrMap.value = map
@@ -173,7 +236,11 @@ async function removeSlug(serial) {
 }
 
 function exportSlugsCsv() {
-  const rows = filteredSlugs.value
+  const rows = exportRows.value
+  if (!rows.length) {
+    flash(selectMode.value ? 'Select at least one slug to export' : 'No slugs to export')
+    return
+  }
   const header = ['slug', 'kind', 'status', 'nfc_url', 'qr_url', 'profile', 'sale_id', 'created_at']
   const lines = [header.join(',')]
   for (const c of rows) {
@@ -211,9 +278,9 @@ async function downloadOneSlugQr(serial) {
 }
 
 async function exportSlugsQrZip() {
-  const rows = filteredSlugs.value
+  const rows = exportRows.value
   if (!rows.length) {
-    flash('No slugs to export')
+    flash(selectMode.value ? 'Select at least one slug to export' : 'No slugs to export')
     return
   }
   slugExporting.value = true
@@ -236,8 +303,12 @@ onMounted(() => {
   refreshSlugQrs()
 })
 
-watch(filteredSlugs, () => {
+watch(filteredSlugs, (rows) => {
   refreshSlugQrs()
+  if (!selected.value.size) return
+  const keep = new Set(rows.map((c) => c.serial))
+  const next = new Set([...selected.value].filter((s) => keep.has(s)))
+  if (next.size !== selected.value.size) selected.value = next
 })
 </script>
 
@@ -308,22 +379,49 @@ watch(filteredSlugs, () => {
           <button
             type="button"
             class="px-4 py-2.5 rounded-full text-xs font-semibold border border-[var(--border)] shrink-0"
-            :disabled="!filteredSlugs.length"
+            :class="selectMode ? 'bg-white text-black border-transparent' : ''"
+            @click="toggleSelectMode"
+          >
+            {{ selectMode ? 'Selecting…' : 'Select' }}
+          </button>
+          <button
+            type="button"
+            class="px-4 py-2.5 rounded-full text-xs font-semibold border border-[var(--border)] shrink-0"
+            :disabled="!exportRows.length"
             @click="exportSlugsCsv"
           >
-            Export CSV
+            Export CSV{{ selectedCount ? ` (${selectedCount})` : '' }}
           </button>
           <button
             type="button"
             class="px-4 py-2.5 rounded-full text-xs font-bold bg-white text-black shrink-0 disabled:opacity-50"
-            :disabled="!filteredSlugs.length || slugExporting"
+            :disabled="!exportRows.length || slugExporting"
             @click="exportSlugsQrZip"
           >
-            {{ slugExporting ? 'Packing…' : 'Export QR ZIP' }}
+            {{ slugExporting ? 'Packing…' : (selectedCount ? `Export QR ZIP (${selectedCount})` : 'Export QR ZIP') }}
           </button>
         </div>
 
-        <div class="flex flex-wrap gap-2">
+        <div class="flex flex-col sm:flex-row gap-2">
+          <div class="field-shell flex-1 !rounded-2xl">
+            <span class="material-symbols-outlined field-icon">event</span>
+            <input v-model="dateFrom" type="date" class="field-input" aria-label="Created from">
+          </div>
+          <div class="field-shell flex-1 !rounded-2xl">
+            <span class="material-symbols-outlined field-icon">event</span>
+            <input v-model="dateTo" type="date" class="field-input" aria-label="Created to">
+          </div>
+          <button
+            v-if="dateFrom || dateTo"
+            type="button"
+            class="px-4 py-2.5 rounded-full text-xs font-semibold border border-[var(--border)] shrink-0"
+            @click="dateFrom = ''; dateTo = ''"
+          >
+            Clear dates
+          </button>
+        </div>
+
+        <div class="flex flex-wrap gap-2 items-center">
           <button
             v-for="f in [{ id: 'all', label: 'All' }, { id: 'unlinked', label: 'Blank' }, { id: 'linked', label: 'Linked' }]"
             :key="f.id"
@@ -340,10 +438,43 @@ watch(filteredSlugs, () => {
               <option v-for="k in kindOptions" :key="k.id" :value="k.id">{{ k.label }}</option>
             </select>
           </div>
+          <template v-if="selectMode || selectedCount">
+            <button
+              type="button"
+              class="px-3 py-1.5 rounded-full text-[11px] font-semibold border border-[var(--border)] text-gray-300"
+              :disabled="!filteredSlugs.length"
+              @click="selectAllFiltered"
+            >
+              Select all ({{ filteredSlugs.length }})
+            </button>
+            <button
+              type="button"
+              class="px-3 py-1.5 rounded-full text-[11px] font-semibold border border-[var(--border)] text-gray-300"
+              :disabled="!selectedCount"
+              @click="clearSelection"
+            >
+              Clear ({{ selectedCount }})
+            </button>
+          </template>
         </div>
 
         <ul class="space-y-2">
-          <li v-for="c in filteredSlugs" :key="c.serial" class="card-item-bg rounded-2xl p-4 flex items-start gap-3">
+          <li
+            v-for="c in filteredSlugs"
+            :key="c.serial"
+            class="card-item-bg rounded-2xl p-4 flex items-start gap-3"
+            :class="isSelected(c.serial) ? 'ring-1 ring-white/40' : ''"
+          >
+            <button
+              type="button"
+              class="mt-1 w-5 h-5 rounded border shrink-0 flex items-center justify-center transition-colors"
+              :class="isSelected(c.serial) ? 'bg-white border-white text-black' : 'border-zinc-500 text-transparent hover:border-zinc-300'"
+              :aria-label="(isSelected(c.serial) ? 'Deselect ' : 'Select ') + c.serial"
+              :aria-pressed="isSelected(c.serial)"
+              @click="toggleSelect(c.serial)"
+            >
+              <span class="material-symbols-outlined text-[16px]">check</span>
+            </button>
             <img
               v-if="slugQrMap[c.serial]"
               :src="slugQrMap[c.serial]"
@@ -381,9 +512,24 @@ watch(filteredSlugs, () => {
                   <option v-for="k in kindOptions" :key="k.id" :value="k.id">{{ k.label }}</option>
                 </select>
               </div>
+              <p class="text-[11px] text-gray-500 mt-1">
+                Created {{ formatSlugDate(c.createdAt) || '—' }}
+                <template v-if="c.linkedAt">
+                  <span class="text-gray-700 mx-1">·</span>
+                  Linked {{ formatSlugDate(c.linkedAt) }}
+                </template>
+              </p>
               <p v-if="c.profileName" class="text-[11px] text-gray-500 mt-0.5">→ {{ c.profileName }}</p>
               <p v-if="c.customerName" class="text-[11px] text-gray-500">{{ c.customerName }}</p>
               <div class="flex flex-wrap gap-x-3 gap-y-1 mt-2">
+                <button
+                  type="button"
+                  class="text-[11px] font-semibold hover:text-white"
+                  :class="isSelected(c.serial) ? 'text-emerald-300' : 'text-gray-300'"
+                  @click="toggleSelect(c.serial)"
+                >
+                  {{ isSelected(c.serial) ? 'Selected' : 'Select' }}
+                </button>
                 <button type="button" class="text-[11px] font-semibold text-gray-300 hover:text-white" @click="downloadOneSlugQr(c.serial)">
                   Download PNG
                 </button>
@@ -404,7 +550,7 @@ watch(filteredSlugs, () => {
           </li>
         </ul>
         <p v-if="!filteredSlugs.length" class="text-sm text-gray-500">
-          No slugs yet. Generate a batch above to start writing tags.
+          {{ allSlugs.length ? 'No slugs match these filters.' : 'No slugs yet. Generate a batch above to start writing tags.' }}
         </p>
       </section>
     </main>

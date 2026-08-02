@@ -6,9 +6,9 @@
 const STAFF_KEY = 'tapna_staff_session'
 
 const API_BASE =
-  typeof window !== 'undefined' && /redirct\.link$/i.test(window.location.hostname)
+  typeof window !== 'undefined' && /(^|\.)(tapnam\.com|redirct\.link)$/i.test(window.location.hostname)
     ? ''
-    : 'https://redirct.link'
+    : 'https://tapnam.com'
 
 function readSession() {
   try {
@@ -154,7 +154,8 @@ export async function upsertStaffSalesUser({
   password,
   agentId,
   name,
-  authUserId
+  authUserId,
+  sendCredentialsEmail
 }) {
   return staffRequest('/api/staff/users', {
     method: 'POST',
@@ -164,7 +165,8 @@ export async function upsertStaffSalesUser({
       agentId,
       name,
       role: 'sales',
-      authUserId: authUserId || undefined
+      authUserId: authUserId || undefined,
+      sendCredentialsEmail: sendCredentialsEmail !== false
     }
   })
 }

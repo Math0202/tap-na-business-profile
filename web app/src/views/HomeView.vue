@@ -18,8 +18,11 @@ const email = ref('')
 const toast = ref('')
 const sections = ref([])
 const catalogTick = ref(0)
+const heroMenuIn = ref(false)
+const heroCardIn = ref(false)
 let observer = null
 let toastTimer = null
+let heroCardTimer = null
 
 const cards = computed(() => {
   catalogTick.value
@@ -85,6 +88,12 @@ onMounted(async () => {
   document.documentElement.classList.add('shop-home')
   await refreshCatalog()
   await nextTick()
+  requestAnimationFrame(() => {
+    heroMenuIn.value = true
+  })
+  heroCardTimer = setTimeout(() => {
+    heroCardIn.value = true
+  }, 2000)
   if (route.hash === '#business-cards') scrollToShop()
   if (route.hash === '#table-brochures') scrollToBrochures()
   observer = new IntersectionObserver(
@@ -110,6 +119,7 @@ onUnmounted(() => {
   document.documentElement.classList.remove('shop-home')
   observer?.disconnect()
   clearTimeout(toastTimer)
+  clearTimeout(heroCardTimer)
 })
 </script>
 
@@ -130,14 +140,54 @@ onUnmounted(() => {
           class="px-margin-mobile md:px-margin-desktop pt-stack-md md:pt-10 flex flex-col gap-6"
         >
           <div
-            class="relative overflow-hidden bg-surface-charcoal rounded-xl p-8 md:p-14 min-h-[400px] md:min-h-[480px] flex flex-col justify-end group"
+            class="relative overflow-hidden bg-surface-charcoal rounded-xl min-h-[520px] md:min-h-[560px] flex flex-col md:flex-row md:items-end"
           >
-            <div class="absolute inset-0 opacity-20" aria-hidden="true">
-              <div
-                class="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,#ffffff_0%,transparent_70%)] animate-pulse"
-              />
+            <div
+              class="absolute inset-0 bg-[radial-gradient(ellipse_at_70%_40%,rgba(255,255,255,0.12)_0%,transparent_55%)]"
+              aria-hidden="true"
+            />
+            <div
+              class="absolute inset-0 bg-gradient-to-t from-surface-charcoal via-surface-charcoal/40 to-transparent md:bg-gradient-to-r md:from-surface-charcoal md:via-surface-charcoal/80 md:to-transparent"
+              aria-hidden="true"
+            />
+
+            <!-- Product visuals -->
+            <div
+              class="relative z-[1] order-1 md:order-2 flex-1 min-h-[280px] md:min-h-full md:absolute md:inset-y-0 md:right-0 md:w-[58%] flex items-center justify-center px-6 pt-8 md:pt-0 md:pr-10"
+            >
+              <div class="relative w-full max-w-[420px] aspect-[4/5] md:max-w-none md:h-[86%] md:aspect-auto md:w-[92%]">
+                <button
+                  type="button"
+                  class="hero-product absolute left-[-4%] top-[8%] w-[58%] rounded-lg shadow-[0_24px_60px_rgba(0,0,0,0.55)] overflow-hidden aspect-[3/4] p-0 border-0 bg-transparent cursor-pointer"
+                  :class="{ 'hero-product--in': heroMenuIn }"
+                  style="--hero-rot: -8deg"
+                  aria-label="Shop custom menu cards"
+                  @click="scrollToBrochures"
+                >
+                  <img
+                    src="/images/table/NFC%20custom%20menu%20card.png"
+                    alt="Custom menu NFC table card"
+                    class="w-full h-full object-cover"
+                  >
+                </button>
+                <button
+                  type="button"
+                  class="hero-product absolute right-[6%] bottom-[8%] w-[43%] md:w-[47%] p-0 border-0 bg-transparent cursor-pointer drop-shadow-[0_28px_70px_rgba(0,0,0,0.65)]"
+                  :class="{ 'hero-product--in': heroCardIn }"
+                  style="--hero-rot: 5deg"
+                  aria-label="Shop Connect business cards"
+                  @click="scrollToShop"
+                >
+                  <img
+                    src="/images/black-card.png"
+                    alt="Charcoal black Connect NFC card"
+                    class="w-full h-auto block"
+                  >
+                </button>
+              </div>
             </div>
-            <div class="relative z-10 flex flex-col gap-4 max-w-xl">
+
+            <div class="relative z-10 order-2 md:order-1 flex flex-col gap-4 max-w-xl px-8 pb-10 pt-2 md:p-14 md:pr-8 md:pb-14 md:w-[48%]">
               <span
                 class="font-label-caps text-label-caps text-secondary-fixed-dim uppercase tracking-[0.2em]"
               >
@@ -148,9 +198,8 @@ onUnmounted(() => {
               >
                 Anything NFC <br> You Want.
               </h1>
-              <p class="text-on-tertiary-container max-w-[80%] md:max-w-md text-body-md">
-                Tap into the future of connection with professional NFC technology. No apps. No paper. Just
-                magic.
+              <p class="text-on-tertiary-container max-w-[90%] md:max-w-md text-body-md">
+                From personal Connect cards to table menu taps — professional NFC, ready to order.
               </p>
               <div class="mt-4 flex flex-wrap gap-3">
                 <button
@@ -158,25 +207,21 @@ onUnmounted(() => {
                   class="bg-surface-container-lowest text-primary font-button-text text-button-text px-8 py-4 rounded-full uppercase tracking-widest hover:bg-primary-fixed transition-all active:scale-95"
                   @click="scrollToShop"
                 >
-                  Shop All
+                  Shop cards
                 </button>
-                <RouterLink
-                  to="/cart"
-                  class="border border-on-primary/40 text-on-primary font-button-text text-button-text px-8 py-4 rounded-full uppercase tracking-widest hover:bg-on-primary/10 transition-all no-underline"
+                <button
+                  type="button"
+                  class="border border-on-primary/40 text-on-primary font-button-text text-button-text px-8 py-4 rounded-full uppercase tracking-widest hover:bg-on-primary/10 transition-all"
+                  @click="scrollToBrochures"
                 >
-                  View Cart
-                </RouterLink>
+                  Table top tap
+                </button>
               </div>
-            </div>
-            <div
-              class="absolute -right-12 -top-12 opacity-40 group-hover:scale-110 transition-transform duration-700 pointer-events-none"
-              aria-hidden="true"
-            >
-              <span
-                class="material-symbols-outlined text-[240px] md:text-[320px] text-surface-container-high leading-none"
-              >
-                contactless
-              </span>
+              <div class="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[11px] uppercase tracking-[0.16em] text-on-primary/55">
+                <span>Connect card</span>
+                <span aria-hidden="true">·</span>
+                <span>Custom menu</span>
+              </div>
             </div>
           </div>
         </section>
@@ -490,5 +535,32 @@ html.shop-home,
 html.shop-home body {
   background-color: #f9f9f9 !important;
   color: #1a1c1c;
+}
+
+.hero-product {
+  --hero-rot: 0deg;
+  opacity: 0;
+  transform: translateY(40px) scale(0.92) rotate(var(--hero-rot));
+  transition:
+    opacity 0.75s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.75s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+
+.hero-product--in {
+  opacity: 1;
+  transform: translateY(0) scale(1) rotate(var(--hero-rot));
+}
+
+.hero-product--in:hover {
+  transform: translateY(0) scale(1.03) rotate(var(--hero-rot));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-product {
+    opacity: 1;
+    transform: rotate(var(--hero-rot));
+    transition: none;
+  }
 }
 </style>

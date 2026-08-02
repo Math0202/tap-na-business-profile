@@ -60,6 +60,7 @@ const showPhone = ref(false)
 const showEmail = ref(false)
 const showCheckin = ref(false)
 const showFeedback = ref(false)
+const showBooking = ref(true)
 const checkinForm = ref(normalizeCheckinForm(DEFAULT_CHECKIN_FORM))
 const feedbackForm = ref(normalizeFeedbackForm(DEFAULT_FEEDBACK_FORM))
 const checkinEventsText = ref('')
@@ -144,6 +145,7 @@ function fillForm(profile) {
     showEmail.value = false
     showCheckin.value = false
     showFeedback.value = false
+    showBooking.value = true
     checkinForm.value = normalizeCheckinForm(DEFAULT_CHECKIN_FORM)
     feedbackForm.value = normalizeFeedbackForm(DEFAULT_FEEDBACK_FORM)
     checkinEventsText.value = ''
@@ -180,6 +182,7 @@ function fillForm(profile) {
     showEmail.value = !!profile.showEmail
     showCheckin.value = !!profile.showCheckin
     showFeedback.value = !!profile.showFeedback
+    showBooking.value = profile.showBooking !== false
     checkinForm.value = normalizeCheckinForm(profile.checkinForm)
     feedbackForm.value = normalizeFeedbackForm(profile.feedbackForm)
     checkinEventsText.value = (checkinForm.value.events || []).join('\n')
@@ -606,6 +609,7 @@ async function onSave(e) {
       showEmail: !!showEmail.value,
       showCheckin: !!showCheckin.value,
       showFeedback: !!showFeedback.value,
+      showBooking: !!showBooking.value,
       checkinForm: nextCheckinForm,
       feedbackForm: nextFeedbackForm,
       whatsapp: socials.whatsapp,
@@ -652,6 +656,7 @@ async function onSave(e) {
         showEmail: !!saved.showEmail,
         showCheckin: !!saved.showCheckin,
         showFeedback: !!saved.showFeedback,
+        showBooking: saved.showBooking !== false,
         checkinForm: saved.checkinForm || nextCheckinForm,
         feedbackForm: saved.feedbackForm || nextFeedbackForm,
         avatar: cloudSafe(saved.avatar, cloudSafe(previous.avatar, '/images/personal.png')),
@@ -698,7 +703,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <main class="w-full max-w-md min-h-screen mx-auto flex flex-col relative pb-28">
+  <main class="w-full max-w-md min-h-screen mx-auto flex flex-col relative pb-32">
     <header class="px-6 pt-16 pb-4 text-center">
       <BrandMark size="sm" class="mb-3 mx-auto" />
       <h1 class="text-2xl font-bold tracking-tight">
@@ -1022,6 +1027,13 @@ onMounted(() => {
             <input id="field-email-personal" v-model="email" type="email" class="field-input" placeholder="you@example.com" />
           </div>
         </div>
+        <label class="flex items-center gap-3 card-item-bg rounded-2xl px-4 py-3 cursor-pointer">
+          <input v-model="showBooking" type="checkbox" class="rounded border-zinc-600" />
+          <span class="min-w-0">
+            <span class="block text-sm font-semibold">Book a meeting button</span>
+            <span class="block text-xs text-gray-500 mt-0.5">Let visitors request a meeting from your public card</span>
+          </span>
+        </label>
       </section>
 
       <section class="space-y-4">

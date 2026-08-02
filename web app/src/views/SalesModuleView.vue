@@ -6,9 +6,16 @@ import AdminBottomNav from '../components/AdminBottomNav.vue'
 import {
   listAgents,
   saveAgent,
+  saveAgentToCloud,
   deleteAgent,
+  restoreAgent,
+  restoreSale,
+  restoreQuote,
+  restoreCashEntry,
+  restoreProduct,
   listSales,
   saveSale,
+  saveSaleToCloud,
   deleteSale,
   listQuotes,
   saveQuote,
@@ -25,14 +32,15 @@ import {
   saveProduct,
   deleteProduct,
   refreshProductsFromApi,
+  refreshFinanceFromApi,
   listCashFlow,
-  addCashEntry,
-  updateCashEntry,
-  deleteCashEntry,
+  saveCashEntryToCloud,
+  deleteCashEntryFromCloud,
+  summarizeCashFlow,
+  cashEntriesWithRunningBalance,
   getSalesStats,
   agentPerformance,
   formatMoney,
-  clearSalesData,
   emptyLine,
   PRODUCT_CATEGORIES,
   SALE_STATUSES,
@@ -77,6 +85,7 @@ const quotes = ref([])
 const products = ref([])
 const invoices = ref([])
 const cash = ref([])
+const showDeleted = ref(false)
 const stats = ref(getSalesStats())
 const query = ref('')
 const agentFilter = ref('')
@@ -84,7 +93,8 @@ const toast = ref('')
 
 const canManageAgents = computed(() => isStaffAdmin())
 const canManageProducts = computed(() => isStaffAdmin())
-const isSalesScoped = computed(() => isStaffSales())
+/** Sales logins only see their own agent data; admins see every agent’s finances. */
+const isSalesScoped = computed(() => isStaffSales() && !isStaffAdmin())
 const myAgentId = computed(() => staffAgentId())
 const staffLabel = computed(() => {
   const u = getStaffUser()
@@ -101,7 +111,9 @@ const salesTabs = computed(() => {
     { id: 'products', label: 'Products', icon: 'inventory_2' },
     { id: 'cash', label: 'Cash', icon: 'account_balance_wallet' }
   ]
-  if (canManageAgents.value) tabs.push({ id: 'agents', label: 'Agents', icon: 'group' })
+  if (canManageAgents.value) {
+    tabs.push({ id: 'agents', label: 'Agents', icon: 'group' })
+  }
   return tabs
 })
 
@@ -128,6 +140,11 @@ const editingSaleId = ref('')
 const editingQuoteId = ref('')
 const editingProductId = ref('')
 const editingCashId = ref('')
+const cashTypeFilter = ref('all') // all | in | out
+const cashCategoryFilter = ref('all')
+const cashFrom = ref('')
+const cashTo = ref('')
+const cashSaving = ref(false)
 const editingAgentId = ref('')
 
 const saleForm = ref(emptySale())
@@ -216,12 +233,13 @@ function emptyCash() {
   return {
     id: '',
     type: 'in',
-    category: 'sale',
+    category: 'expense',
     amount: 0,
     method: 'eft',
     description: '',
     agentId: '',
-    at: new Date().toISOString().slice(0, 16)
+    saleId: '',
+    at: toDatetimeLocalValue(new Date().toISOString())
   }
 }
 
@@ -242,25 +260,29 @@ function emptyAgent() {
 }
 
 async function refresh() {
-  await refreshProductsFromApi({ includeInactive: true })
-  const allAgents = listAgents()
-  const allSales = listSales()
-  const allQuotes = listQuotes()
-  const allInvoices = listInvoices()
-  const allCash = listCashFlow()
-  products.value = listProducts()
+  const [productsOk, financeOk] = await Promise.all([
+    refreshProductsFromApi({ includeInactive: true }).then(() => true).catch(() => false),
+    refreshFinanceFromApi()
+  ])
+  const includeDeleted = canManageAgents.value && showDeleted.value
+  const allAgents = listAgents({ includeDeleted: canManageAgents.value })
+  const allSales = listSales({ includeDeleted: canManageAgents.value })
+  const allQuotes = listQuotes({ includeDeleted: canManageAgents.value })
+  const allInvoices = listInvoices({ includeDeleted: canManageAgents.value })
+  const allCash = listCashFlow({ includeDeleted: canManageAgents.value })
+  products.value = listProducts({ includeInactive: true, includeDeleted: canManageAgents.value })
 
   if (isSalesScoped.value) {
     const aid = myAgentId.value
-    agents.value = allAgents.filter((a) => a.id === aid)
-    sales.value = allSales.filter((s) => s.agentId === aid)
-    quotes.value = allQuotes.filter((q) => q.agentId === aid)
+    agents.value = allAgents.filter((a) => a.id === aid && !a.deleted)
+    sales.value = allSales.filter((s) => s.agentId === aid && !s.deleted)
+    quotes.value = allQuotes.filter((q) => q.agentId === aid && !q.deleted)
     const saleIds = new Set(sales.value.map((s) => s.id))
     invoices.value = allInvoices.filter(
-      (inv) => inv.agentId === aid || (inv.saleId && saleIds.has(inv.saleId))
+      (inv) => !inv.deleted && (inv.agentId === aid || (inv.saleId && saleIds.has(inv.saleId)))
     )
     cash.value = allCash.filter(
-      (c) => c.agentId === aid || (c.saleId && saleIds.has(c.saleId))
+      (c) => !c.deleted && (c.agentId === aid || (c.saleId && saleIds.has(c.saleId)))
     )
     const paid = sales.value.filter((s) => s.status === 'paid' || s.status === 'fulfilled')
     const pending = sales.value.filter((s) => s.status === 'pending')
@@ -278,13 +300,17 @@ async function refresh() {
       agentsTotal: agents.value.length
     }
   } else {
-    agents.value = allAgents
-    sales.value = allSales
-    quotes.value = allQuotes
-    invoices.value = allInvoices
-    cash.value = allCash
+    const visible = (list) => (includeDeleted ? list : list.filter((x) => !x.deleted))
+    agents.value = visible(allAgents)
+    sales.value = visible(allSales)
+    quotes.value = visible(allQuotes)
+    invoices.value = visible(allInvoices)
+    cash.value = visible(allCash)
+    products.value = visible(products.value)
     stats.value = getSalesStats()
   }
+
+  return { productsOk, financeOk }
 }
 
 function flash(msg) {
@@ -305,6 +331,14 @@ function formatDate(iso) {
   } catch {
     return '—'
   }
+}
+
+function toDatetimeLocalValue(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return String(iso).slice(0, 16)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 function formatDay(iso) {
@@ -383,14 +417,90 @@ const filteredProducts = computed(() => {
 })
 
 const filteredCash = computed(() => {
+  let list = cash.value
+  if (!isSalesScoped.value && agentFilter.value === '__none__') {
+    list = list.filter((c) => !c.agentId)
+  } else if (!isSalesScoped.value && agentFilter.value) {
+    list = list.filter((c) => c.agentId === agentFilter.value)
+  }
+  if (cashTypeFilter.value === 'in' || cashTypeFilter.value === 'out') {
+    list = list.filter((c) => c.type === cashTypeFilter.value)
+  }
+  if (cashCategoryFilter.value !== 'all') {
+    list = list.filter((c) => c.category === cashCategoryFilter.value)
+  }
+  if (cashFrom.value) {
+    const from = new Date(cashFrom.value).getTime()
+    list = list.filter((c) => new Date(c.at).getTime() >= from)
+  }
+  if (cashTo.value) {
+    const to = new Date(cashTo.value + 'T23:59:59').getTime()
+    list = list.filter((c) => new Date(c.at).getTime() <= to)
+  }
   const q = query.value.trim().toLowerCase()
-  if (!q) return cash.value
-  return cash.value.filter((c) =>
-    [c.description, c.category, c.type, c.method, agentName(c.agentId)]
-      .join(' ')
-      .toLowerCase()
-      .includes(q)
-  )
+  if (q) {
+    list = list.filter((c) =>
+      [c.description, c.category, c.type, c.method, agentName(c.agentId), c.saleId]
+        .join(' ')
+        .toLowerCase()
+        .includes(q)
+    )
+  }
+  return list
+})
+
+const cashSummary = computed(() => summarizeCashFlow(filteredCash.value))
+
+const cashRows = computed(() => cashEntriesWithRunningBalance(filteredCash.value))
+
+const cashCategoryRows = computed(() => {
+  const map = cashSummary.value.byCategory || {}
+  return Object.keys(map)
+    .sort()
+    .map((key) => ({
+      category: key,
+      in: map[key].in || 0,
+      out: map[key].out || 0,
+      net: (map[key].in || 0) - (map[key].out || 0)
+    }))
+})
+
+/** Admin: cash totals per agent (uses date/type/category filters, ignores agent filter). */
+const cashByAgentRows = computed(() => {
+  if (isSalesScoped.value) return []
+  let list = cash.value
+  if (cashTypeFilter.value === 'in' || cashTypeFilter.value === 'out') {
+    list = list.filter((c) => c.type === cashTypeFilter.value)
+  }
+  if (cashCategoryFilter.value !== 'all') {
+    list = list.filter((c) => c.category === cashCategoryFilter.value)
+  }
+  if (cashFrom.value) {
+    const from = new Date(cashFrom.value).getTime()
+    list = list.filter((c) => new Date(c.at).getTime() >= from)
+  }
+  if (cashTo.value) {
+    const to = new Date(cashTo.value + 'T23:59:59').getTime()
+    list = list.filter((c) => new Date(c.at).getTime() <= to)
+  }
+  const buckets = new Map()
+  for (const c of list) {
+    const key = c.agentId || '__none__'
+    if (!buckets.has(key)) {
+      buckets.set(key, { agentId: c.agentId || '', in: 0, out: 0, count: 0 })
+    }
+    const b = buckets.get(key)
+    b.count += 1
+    if (c.type === 'out') b.out += Number(c.amount) || 0
+    else b.in += Number(c.amount) || 0
+  }
+  return [...buckets.values()]
+    .map((b) => ({
+      ...b,
+      name: b.agentId ? agentName(b.agentId) : 'Company / unassigned',
+      balance: b.in - b.out
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
 })
 
 const filteredInvoices = computed(() => {
@@ -579,7 +689,7 @@ function copyCardUrl(serial, via) {
   )
 }
 
-function submitSale(e) {
+async function submitSale(e) {
   e.preventDefault()
   if (!saleForm.value.customerName.trim()) {
     flash('Customer name is required')
@@ -594,23 +704,36 @@ function submitSale(e) {
       ? new Date(saleForm.value.soldAt).toISOString()
       : new Date().toISOString()
   }
-  const result = saveSale(payload)
+  const result = await saveSaleToCloud(payload)
+  if (!result.ok) {
+    flash(result.error || 'Sale saved locally, but cloud sync failed')
+  }
   showSaleForm.value = false
-  refresh()
+  await refresh()
   if (!wasEdit && result.sale) {
     provisionCardsForSale(result.sale)
-    flash('Sale recorded · invoice & card codes ready')
+    flash(result.ok ? 'Sale recorded · invoice & card codes ready' : 'Sale saved (sync issue — retry refresh)')
     if (result.invoice) openInvoiceModal(result.invoice)
   } else {
-    flash(wasEdit ? 'Sale updated' : 'Sale recorded')
+    flash(wasEdit ? (result.ok ? 'Sale updated' : 'Sale updated locally') : 'Sale recorded')
   }
 }
 
 function removeSale(id) {
-  if (!confirm('Delete this sale?')) return
+  if (!confirm('Mark this sale as deleted? Admin can restore it later.')) return
   deleteSale(id)
   refresh()
-  flash('Sale deleted')
+  flash('Sale marked deleted')
+}
+
+async function undeleteSale(id) {
+  const res = await restoreSale(id)
+  if (!res.ok) {
+    flash(res.error || 'Could not restore sale')
+    return
+  }
+  await refresh()
+  flash('Sale restored')
 }
 
 function openNewQuote() {
@@ -664,10 +787,20 @@ function submitQuote(e) {
 }
 
 function removeQuote(id) {
-  if (!confirm('Delete this quote?')) return
+  if (!confirm('Mark this quote as deleted? Admin can restore it later.')) return
   deleteQuote(id)
   refresh()
-  flash('Quote deleted')
+  flash('Quote marked deleted')
+}
+
+async function undeleteQuote(id) {
+  const res = await restoreQuote(id)
+  if (!res.ok) {
+    flash(res.error || 'Could not restore quote')
+    return
+  }
+  await refresh()
+  flash('Quote restored')
 }
 
 function convertQuote(q) {
@@ -839,13 +972,24 @@ async function removeProduct(id) {
     flash('Only admins can delete products')
     return
   }
-  if (!confirm('Delete this product?')) return
+  if (!confirm('Mark this product as deleted? You can restore it later.')) return
   try {
     await deleteProduct(id)
     await refresh()
-    flash('Product deleted')
+    flash('Product marked deleted')
   } catch (err) {
     flash(err?.message || 'Could not delete product')
+  }
+}
+
+async function undeleteProduct(id) {
+  if (!canManageProducts.value) return
+  try {
+    await restoreProduct(id)
+    await refresh()
+    flash('Product restored')
+  } catch (err) {
+    flash(err?.message || 'Could not restore product')
   }
 }
 
@@ -898,7 +1042,7 @@ async function sendActiveInvoice() {
   }
 }
 
-function markInvoicePaid() {
+async function markInvoicePaid() {
   if (!activeInvoice.value) return
   const updated = updateInvoice({
     ...activeInvoice.value,
@@ -908,11 +1052,11 @@ function markInvoicePaid() {
   if (updated.saleId) {
     const sale = sales.value.find((s) => s.id === updated.saleId)
     if (sale && sale.status !== 'paid' && sale.status !== 'fulfilled') {
-      saveSale({ ...sale, status: 'paid' })
+      await saveSaleToCloud({ ...sale, status: 'paid' })
     }
   }
   activeInvoice.value = updated
-  refresh()
+  await refresh()
   flash('Invoice marked paid')
 }
 
@@ -960,37 +1104,73 @@ function openEditCash(c) {
     method: c.method,
     description: c.description,
     agentId: c.agentId,
-    at: c.at ? c.at.slice(0, 16) : ''
+    saleId: c.saleId || '',
+    at: toDatetimeLocalValue(c.at)
   }
   showCashForm.value = true
 }
 
-function submitCash(e) {
+async function submitCash(e) {
   e.preventDefault()
   if (!cashForm.value.description.trim() || !(Number(cashForm.value.amount) > 0)) {
     flash('Description and amount are required')
     return
   }
-  const payload = {
-    ...cashForm.value,
-    agentId: isSalesScoped.value ? myAgentId.value : cashForm.value.agentId,
-    amount: Number(cashForm.value.amount),
-    at: cashForm.value.at
-      ? new Date(cashForm.value.at).toISOString()
-      : new Date().toISOString()
+  cashSaving.value = true
+  try {
+    const payload = {
+      ...cashForm.value,
+      id: editingCashId.value || undefined,
+      agentId: isSalesScoped.value ? myAgentId.value : cashForm.value.agentId,
+      amount: Number(cashForm.value.amount),
+      at: cashForm.value.at
+        ? new Date(cashForm.value.at).toISOString()
+        : new Date().toISOString()
+    }
+    const result = await saveCashEntryToCloud(payload)
+    if (!result.ok) {
+      flash(result.error || 'Could not save cash entry')
+      return
+    }
+    showCashForm.value = false
+    await refresh()
+    flash(editingCashId.value ? 'Cash entry updated' : 'Cash entry added')
+  } finally {
+    cashSaving.value = false
   }
-  if (editingCashId.value) updateCashEntry({ ...payload, id: editingCashId.value })
-  else addCashEntry(payload)
-  showCashForm.value = false
-  refresh()
-  flash(editingCashId.value ? 'Cash entry updated' : 'Cash entry added')
 }
 
-function removeCash(id) {
-  if (!confirm('Delete this cash entry?')) return
-  deleteCashEntry(id)
-  refresh()
-  flash('Cash entry deleted')
+async function removeCash(id) {
+  if (!confirm('Mark this cash entry as deleted? Admin can restore it later.')) return
+  const result = await deleteCashEntryFromCloud(id)
+  if (!result.ok) {
+    flash(result.error || 'Could not delete cash entry')
+    return
+  }
+  await refresh()
+  flash('Cash entry marked deleted')
+}
+
+async function undeleteCash(id) {
+  const res = await restoreCashEntry(id)
+  if (!res.ok) {
+    flash(res.error || 'Could not restore cash entry')
+    return
+  }
+  await refresh()
+  flash('Cash entry restored')
+}
+
+function openSaleFromCash(saleId) {
+  if (!saleId) return
+  const sale = sales.value.find((s) => s.id === saleId) || listSales().find((s) => s.id === saleId)
+  if (!sale) {
+    flash('Linked sale not found')
+    return
+  }
+  tab.value = 'sales'
+  salesListMode.value = 'orders'
+  openEditSale(sale)
 }
 
 function openNewAgent() {
@@ -1026,22 +1206,42 @@ async function submitAgent(e) {
     flash('Agent name is required')
     return
   }
-  const saved = saveAgent({
+
+  const isNew = !editingAgentId.value
+  const loginEmail = (agentForm.value.loginEmail || agentForm.value.email || '').trim().toLowerCase()
+  const loginPassword = String(agentForm.value.loginPassword || '')
+
+  if (isNew) {
+    if (!loginEmail) {
+      flash('Login email is required for new agents')
+      return
+    }
+    if (!loginPassword) {
+      flash('Password is required for new agents')
+      return
+    }
+  }
+
+  const cloud = await saveAgentToCloud({
     ...agentForm.value,
     id: editingAgentId.value || undefined,
     commissionRate: Number(agentForm.value.commissionRate) || 0,
-    loginEmail: (agentForm.value.loginEmail || agentForm.value.email || '').trim().toLowerCase()
+    loginEmail
   })
+  if (!cloud.ok) {
+    flash(cloud.error || 'Could not save agent to database')
+    return
+  }
+  let saved = cloud.agent
 
-  const loginEmail = (agentForm.value.loginEmail || agentForm.value.email || '').trim().toLowerCase()
-  const loginPassword = String(agentForm.value.loginPassword || '')
   if (loginEmail && (loginPassword || saved.authUserId)) {
     const result = await upsertStaffSalesUser({
       email: loginEmail,
       password: loginPassword || undefined,
       agentId: saved.id,
       name: saved.name,
-      authUserId: saved.authUserId || undefined
+      authUserId: saved.authUserId || undefined,
+      sendCredentialsEmail: Boolean(loginPassword)
     })
     if (!result.ok) {
       flash(result.error || 'Agent saved, but login could not be set')
@@ -1049,24 +1249,50 @@ async function submitAgent(e) {
       refresh()
       return
     }
-    saveAgent({
+    const linked = await saveAgentToCloud({
       ...saved,
       authUserId: result.data?.user?.id || saved.authUserId,
       loginEmail
     })
+    saved = linked.ok ? linked.agent : { ...saved, authUserId: result.data?.user?.id || saved.authUserId, loginEmail }
+
+    showAgentForm.value = false
+    refresh()
+    if (loginPassword) {
+      if (result.data?.emailSent) {
+        flash(isNew ? 'Agent saved — login email sent' : 'Agent updated — credentials emailed')
+      } else {
+        flash(
+          result.data?.emailError
+            ? `Agent saved, but email failed: ${result.data.emailError}`
+            : 'Agent saved (credentials email not sent)'
+        )
+      }
+      return
+    }
   }
 
   showAgentForm.value = false
   refresh()
-  flash(editingAgentId.value ? 'Agent updated' : 'Agent added')
+  flash(isNew ? 'Agent added' : 'Agent updated')
 }
 
 function removeAgent(id) {
   if (!canManageAgents.value) return
-  if (!confirm('Remove this sales agent?')) return
+  if (!confirm('Mark this sales agent as deleted? You can restore it later.')) return
   deleteAgent(id)
   refresh()
-  flash('Agent removed')
+  flash('Agent marked deleted')
+}
+
+async function undeleteAgent(id) {
+  const res = await restoreAgent(id)
+  if (!res.ok) {
+    flash(res.error || 'Could not restore agent')
+    return
+  }
+  await refresh()
+  flash('Agent restored')
 }
 
 function statusClass(status) {
@@ -1079,25 +1305,12 @@ function statusClass(status) {
   return 'bg-red-500/15 text-red-300'
 }
 
-function reseeds() {
-  if (!canManageAgents.value) {
-    flash('Only admins can clear sales data')
-    return
-  }
-  if (!confirm('Clear all sales, quotes, invoices, cash entries, and agents? Products in the database are kept.')) {
-    return
-  }
-  clearSalesData()
-  refresh()
-  flash('Sales data cleared')
-}
-
 async function logoutStaff() {
   await staffLogout()
-  router.replace('/admin/login')
+  router.replace('/login')
 }
 
-onMounted(() => {
+onMounted(async () => {
   const t = route.query.tab
   const allowed = salesTabs.value.map((x) => x.id)
   if (allowed.includes(t)) tab.value = t
@@ -1106,7 +1319,10 @@ onMounted(() => {
     tab.value = 'sales'
     salesListMode.value = 'quotes'
   }
-  refresh()
+  const sync = await refresh()
+  if (!sync?.financeOk) {
+    flash('Could not sync sales data — check you are logged in')
+  }
 })
 </script>
 
@@ -1393,7 +1609,8 @@ onMounted(() => {
                 <button type="button" class="text-xs font-semibold text-emerald-300 hover:text-emerald-200" @click="openCardsForSale(s)">Cards</button>
                 <button type="button" class="text-xs font-semibold text-gray-300 hover:text-white" @click="openInvoiceForSale(s)">Invoice</button>
                 <button type="button" class="text-xs font-semibold text-gray-300 hover:text-white" @click="openEditSale(s)">Edit</button>
-                <button type="button" class="text-xs font-semibold text-red-400" @click="removeSale(s.id)">Delete</button>
+                <button v-if="!s.deleted" type="button" class="text-xs font-semibold text-red-400" @click="removeSale(s.id)">Delete</button>
+                <button v-else-if="canManageAgents" type="button" class="text-xs font-semibold text-emerald-300" @click="undeleteSale(s.id)">Restore</button>
               </div>
             </div>
           </li>
@@ -1435,7 +1652,8 @@ onMounted(() => {
                   Email
                 </button>
                 <button type="button" class="text-xs font-semibold text-gray-300 hover:text-white" @click="openEditQuote(q)">Edit</button>
-                <button type="button" class="text-xs font-semibold text-red-400" @click="removeQuote(q.id)">Delete</button>
+                <button v-if="!q.deleted" type="button" class="text-xs font-semibold text-red-400" @click="removeQuote(q.id)">Delete</button>
+                <button v-else-if="canManageAgents" type="button" class="text-xs font-semibold text-emerald-300" @click="undeleteQuote(q.id)">Restore</button>
               </div>
             </div>
           </li>
@@ -1526,7 +1744,8 @@ onMounted(() => {
             </div>
             <div v-if="canManageProducts" class="flex flex-col gap-1 shrink-0">
               <button type="button" class="text-xs font-semibold text-gray-300 hover:text-white" @click="openEditProduct(p)">Edit</button>
-              <button type="button" class="text-xs font-semibold text-red-400" @click="removeProduct(p.id)">Delete</button>
+              <button v-if="!p.deleted" type="button" class="text-xs font-semibold text-red-400" @click="removeProduct(p.id)">Delete</button>
+              <button v-else type="button" class="text-xs font-semibold text-emerald-300" @click="undeleteProduct(p.id)">Restore</button>
             </div>
           </li>
         </ul>
@@ -1538,30 +1757,95 @@ onMounted(() => {
         <div class="grid grid-cols-3 gap-3">
           <div class="card-item-bg rounded-2xl p-3">
             <p class="text-[10px] uppercase tracking-wide text-gray-500">In</p>
-            <p class="text-lg font-bold text-emerald-400">{{ formatMoney(stats.inflow) }}</p>
+            <p class="text-lg font-bold text-emerald-400">{{ formatMoney(cashSummary.inflow) }}</p>
           </div>
           <div class="card-item-bg rounded-2xl p-3">
             <p class="text-[10px] uppercase tracking-wide text-gray-500">Out</p>
-            <p class="text-lg font-bold text-red-400">{{ formatMoney(stats.outflow) }}</p>
+            <p class="text-lg font-bold text-red-400">{{ formatMoney(cashSummary.outflow) }}</p>
           </div>
           <div class="card-item-bg rounded-2xl p-3">
             <p class="text-[10px] uppercase tracking-wide text-gray-500">Balance</p>
-            <p class="text-lg font-bold">{{ formatMoney(stats.balance) }}</p>
+            <p
+              class="text-lg font-bold"
+              :class="cashSummary.balance >= 0 ? 'text-emerald-400' : 'text-red-400'"
+            >
+              {{ formatMoney(cashSummary.balance) }}
+            </p>
           </div>
         </div>
 
-        <div class="flex flex-col sm:flex-row gap-3">
-          <div class="field-shell flex-1 !rounded-2xl">
-            <span class="material-symbols-outlined field-icon">search</span>
-            <input v-model="query" type="search" class="field-input" placeholder="Search cash flow…">
+        <div v-if="cashCategoryRows.length" class="card-item-bg rounded-2xl p-4 space-y-2">
+          <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">By category</p>
+          <div
+            v-for="row in cashCategoryRows"
+            :key="row.category"
+            class="flex items-center justify-between gap-3 text-xs"
+          >
+            <span class="capitalize text-gray-300">{{ row.category }}</span>
+            <span class="tabular-nums text-gray-400">
+              <span class="text-emerald-400">+{{ formatMoney(row.in) }}</span>
+              <span class="mx-1">/</span>
+              <span class="text-red-400">−{{ formatMoney(row.out) }}</span>
+            </span>
           </div>
-          <button type="button" class="px-4 py-2.5 rounded-full text-xs font-bold bg-white text-black shrink-0" @click="openNewCash">
-            Add entry
+        </div>
+
+        <div v-if="!isSalesScoped && cashByAgentRows.length" class="card-item-bg rounded-2xl p-4 space-y-2">
+          <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">By agent</p>
+          <button
+            v-for="row in cashByAgentRows"
+            :key="row.agentId || '__none__'"
+            type="button"
+            class="w-full flex items-center justify-between gap-3 text-xs text-left rounded-xl px-2 py-1.5 -mx-2 hover:bg-white/5"
+            :class="agentFilter === (row.agentId || '__none__') ? 'bg-white/10' : ''"
+            @click="agentFilter = agentFilter === (row.agentId || '__none__') ? '' : (row.agentId || '__none__')"
+          >
+            <span class="text-gray-200 font-medium truncate">{{ row.name }}</span>
+            <span class="tabular-nums shrink-0">
+              <span class="text-emerald-400">+{{ formatMoney(row.in) }}</span>
+              <span class="mx-1 text-gray-600">/</span>
+              <span class="text-red-400">−{{ formatMoney(row.out) }}</span>
+              <span class="ml-2 text-gray-300">{{ formatMoney(row.balance) }}</span>
+            </span>
           </button>
         </div>
 
+        <div class="flex flex-col gap-3">
+          <div class="field-shell !rounded-2xl">
+            <span class="material-symbols-outlined field-icon">search</span>
+            <input v-model="query" type="search" class="field-input" placeholder="Search cash flow…">
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <select
+              v-if="!isSalesScoped"
+              v-model="agentFilter"
+              class="field-shell w-full field-input !py-2.5 text-xs col-span-2 sm:col-span-1"
+            >
+              <option value="">All agents</option>
+              <option value="__none__">Company / unassigned</option>
+              <option v-for="a in agents" :key="a.id" :value="a.id">{{ a.name }}</option>
+            </select>
+            <select v-model="cashTypeFilter" class="field-shell w-full field-input !py-2.5 text-xs">
+              <option value="all">All types</option>
+              <option value="in">Inflow</option>
+              <option value="out">Outflow</option>
+            </select>
+            <select v-model="cashCategoryFilter" class="field-shell w-full field-input !py-2.5 text-xs">
+              <option value="all">All categories</option>
+              <option v-for="c in CASH_CATEGORIES" :key="c" :value="c">{{ c }}</option>
+            </select>
+            <input v-model="cashFrom" type="date" class="field-shell w-full field-input !py-2.5 text-xs" title="From date">
+            <input v-model="cashTo" type="date" class="field-shell w-full field-input !py-2.5 text-xs" title="To date">
+          </div>
+          <div class="flex justify-end">
+            <button type="button" class="px-4 py-2.5 rounded-full text-xs font-bold bg-white text-black shrink-0" @click="openNewCash">
+              Add entry
+            </button>
+          </div>
+        </div>
+
         <ul class="space-y-2">
-          <li v-for="c in filteredCash" :key="c.id" class="card-item-bg rounded-2xl p-4 flex gap-3">
+          <li v-for="c in cashRows" :key="c.id" class="card-item-bg rounded-2xl p-4 flex gap-3">
             <div
               class="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
               :class="c.type === 'in' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'"
@@ -1572,34 +1856,55 @@ onMounted(() => {
               <p class="text-sm font-semibold">{{ c.description }}</p>
               <p class="text-xs text-gray-400 mt-0.5 capitalize">
                 {{ c.type }} · {{ c.category }} · {{ c.method }}
-                <span v-if="c.agentId"> · {{ agentName(c.agentId) }}</span>
+                · {{ c.agentId ? agentName(c.agentId) : 'Company' }}
               </p>
               <p class="text-[11px] text-gray-500 mt-1">{{ formatDate(c.at) }}</p>
+              <button
+                v-if="c.saleId"
+                type="button"
+                class="mt-1 text-[11px] font-semibold text-sky-300 hover:text-sky-200"
+                @click="openSaleFromCash(c.saleId)"
+              >
+                From sale
+              </button>
             </div>
             <div class="text-right shrink-0">
               <p class="text-sm font-bold" :class="c.type === 'in' ? 'text-emerald-400' : 'text-red-400'">
                 {{ c.type === 'in' ? '+' : '−' }}{{ formatMoney(c.amount) }}
               </p>
+              <p class="text-[10px] text-gray-500 mt-0.5 tabular-nums">
+                bal {{ formatMoney(c.runningBalance) }}
+              </p>
               <div class="flex gap-2 justify-end mt-1">
-                <button type="button" class="text-[11px] font-semibold text-gray-400 hover:text-white" @click="openEditCash(c)">Edit</button>
-                <button type="button" class="text-[11px] font-semibold text-red-400" @click="removeCash(c.id)">Delete</button>
+                <button v-if="!c.deleted" type="button" class="text-[11px] font-semibold text-gray-400 hover:text-white" @click="openEditCash(c)">Edit</button>
+                <button v-if="!c.deleted" type="button" class="text-[11px] font-semibold text-red-400" @click="removeCash(c.id)">Delete</button>
+                <button v-else-if="canManageAgents" type="button" class="text-[11px] font-semibold text-emerald-300" @click="undeleteCash(c.id)">Restore</button>
               </div>
             </div>
           </li>
         </ul>
-        <p v-if="!filteredCash.length" class="text-sm text-gray-500">No cash entries found.</p>
+        <p v-if="!cashRows.length" class="text-sm text-gray-500">No cash entries found.</p>
       </section>
 
       <!-- Agents -->
       <section v-if="tab === 'agents' && canManageAgents" class="mb-8 space-y-4">
-        <div class="flex justify-end">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <div class="flex items-center gap-3 flex-wrap">
+            <label class="flex items-center gap-2 text-xs text-gray-400">
+              <input v-model="showDeleted" type="checkbox" class="rounded" @change="refresh()">
+              Show deleted
+            </label>
+            <RouterLink to="/admin?panel=deleted" class="text-xs font-semibold text-gray-400 hover:text-white no-underline">
+              All deleted →
+            </RouterLink>
+          </div>
           <button type="button" class="px-4 py-2.5 rounded-full text-xs font-bold bg-white text-black" @click="openNewAgent">
             Add agent
           </button>
         </div>
 
         <ul class="space-y-2">
-          <li v-for="a in agentRows" :key="a.id" class="card-item-bg rounded-2xl p-4">
+          <li v-for="a in agentRows" :key="a.id" class="card-item-bg rounded-2xl p-4" :class="a.deleted ? 'opacity-60' : ''">
             <div class="flex items-start gap-3">
               <div class="w-11 h-11 rounded-full bg-white text-black flex items-center justify-center shrink-0 font-bold">
                 {{ (a.name || '?').slice(0, 1) }}
@@ -1608,6 +1913,13 @@ onMounted(() => {
                 <div class="flex items-center gap-2 flex-wrap">
                   <p class="text-sm font-semibold">{{ a.name }}</p>
                   <span
+                    v-if="a.deleted"
+                    class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-red-500/15 text-red-300"
+                  >
+                    Deleted
+                  </span>
+                  <span
+                    v-else
                     class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
                     :class="a.active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-500/20 text-gray-400'"
                   >
@@ -1623,22 +1935,17 @@ onMounted(() => {
                 <p v-if="a.notes" class="text-[11px] text-gray-500 mt-1 italic">{{ a.notes }}</p>
               </div>
               <div class="flex flex-col gap-1 shrink-0">
-                <button type="button" class="text-xs font-semibold text-gray-300 hover:text-white" @click="openEditAgent(a)">Edit</button>
-                <button type="button" class="text-xs font-semibold text-red-400" @click="removeAgent(a.id)">Delete</button>
+                <button v-if="!a.deleted" type="button" class="text-xs font-semibold text-gray-300 hover:text-white" @click="openEditAgent(a)">Edit</button>
+                <button v-if="!a.deleted" type="button" class="text-xs font-semibold text-red-400" @click="removeAgent(a.id)">Delete</button>
+                <button v-else type="button" class="text-xs font-semibold text-emerald-300" @click="undeleteAgent(a.id)">Restore</button>
               </div>
             </div>
           </li>
         </ul>
       </section>
 
-      <button
-        v-if="canManageAgents"
-        type="button"
-        class="text-xs font-semibold text-gray-500 hover:text-white underline underline-offset-2"
-        @click="reseeds"
-      >
-        Clear all sales data
-      </button>
+
+
     </main>
 
     <!-- Sale modal -->
@@ -2270,7 +2577,9 @@ onMounted(() => {
         </div>
         <div class="flex gap-2 pt-1">
           <button type="button" class="flex-1 py-3 rounded-full border border-[var(--border)] text-sm font-semibold" @click="showCashForm = false">Cancel</button>
-          <button type="submit" class="flex-1 py-3 rounded-full bg-white text-black text-sm font-bold">Save</button>
+          <button type="submit" class="flex-1 py-3 rounded-full bg-white text-black text-sm font-bold" :disabled="cashSaving">
+            {{ cashSaving ? 'Saving…' : 'Save' }}
+          </button>
         </div>
       </form>
     </div>
@@ -2317,6 +2626,7 @@ onMounted(() => {
           <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Sales login</p>
           <p class="text-[11px] text-gray-500">
             Creates a staff account that can only open Sales and see this agent’s records.
+            New agents are saved to the database and emailed their login email, password, and links.
           </p>
           <div>
             <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Login email</label>
@@ -2325,6 +2635,7 @@ onMounted(() => {
                 v-model="agentForm.loginEmail"
                 type="email"
                 class="field-input"
+                :required="!editingAgentId"
                 placeholder="Defaults to contact email"
               >
             </div>
@@ -2338,11 +2649,15 @@ onMounted(() => {
                 v-model="agentForm.loginPassword"
                 type="password"
                 class="field-input"
+                :required="!editingAgentId"
                 :placeholder="agentForm.authUserId ? 'Leave blank to keep current' : 'Set a login password'"
               >
             </div>
           </div>
           <p v-if="agentForm.authUserId" class="text-[11px] text-emerald-300/80">Login linked</p>
+          <p v-else-if="!editingAgentId" class="text-[11px] text-amber-200/80">
+            Password is emailed to the agent with login links.
+          </p>
         </div>
 
         <div class="flex gap-2 pt-1">

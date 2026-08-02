@@ -1,49 +1,52 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
-import { isLoggedIn, loadProfile, isTableBusiness } from '../lib/profileStore'
+import {
+  isLoggedIn,
+  loadProfile,
+  isTableBusiness,
+  loadViewedProfile
+} from '../lib/profileStore'
 import { hideFloatingChrome } from '../lib/uiChrome'
-import { isStaffAdmin, isStaffLoggedIn, isStaffSales } from '../lib/staffAuth'
 
 const route = useRoute()
 const router = useRouter()
 const open = ref(false)
 const loggedIn = ref(isLoggedIn())
 const isTable = ref(isTableBusiness(loadProfile()))
-const staffIn = ref(isStaffLoggedIn())
-const staffAdmin = ref(isStaffAdmin())
-const staffSales = ref(isStaffSales())
+const viewedIsTable = ref(isTableBusiness(loadViewedProfile()))
 
 const isHome = computed(() => route.path === '/' || route.path === '/me' || route.path === '/business')
 const isShopHome = computed(() => route.path === '/' || route.path === '/cart')
-const isBusiness = computed(() => route.path === '/business')
 const isAdminArea = computed(() => route.path.startsWith('/admin'))
 const isLogin = computed(
   () => route.path === '/login' || route.path === '/shop/login' || route.path === '/admin/login'
 )
-const hideChrome = computed(
-  () =>
-    isShopHome.value ||
-    isLogin.value ||
-    isAdminArea.value ||
-    route.path.startsWith('/venue') ||
-    hideFloatingChrome.value
-)
 
-const signupTo = computed(() =>
-  isBusiness.value ? { path: '/signup', query: { type: 'table' } } : '/signup'
-)
-const signupLabel = computed(() =>
-  isBusiness.value ? 'Sign up for my business' : 'Sign up'
-)
-const signupIcon = computed(() => (isBusiness.value ? 'storefront' : 'person_add'))
+/** Floating menu is for business profiles only — never personal bottom-nav surfaces. */
+const onBusinessSurface = computed(() => {
+  const p = route.path
+  if (p === '/business' || p === '/table') return true
+  if (p.startsWith('/venue')) return true
+  // Table owners editing profile use FAB (no business bottom nav)
+  if (p === '/profile' && (isTable.value || viewedIsTable.value)) return true
+  if (p.startsWith('/c/')) {
+    if (loadViewedProfile()) return viewedIsTable.value
+    return isTable.value
+  }
+  return false
+})
+
+const showFab = computed(() => {
+  if (hideFloatingChrome.value) return false
+  if (isShopHome.value || isLogin.value || isAdminArea.value) return false
+  return onBusinessSurface.value
+})
 
 function refreshAuth() {
   loggedIn.value = isLoggedIn()
   isTable.value = isTableBusiness(loadProfile())
-  staffIn.value = isStaffLoggedIn()
-  staffAdmin.value = isStaffAdmin()
-  staffSales.value = isStaffSales()
+  viewedIsTable.value = isTableBusiness(loadViewedProfile())
 }
 
 function setOpen(value) {
@@ -69,7 +72,7 @@ function shareProfile() {
     window.openShareProfile()
     return
   }
-  router.push({ path: '/me', hash: '#share' })
+  router.push({ path: '/business', hash: '#share' })
 }
 
 function onKeydown(e) {
@@ -87,16 +90,18 @@ watch(() => route.fullPath, () => {
 onMounted(() => {
   document.addEventListener('keydown', onKeydown)
   refreshAuth()
+  window.addEventListener('tapna-view-profile-changed', refreshAuth)
 })
 
 onUnmounted(() => {
   document.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('tapna-view-profile-changed', refreshAuth)
   document.body.classList.remove('fab-open')
 })
 </script>
 
 <template>
-  <template v-if="!hideChrome">
+  <template v-if="showFab">
     <button
       v-if="!isHome && route.path !== '/profile'"
       type="button"
@@ -113,56 +118,13 @@ onUnmounted(() => {
           <span class="material-symbols-outlined">ios_share</span>
           Share profile
         </button>
-        <RouterLink v-if="!loggedIn" :to="signupTo" role="menuitem" @click="setOpen(false)">
-          <span class="material-symbols-outlined">{{ signupIcon }}</span>
-          {{ signupLabel }}
-        </RouterLink>
         <RouterLink
-          v-if="loggedIn"
-          to="/profile"
-          role="menuitem"
-          @click="setOpen(false)"
-        >
-          <span class="material-symbols-outlined">person</span>
-          Profile
-        </RouterLink>
-        <RouterLink
-          v-if="loggedIn && isTable && isBusiness"
-          to="/venue"
-          role="menuitem"
-          @click="setOpen(false)"
-        >
-          <span class="material-symbols-outlined">analytics</span>
-          Venue dashboard
-        </RouterLink>
-        <RouterLink
-          v-if="!loggedIn"
           to="/login"
           role="menuitem"
           @click="setOpen(false)"
         >
           <span class="material-symbols-outlined">login</span>
           Login
-        </RouterLink>
-        <RouterLink v-if="staffAdmin" to="/admin" role="menuitem" @click="setOpen(false)">
-          <span class="material-symbols-outlined">dashboard</span>
-          Admin
-        </RouterLink>
-        <RouterLink v-if="staffAdmin" to="/admin/slugs" role="menuitem" @click="setOpen(false)">
-          <span class="material-symbols-outlined">qr_code_2</span>
-          Slugs
-        </RouterLink>
-        <RouterLink v-if="staffAdmin || staffSales" to="/admin/sales" role="menuitem" @click="setOpen(false)">
-          <span class="material-symbols-outlined">point_of_sale</span>
-          Sales
-        </RouterLink>
-        <RouterLink v-if="staffAdmin" to="/admin/shop" role="menuitem" @click="setOpen(false)">
-          <span class="material-symbols-outlined">storefront</span>
-          Shop
-        </RouterLink>
-        <RouterLink v-if="!staffIn" to="/admin/login" role="menuitem" @click="setOpen(false)">
-          <span class="material-symbols-outlined">admin_panel_settings</span>
-          Staff login
         </RouterLink>
       </div>
       <button

@@ -1,10 +1,11 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter, RouterLink } from 'vue-router'
 import PageBanner from '../components/PageBanner.vue'
 import LinkRow from '../components/LinkRow.vue'
 import SecurityMarquee from '../components/SecurityMarquee.vue'
 import ShareQrModal from '../components/ShareQrModal.vue'
+import BookMeetingPopup from '../components/BookMeetingPopup.vue'
 import {
   loadPublicProfile,
   loadProfile,
@@ -27,6 +28,7 @@ const router = useRouter()
 const profile = ref(loadPublicProfile())
 const shareOpen = ref(false)
 const videoOpen = ref(false)
+const bookOpen = ref(false)
 const shareModal = ref(null)
 const videoEl = ref(null)
 const embedSrc = ref('')
@@ -35,6 +37,29 @@ const useEmbed = ref(false)
 const deleted = computed(() => isProfileDeleted(profile.value))
 const disabled = computed(() => isProfileDisabled(profile.value))
 const name = computed(() => displayName(profile.value))
+const showBooking = computed(
+  () => !deleted.value && !disabled.value && profile.value.showBooking !== false
+)
+const bookingProfileId = computed(
+  () => String(profile.value.remoteProfileId || profile.value.id || '').trim()
+)
+const catalogItems = computed(() => {
+  const list = Array.isArray(profile.value.catalogItems) ? profile.value.catalogItems : []
+  return list.filter((item) => item && item.active !== false && String(item.name || '').trim())
+})
+function formatCatalogPrice(price) {
+  if (price === null || price === undefined || price === '') return ''
+  return 'N$ ' + Number(price).toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  })
+}
+function catalogDetail(item) {
+  const price = formatCatalogPrice(item.price)
+  const desc = String(item.description || '').trim()
+  if (price && desc) return price + ' · ' + desc
+  return price || desc
+}
 const title = computed(() => {
   if (deleted.value) return 'Create your profile'
   return String(profile.value.title || '').trim()
@@ -233,6 +258,7 @@ function closeVideo() {
 function onKeydown(e) {
   if (e.key === 'Escape') {
     shareOpen.value = false
+    bookOpen.value = false
     closeVideo()
   }
 }
@@ -264,7 +290,7 @@ watch(() => route.path, () => {
 <template>
   <div class="min-h-screen flex flex-col items-center overflow-x-hidden">
     <PageBanner />
-    <main class="w-full max-w-md min-h-screen flex flex-col relative z-10 pb-20">
+    <main class="w-full max-w-md min-h-screen flex flex-col relative z-10 pb-32">
       <section class="relative w-full">
         <div class="w-full h-[160px]" aria-hidden="true" />
         <div class="absolute top-4 left-4 right-4 flex justify-end items-start z-20">
@@ -449,7 +475,47 @@ watch(() => route.path, () => {
           />
         </section>
 
-        <div class="px-6 mt-8 mb-4">
+        <section
+          v-if="catalogItems.length"
+          class="px-6 mt-6 space-y-3"
+          :class="{ 'opacity-40 pointer-events-none': disabled }"
+        >
+          <p class="text-[10px] uppercase tracking-wide text-gray-500 px-1">Offers</p>
+          <div
+            v-for="item in catalogItems"
+            :key="item.id"
+            class="card-item-bg rounded-2xl flex items-center p-4"
+          >
+            <div class="w-12 h-12 rounded-full bg-white flex items-center justify-center text-black mr-4 shadow-lg shrink-0">
+              <span class="material-symbols-outlined text-[24px]">inventory_2</span>
+            </div>
+            <div class="min-w-0 flex-1 text-left">
+              <template v-if="catalogDetail(item)">
+                <p class="text-[10px] uppercase tracking-wide text-gray-500 leading-none mb-1">{{ item.name }}</p>
+                <p class="link-row-detail text-gray-200 font-medium text-sm truncate">{{ catalogDetail(item) }}</p>
+              </template>
+              <span v-else class="link-row-detail text-gray-300 font-medium text-sm">{{ item.name }}</span>
+            </div>
+          </div>
+        </section>
+
+        <div class="px-6 mt-8 mb-4 space-y-3">
+          <button
+            v-if="showBooking"
+            type="button"
+            class="card-item-bg rounded-2xl flex items-center p-4 w-full cursor-pointer hover:bg-zinc-800 transition-colors text-left"
+            :class="{ 'opacity-40 pointer-events-none': actionsBlocked }"
+            :disabled="actionsBlocked"
+            @click="bookOpen = true"
+          >
+            <div class="w-12 h-12 rounded-full bg-white flex items-center justify-center text-black mr-4 shadow-lg shrink-0">
+              <span class="material-symbols-outlined text-[24px]">event</span>
+            </div>
+            <div class="min-w-0 flex-1">
+              <span class="link-row-detail text-gray-300 font-medium text-sm">Book a meeting</span>
+            </div>
+            <span class="material-symbols-outlined text-gray-500 text-[22px] shrink-0 ml-2">chevron_right</span>
+          </button>
           <button
             type="button"
             class="w-full py-4 rounded-full bg-white text-black font-bold text-lg hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
@@ -477,6 +543,13 @@ watch(() => route.path, () => {
       @share="onShareChannel"
       @copy="onCopyLink"
       @download="onQrDownload"
+    />
+
+    <BookMeetingPopup
+      :open="bookOpen"
+      :profile-id="bookingProfileId"
+      :owner-name="name"
+      @close="bookOpen = false"
     />
 
     <div

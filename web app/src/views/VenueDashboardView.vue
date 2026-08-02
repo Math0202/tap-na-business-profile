@@ -11,20 +11,20 @@ import {
   buildCheckinsCsv,
   buildFeedbackCsv,
   buildAllCustomersCsv,
-  downloadCsv,
-  resetVenueCustomerDemo
+  downloadCsv
 } from '../lib/venueCustomerStore'
 import {
   loadProfile,
   isTableBusiness,
-  isLoggedIn
+  isLoggedIn,
+  logoUrl
 } from '../lib/profileStore'
 import { apiListCheckins, apiListFeedback, apiVenueStats, getApiToken } from '../lib/api'
 import { formatAnswersLine } from '../lib/venueForms'
 
 const router = useRouter()
 const profile = ref(loadProfile())
-const tab = ref('checkins') // checkins | feedback
+const tab = ref('checkins')
 const query = ref('')
 const checkins = ref([])
 const feedback = ref([])
@@ -43,7 +43,6 @@ async function refresh() {
   feedback.value = listFeedback()
   stats.value = getVenueCustomerStats()
 
-  // Prefer live Supabase data when logged into the API
   if (!getApiToken()) return
   loadingRemote.value = true
   try {
@@ -106,6 +105,7 @@ function formatDate(iso) {
 const venueName = computed(
   () => profile.value.company || profile.value.name || 'Your venue'
 )
+const logo = computed(() => logoUrl(profile.value))
 
 const filteredCheckins = computed(() => {
   const q = query.value.trim().toLowerCase()
@@ -153,12 +153,6 @@ function removeFeedback(id) {
   flash('Feedback deleted')
 }
 
-function reseeds() {
-  resetVenueCustomerDemo()
-  refresh()
-  flash('Demo customer data restored')
-}
-
 onMounted(async () => {
   if (!isLoggedIn()) {
     router.replace({ path: '/login', query: { next: '/venue' } })
@@ -166,79 +160,105 @@ onMounted(async () => {
   }
   await refresh()
   if (!isTableBusiness(profile.value)) {
-    flash('This account is personal — venue dashboard is for business cards only')
+    flash('This account is personal — switch to a business card to use this dashboard')
   }
-  document.title = 'Venue dashboard · ' + venueName.value
+  document.title = 'Dashboard · ' + venueName.value
 })
 </script>
 
 <template>
   <div class="min-h-screen flex flex-col items-center overflow-x-hidden">
-    <main class="w-full max-w-3xl min-h-screen flex flex-col relative z-10 px-5 pt-16 pb-28">
+    <main class="w-full max-w-3xl min-h-screen flex flex-col relative z-10 px-5 pt-10 pb-32">
       <header class="mb-6">
-        <BrandMark size="sm" class="mb-3" />
-        <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">{{ venueName }}</p>
-        <h1 class="text-2xl font-bold tracking-tight mt-1">Venue dashboard</h1>
-        <p class="text-gray-400 text-sm mt-1">
-          View and export customer check-ins and feedback from your table cards
-        </p>
-        <div class="flex flex-wrap gap-2 mt-4">
-          <RouterLink
-            to="/business"
-            class="px-4 py-2.5 rounded-full text-xs font-semibold border border-[var(--border)] no-underline text-inherit"
+        <div class="flex items-start gap-4">
+          <div
+            class="w-14 h-14 rounded-2xl overflow-hidden bg-zinc-800 border border-zinc-700 shrink-0 flex items-center justify-center"
           >
-            Public venue page
-          </RouterLink>
-          <RouterLink
-            to="/profile"
-            class="px-4 py-2.5 rounded-full text-xs font-semibold border border-[var(--border)] no-underline text-inherit"
-          >
-            Edit profile
-          </RouterLink>
+            <img v-if="logo" :src="logo" alt="" class="w-full h-full object-cover" />
+            <span v-else class="material-symbols-outlined text-zinc-500 text-[28px]">storefront</span>
+          </div>
+          <div class="min-w-0 flex-1">
+            <BrandMark size="sm" class="mb-2" />
+            <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-400/90">Business dashboard</p>
+            <h1 class="text-2xl font-bold tracking-tight mt-0.5 truncate" :title="venueName">{{ venueName }}</h1>
+            <p class="text-gray-400 text-sm mt-1">
+              Guest check-ins, feedback, and exports — all in one place.
+            </p>
+          </div>
+        </div>
+
+        <div class="mt-5 grid grid-cols-2 gap-2">
           <button
             type="button"
-            class="px-4 py-2.5 rounded-full text-xs font-bold bg-white text-black"
+            class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-white text-black text-xs font-bold"
             @click="exportAll"
           >
+            <span class="material-symbols-outlined text-[18px]">download</span>
             Export all CSV
           </button>
+          <RouterLink
+            to="/profile"
+            class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-zinc-600 text-xs font-semibold no-underline text-inherit"
+          >
+            <span class="material-symbols-outlined text-[18px]">tune</span>
+            Guest popups
+          </RouterLink>
         </div>
       </header>
 
       <section class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <div class="card-item-bg rounded-2xl p-4">
-          <p class="text-[11px] uppercase tracking-wide text-gray-500">Check-ins</p>
-          <p class="text-2xl font-bold mt-1">{{ stats.checkins }}</p>
+        <div class="rounded-2xl p-4 bg-gradient-to-br from-emerald-500/20 to-zinc-900 border border-emerald-500/20">
+          <div class="flex items-center gap-2 text-emerald-300">
+            <span class="material-symbols-outlined text-[18px]">how_to_reg</span>
+            <p class="text-[11px] uppercase tracking-wide">Check-ins</p>
+          </div>
+          <p class="text-2xl font-bold mt-2">{{ stats.checkins }}</p>
         </div>
-        <div class="card-item-bg rounded-2xl p-4">
-          <p class="text-[11px] uppercase tracking-wide text-gray-500">Guests</p>
-          <p class="text-2xl font-bold mt-1">{{ stats.guests }}</p>
+        <div class="rounded-2xl p-4 bg-gradient-to-br from-sky-500/20 to-zinc-900 border border-sky-500/20">
+          <div class="flex items-center gap-2 text-sky-300">
+            <span class="material-symbols-outlined text-[18px]">groups</span>
+            <p class="text-[11px] uppercase tracking-wide">Guests</p>
+          </div>
+          <p class="text-2xl font-bold mt-2">{{ stats.guests }}</p>
         </div>
-        <div class="card-item-bg rounded-2xl p-4">
-          <p class="text-[11px] uppercase tracking-wide text-gray-500">Feedback</p>
-          <p class="text-2xl font-bold mt-1">{{ stats.feedback }}</p>
+        <div class="rounded-2xl p-4 bg-gradient-to-br from-amber-500/20 to-zinc-900 border border-amber-500/20">
+          <div class="flex items-center gap-2 text-amber-300">
+            <span class="material-symbols-outlined text-[18px]">rate_review</span>
+            <p class="text-[11px] uppercase tracking-wide">Feedback</p>
+          </div>
+          <p class="text-2xl font-bold mt-2">{{ stats.feedback }}</p>
         </div>
-        <div class="card-item-bg rounded-2xl p-4">
-          <p class="text-[11px] uppercase tracking-wide text-gray-500">Avg rating</p>
-          <p class="text-2xl font-bold mt-1">{{ stats.avgRating || '—' }}</p>
+        <div class="rounded-2xl p-4 bg-gradient-to-br from-violet-500/15 to-zinc-900 border border-violet-500/20">
+          <div class="flex items-center gap-2 text-violet-300">
+            <span class="material-symbols-outlined text-[18px]">star</span>
+            <p class="text-[11px] uppercase tracking-wide">Avg rating</p>
+          </div>
+          <p class="text-2xl font-bold mt-2">{{ stats.avgRating || '—' }}</p>
         </div>
       </section>
 
-      <div class="flex gap-2 p-1 rounded-full card-item-bg w-fit mb-4">
+      <p v-if="loadingRemote" class="text-xs text-gray-500 mb-3 flex items-center gap-2">
+        <span class="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>
+        Syncing latest guest data…
+      </p>
+
+      <div class="flex gap-2 p-1 rounded-2xl card-item-bg mb-4">
         <button
           type="button"
-          class="px-4 py-2 rounded-full text-xs font-semibold transition-colors"
+          class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors"
           :class="tab === 'checkins' ? 'bg-white text-black' : 'text-gray-400'"
           @click="tab = 'checkins'; query = ''"
         >
+          <span class="material-symbols-outlined text-[16px]">how_to_reg</span>
           Check-ins
         </button>
         <button
           type="button"
-          class="px-4 py-2 rounded-full text-xs font-semibold transition-colors"
+          class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors"
           :class="tab === 'feedback' ? 'bg-white text-black' : 'text-gray-400'"
           @click="tab = 'feedback'; query = ''"
         >
+          <span class="material-symbols-outlined text-[16px]">rate_review</span>
           Feedback
         </button>
       </div>
@@ -255,18 +275,19 @@ onMounted(async () => {
         </div>
         <button
           type="button"
-          class="px-4 py-2.5 rounded-full text-xs font-bold bg-white text-black shrink-0"
+          class="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-2xl text-xs font-bold bg-zinc-800 border border-zinc-600 shrink-0"
           @click="exportCurrent"
         >
-          Export this tab
+          <span class="material-symbols-outlined text-[16px]">table</span>
+          Export tab
         </button>
       </div>
 
       <section v-if="tab === 'checkins'" class="mb-8 space-y-2">
         <ul class="space-y-2">
           <li v-for="c in filteredCheckins" :key="c.id" class="card-item-bg rounded-2xl p-4 flex gap-3">
-            <div class="w-10 h-10 rounded-full bg-emerald-500/15 text-emerald-300 flex items-center justify-center shrink-0">
-              <span class="material-symbols-outlined text-[20px]">how_to_reg</span>
+            <div class="w-11 h-11 rounded-2xl bg-emerald-500/15 text-emerald-300 flex items-center justify-center shrink-0">
+              <span class="material-symbols-outlined text-[22px]">how_to_reg</span>
             </div>
             <div class="min-w-0 flex-1">
               <p class="text-sm font-semibold">{{ c.name }}</p>
@@ -283,14 +304,23 @@ onMounted(async () => {
             </button>
           </li>
         </ul>
-        <p v-if="!filteredCheckins.length" class="text-sm text-gray-500">No check-ins yet.</p>
+        <div v-if="!filteredCheckins.length" class="rounded-2xl border border-dashed border-zinc-700 px-6 py-10 text-center">
+          <span class="material-symbols-outlined text-4xl text-zinc-600">event_available</span>
+          <p class="text-sm font-semibold mt-3">No check-ins yet</p>
+          <p class="text-xs text-gray-500 mt-1 max-w-xs mx-auto">
+            Turn on the check-in popup in Edit profile — it opens when guests visit your page.
+          </p>
+          <RouterLink to="/profile" class="inline-block mt-4 text-xs font-semibold underline underline-offset-2 text-gray-300">
+            Configure check-in
+          </RouterLink>
+        </div>
       </section>
 
       <section v-else class="mb-8 space-y-2">
         <ul class="space-y-2">
           <li v-for="f in filteredFeedback" :key="f.id" class="card-item-bg rounded-2xl p-4 flex gap-3">
-            <div class="w-10 h-10 rounded-full bg-amber-500/15 text-amber-300 flex items-center justify-center shrink-0 font-bold text-sm">
-              {{ f.rating }}★
+            <div class="w-11 h-11 rounded-2xl bg-amber-500/15 text-amber-300 flex items-center justify-center shrink-0 font-bold text-sm">
+              {{ f.rating || '—' }}★
             </div>
             <div class="min-w-0 flex-1">
               <p class="text-sm font-semibold">{{ f.name }}</p>
@@ -306,17 +336,22 @@ onMounted(async () => {
             </button>
           </li>
         </ul>
-        <p v-if="!filteredFeedback.length" class="text-sm text-gray-500">No feedback yet.</p>
+        <div v-if="!filteredFeedback.length" class="rounded-2xl border border-dashed border-zinc-700 px-6 py-10 text-center">
+          <span class="material-symbols-outlined text-4xl text-zinc-600">reviews</span>
+          <p class="text-sm font-semibold mt-3">No feedback yet</p>
+          <p class="text-xs text-gray-500 mt-1 max-w-xs mx-auto">
+            Enable the feedback popup so guests can rate their visit when they open your page.
+          </p>
+          <RouterLink to="/profile" class="inline-block mt-4 text-xs font-semibold underline underline-offset-2 text-gray-300">
+            Configure feedback
+          </RouterLink>
+        </div>
       </section>
-
-      <button type="button" class="text-xs font-semibold text-gray-500 hover:text-white underline underline-offset-2" @click="reseeds">
-        Reset demo customer data
-      </button>
     </main>
 
     <div
       v-if="toast"
-      class="fixed left-1/2 -translate-x-1/2 bottom-8 z-[110] px-4 py-3 rounded-2xl bg-white text-black text-sm font-medium shadow-xl"
+      class="fixed left-1/2 -translate-x-1/2 bottom-24 z-[110] px-4 py-3 rounded-2xl bg-white text-black text-sm font-medium shadow-xl"
     >
       {{ toast }}
     </div>

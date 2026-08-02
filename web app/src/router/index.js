@@ -137,6 +137,16 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/meetings',
+    name: 'meetings',
+    component: () => import('../views/MeetingsView.vue')
+  },
+  {
+    path: '/catalog',
+    name: 'catalog',
+    component: () => import('../views/CatalogView.vue')
+  },
+  {
     path: '/c/:serial',
     name: 'card-tap',
     component: () => import('../views/CardTapView.vue')
@@ -170,10 +180,10 @@ router.beforeEach((to) => {
   // Staff area — home and /c/:serial stay public
   if (to.path.startsWith('/admin') && !to.meta.staffPublic) {
     if (!isStaffLoggedIn()) {
-      return { path: '/admin/login', query: { next: to.fullPath } }
+      return { path: '/login', query: { next: to.fullPath } }
     }
     if (!staffCanAccessAdminPath(to.path)) {
-      return isStaffSales() ? '/admin/sales' : '/admin/login'
+      return isStaffSales() ? '/admin/sales' : '/login'
     }
     if (to.meta.staffRoles?.length) {
       const role = isStaffSales() ? 'sales' : 'admin'

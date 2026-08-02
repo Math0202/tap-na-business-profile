@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "tap-na",
+  "account_id": "90cfcc1f7ec6362997f8b063c094c308",
   "main": "worker/index.js",
   "compatibility_date": "2026-07-25",
   "assets": {
@@ -11,8 +12,14 @@
   },
   "vars": {
     "SUPABASE_URL": "https://mjfkthjxqvedqhpemxmt.supabase.co",
-    "RESEND_FROM": "tap-na <noreply@no-reply.auckmund.com>"
+    "CLOUDFLARE_ACCOUNT_ID": "90cfcc1f7ec6362997f8b063c094c308",
+    "EMAIL_FROM": "tap-na <welcome@tapnam.com>"
   },
+  "send_email": [
+    {
+      "name": "EMAIL"
+    }
+  ],
   "routes": [
     {
       "pattern": "redirct.link",
@@ -23,7 +30,11 @@
       "custom_domain": true
     },
     {
-      "pattern": "cards.redirct.link",
+      "pattern": "tapnam.com",
+      "custom_domain": true
+    },
+    {
+      "pattern": "www.tapnam.com",
       "custom_domain": true
     }
   ],

@@ -26,7 +26,7 @@ const activeLabel = computed(() => items.value.find((i) => isActive(i))?.label |
 
 async function onLogout() {
   await staffLogout()
-  window.location.href = '/admin/login'
+  window.location.href = '/login'
 }
 </script>
 

@@ -7,9 +7,16 @@ import {
   login,
   saveProfile,
   markLoggedIn,
-  hashPassword
+  hashPassword,
+  loadProfile,
+  isTableBusiness
 } from '../lib/profileStore'
 import { apiLogin, setApiToken } from '../lib/api'
+import {
+  isStaffLoggedIn,
+  staffLogin
+} from '../lib/staffAuth'
+import { resolvePostLoginPath, profileHomePath, staffHomePath } from '../lib/authRedirect'
 
 const route = useRoute()
 const router = useRouter()
@@ -18,13 +25,69 @@ const password = ref('')
 const error = ref('')
 const submitting = ref(false)
 
+function currentHome() {
+  if (isStaffLoggedIn()) return staffHomePath()
+  if (isLoggedIn()) {
+    const p = loadProfile()
+    return profileHomePath(isTableBusiness(p) ? 'table' : 'personal')
+  }
+  return '/profile'
+}
+
 onMounted(() => {
   document.title = 'Login - tap-na'
   if (typeof route.query.email === 'string' && route.query.email) {
     identifier.value = route.query.email
   }
-  if (isLoggedIn() && route.query.claimed !== '1') router.replace('/profile')
+  if ((isLoggedIn() || isStaffLoggedIn()) && route.query.claimed !== '1') {
+    router.replace(currentHome())
+  }
 })
+
+function applyProfileSession(p, passwordHash, token) {
+  saveProfile({
+    cardType: p.cardType,
+    name: p.name,
+    title: p.title,
+    company: p.company,
+    phone: p.phone,
+    email: p.email,
+    whatsapp: p.whatsapp,
+    linkedin: p.linkedin,
+    youtube: p.youtube,
+    x: p.x,
+    instagram: p.instagram,
+    tiktok: p.tiktok,
+    website: p.website,
+    address: p.address,
+    menuUrl: p.menuUrl,
+    menuPdf: p.menuPdf || '',
+    menuImages: Array.isArray(p.menuImages) ? p.menuImages : [],
+    googleReview: p.googleReview,
+    showPhone: !!p.showPhone,
+    showEmail: !!p.showEmail,
+    showCheckin: !!p.showCheckin,
+    showFeedback: !!p.showFeedback,
+    showBooking: p.showBooking !== false,
+    catalogItems: Array.isArray(p.catalogItems) ? p.catalogItems : [],
+    checkinForm: p.checkinForm && typeof p.checkinForm === 'object' ? p.checkinForm : {},
+    feedbackForm: p.feedbackForm && typeof p.feedbackForm === 'object' ? p.feedbackForm : {},
+    checkInUrl: p.checkInUrl,
+    feedbackUrl: p.feedbackUrl,
+    linkOrder: Array.isArray(p.linkOrder) ? p.linkOrder : [],
+    avatar: p.avatar || '',
+    logo: p.logo || '',
+    video: p.video || '',
+    disabled: !!p.disabled,
+    loginEmail: p.email || identifier.value.trim(),
+    loginPhone: p.phone || '',
+    passwordHash,
+    remoteProfileId: p.id,
+    shareSlug: p.shareSlug || ''
+  })
+  markLoggedIn()
+  if (token) setApiToken(token)
+}
 
 async function onSubmit(e) {
   e.preventDefault()
@@ -34,69 +97,47 @@ async function onSubmit(e) {
     const id = identifier.value.trim()
     const pw = password.value
     const passwordHash = hashPassword(pw)
+    const next = typeof route.query.next === 'string' ? route.query.next : ''
 
-    // Prefer the live API (Supabase via Worker)
+    // 1) Card owner (personal / business)
     const remote = await apiLogin({ identifier: id, passwordHash })
     if (remote.ok && remote.data?.profile) {
       const p = remote.data.profile
-      saveProfile({
-        cardType: p.cardType,
-        name: p.name,
-        title: p.title,
-        company: p.company,
-        phone: p.phone,
-        email: p.email,
-        whatsapp: p.whatsapp,
-        linkedin: p.linkedin,
-        youtube: p.youtube,
-        x: p.x,
-        instagram: p.instagram,
-        tiktok: p.tiktok,
-        website: p.website,
-        address: p.address,
-        menuUrl: p.menuUrl,
-        menuPdf: p.menuPdf || '',
-        menuImages: Array.isArray(p.menuImages) ? p.menuImages : [],
-        googleReview: p.googleReview,
-        showPhone: !!p.showPhone,
-        showEmail: !!p.showEmail,
-        showCheckin: !!p.showCheckin,
-        showFeedback: !!p.showFeedback,
-        checkinForm: p.checkinForm && typeof p.checkinForm === 'object' ? p.checkinForm : {},
-        feedbackForm: p.feedbackForm && typeof p.feedbackForm === 'object' ? p.feedbackForm : {},
-        checkInUrl: p.checkInUrl,
-        feedbackUrl: p.feedbackUrl,
-        linkOrder: Array.isArray(p.linkOrder) ? p.linkOrder : [],
-        avatar: p.avatar || '',
-        logo: p.logo || '',
-        video: p.video || '',
-        disabled: !!p.disabled,
-        loginEmail: p.email || id,
-        loginPhone: p.phone || '',
-        passwordHash,
-        remoteProfileId: p.id,
-        shareSlug: p.shareSlug || ''
-      })
-      markLoggedIn()
-      if (remote.data.token) setApiToken(remote.data.token)
-      const next = typeof route.query.next === 'string' ? route.query.next : '/profile'
-      router.push(next)
+      applyProfileSession(p, passwordHash, remote.data.token)
+      router.push(resolvePostLoginPath('profile', { cardType: p.cardType, next }))
       return
     }
 
-    // Offline / local fallback
+    // 2) Staff (admin / sales) — email + password via Supabase
+    if (id.includes('@') && pw) {
+      const staff = await staffLogin(id, pw)
+      if (staff.ok) {
+        router.push(resolvePostLoginPath('staff', { next }))
+        return
+      }
+    }
+
+    // 3) Offline / local profile fallback
     const result = login(id, pw)
-    if (!result.ok) {
-      error.value = remote.error || result.error || 'Login failed'
+    if (result.ok) {
+      const p = loadProfile()
+      router.push(
+        resolvePostLoginPath('profile', {
+          cardType: isTableBusiness(p) ? 'table' : 'personal',
+          next
+        })
+      )
       return
     }
-    const next = typeof route.query.next === 'string' ? route.query.next : '/profile'
-    router.push(next)
+
+    error.value =
+      remote.error ||
+      result.error ||
+      'Login failed. Check your email/phone and password.'
   } finally {
     submitting.value = false
   }
 }
-
 </script>
 
 <template>
@@ -106,7 +147,7 @@ async function onSubmit(e) {
     <p class="text-gray-400 text-sm mt-1 mb-6">
       {{ route.query.claimed === '1'
         ? 'Your card is claimed. Log in to finish setting up your profile.'
-        : 'Access your digital card' }}
+        : 'Sign in to your card, business dashboard, or staff account.' }}
     </p>
 
     <div v-if="route.query.claimed === '1'" class="card-item-bg rounded-2xl p-4 mb-6 text-sm text-gray-300">
@@ -157,10 +198,10 @@ async function onSubmit(e) {
       </button>
     </form>
 
-    <div class="mt-8 card-item-bg rounded-2xl p-4">
+    <div class="mt-8 card-item-bg rounded-2xl p-4 space-y-3">
       <p class="text-sm font-semibold">New here?</p>
-      <p class="text-xs text-gray-400 mt-1 leading-relaxed">
-        Scan a blank card QR (try SetupA) to create an account, or
+      <p class="text-xs text-gray-400 leading-relaxed">
+        Scan a blank card QR to create an account, or
         <RouterLink to="/signup" class="underline underline-offset-2 font-semibold text-gray-300">sign up</RouterLink>
         to browse cards.
       </p>
