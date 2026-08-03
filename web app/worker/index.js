@@ -1195,7 +1195,7 @@ const PERSONAL_TYPE_RANKS = {
   professional: 1
 }
 
-function normalizePersonalType(raw, fallback = 'professional') {
+function normalizePersonalType(raw, fallback = 'business') {
   const key = String(raw || '')
     .trim()
     .toLowerCase()
@@ -1206,11 +1206,28 @@ function normalizePersonalType(raw, fallback = 'professional') {
 }
 
 function personalTypeRank(role) {
-  return PERSONAL_TYPE_RANKS[normalizePersonalType(role)] || 1
+  return PERSONAL_TYPE_RANKS[normalizePersonalType(role)] || 2
 }
 
 function canManageTeamRole(actorRole, targetRole) {
   return personalTypeRank(actorRole) >= personalTypeRank(targetRole)
+}
+
+/** Roles allowed under an owner's card tier. */
+function assignableTeamRoles(ownerRole) {
+  const rank = personalTypeRank(ownerRole)
+  return Object.keys(PERSONAL_TYPE_RANKS).filter((id) => personalTypeRank(id) <= rank)
+}
+
+async function getProfilePersonalType(env, profileId) {
+  if (!profileId) return 'business'
+  const cards = await sb(
+    env,
+    `cards?profile_id=eq.${encodeURIComponent(profileId)}&kind=eq.personal&deleted=eq.false&select=personal_type,status&order=linked_at.desc.nullslast&limit=1`
+  )
+  const card = cards?.[0]
+  if (card) return normalizePersonalType(card.personal_type || 'business')
+  return 'business'
 }
 
 function mapTeamRow(row) {
@@ -1247,7 +1264,20 @@ async function getOrCreateOwnedTeam(env, profile) {
     env,
     `teams?owner_profile_id=eq.${encodeURIComponent(profile.id)}&deleted=eq.false&select=*&order=created_at.asc&limit=1`
   )
-  if (existing?.[0]) return existing[0]
+  const ownerRole = await getProfilePersonalType(env, profile.id)
+  if (existing?.[0]) {
+    // Keep owner membership role aligned with their card type
+    await sb(
+      env,
+      `team_members?team_id=eq.${encodeURIComponent(existing[0].id)}&profile_id=eq.${encodeURIComponent(profile.id)}&deleted=eq.false&status=eq.active`,
+      {
+        method: 'PATCH',
+        body: { role: ownerRole, updated_at: new Date().toISOString() },
+        prefer: 'return=minimal'
+      }
+    )
+    return existing[0]
+  }
   const id = uid('team')
   const now = new Date().toISOString()
   const name =
@@ -1263,7 +1293,7 @@ async function getOrCreateOwnedTeam(env, profile) {
     },
     prefer: 'return=minimal'
   })
-  // Owner is always an active executive exclusive member
+  // Owner role follows their personal card type (default business)
   await sb(env, 'team_members', {
     method: 'POST',
     body: {
@@ -1272,7 +1302,7 @@ async function getOrCreateOwnedTeam(env, profile) {
       profile_id: profile.id,
       card_id: null,
       slug: '',
-      role: 'executive_exclusive',
+      role: ownerRole,
       status: 'active',
       invite_email: String(profile.login_email || profile.email || ''),
       invited_by_profile_id: profile.id,
@@ -2143,7 +2173,7 @@ async function handleApi(request, env, url) {
     const kind = body?.kind === 'personal' ? 'personal' : 'table'
     const personalType =
       kind === 'personal'
-        ? normalizePersonalType(body?.personalType || body?.personal_type || 'professional')
+        ? normalizePersonalType(body?.personalType || body?.personal_type || 'business')
         : ''
     const created = []
     for (let i = 0; i < count; i++) {
@@ -2190,7 +2220,7 @@ async function handleApi(request, env, url) {
         id: card.id,
         slug: card.slug,
         kind: card.kind,
-        personalType: card.kind === 'personal' ? normalizePersonalType(card.personal_type || 'professional') : '',
+        personalType: card.kind === 'personal' ? normalizePersonalType(card.personal_type || 'business') : '',
         status: card.status,
         profileId: card.profile_id
       },
@@ -2325,7 +2355,7 @@ async function handleApi(request, env, url) {
     const patch = { kind }
     if (kind === 'personal') {
       patch.personal_type = normalizePersonalType(
-        body?.personalType || body?.personal_type || 'professional'
+        body?.personalType || body?.personal_type || 'business'
       )
     } else {
       patch.personal_type = ''
@@ -2447,9 +2477,10 @@ async function handleApi(request, env, url) {
       members.find((m) => m.profileId === profile.id) ||
       null
     const isOwner = team.owner_profile_id === profile.id
+    const ownerRole = await getProfilePersonalType(env, team.owner_profile_id)
     const myRole = isOwner
-      ? 'executive_exclusive'
-      : myMembership?.role || 'professional'
+      ? ownerRole
+      : normalizePersonalType(myMembership?.role || 'business')
 
     const pendingInvites = (memberships || [])
       .filter((m) => m.status === 'invited' || m.status === 'pending_claim')
@@ -2460,6 +2491,8 @@ async function handleApi(request, env, url) {
       team: mapTeamRow(team),
       members,
       myRole,
+      ownerRole,
+      allowedRoles: assignableTeamRoles(ownerRole),
       isOwner,
       canManage: true,
       pendingInvites
@@ -2494,8 +2527,9 @@ async function handleApi(request, env, url) {
     const team = await getOrCreateOwnedTeam(env, profile)
     const isOwner = team.owner_profile_id === profile.id
     const actorMembership = await getActorTeamMembership(env, profile.id, team.id)
+    const ownerRole = await getProfilePersonalType(env, team.owner_profile_id)
     const actorRole = isOwner
-      ? 'executive_exclusive'
+      ? ownerRole
       : normalizePersonalType(actorMembership?.role || '')
     if (!isOwner && !actorMembership) return bad('You are not an active team member', 403)
 
@@ -2514,8 +2548,15 @@ async function handleApi(request, env, url) {
     if (existing?.length) return bad('This card is already on the team', 409)
 
     const defaultRole = normalizePersonalType(
-      body?.role || card.personal_type || 'professional'
+      body?.role || card.personal_type || 'business'
     )
+    // Cap by team owner's card type AND actor's manage rights
+    if (!assignableTeamRoles(ownerRole).includes(defaultRole)) {
+      return bad(
+        `This team can only include ${assignableTeamRoles(ownerRole).join(', ')} roles based on the owner's card`,
+        403
+      )
+    }
     if (!canManageTeamRole(actorRole, defaultRole)) {
       return bad('You cannot assign or add this role', 403)
     }
@@ -2633,8 +2674,9 @@ async function handleApi(request, env, url) {
     const isOwner = team.owner_profile_id === profile.id
     const isSelf = member.profile_id === profile.id
     const actorMembership = await getActorTeamMembership(env, profile.id, team.id)
+    const ownerRole = await getProfilePersonalType(env, team.owner_profile_id)
     const actorRole = isOwner
-      ? 'executive_exclusive'
+      ? ownerRole
       : normalizePersonalType(actorMembership?.role || '')
 
     // Accept / reject invite (self only)
@@ -2692,8 +2734,14 @@ async function handleApi(request, env, url) {
     // Assign role
     if (body?.role !== undefined) {
       const nextRole = normalizePersonalType(body.role)
-      if (member.profile_id === team.owner_profile_id && nextRole !== 'executive_exclusive') {
-        return bad('Team owner must remain Executive Exclusive', 403)
+      if (member.profile_id === team.owner_profile_id) {
+        return bad("The owner's role follows their personal card type", 403)
+      }
+      if (!assignableTeamRoles(ownerRole).includes(nextRole)) {
+        return bad(
+          `This team can only include ${assignableTeamRoles(ownerRole).join(', ')} roles based on the owner's card`,
+          403
+        )
       }
       if (!isOwner && !canManageTeamRole(actorRole, member.role)) {
         return bad('You cannot manage this member', 403)
@@ -3561,7 +3609,7 @@ async function handleApi(request, env, url) {
         kind: c.kind === 'personal' ? 'personal' : 'table',
         personalType:
           c.kind === 'personal'
-            ? normalizePersonalType(c.personal_type || 'professional')
+            ? normalizePersonalType(c.personal_type || 'business')
             : '',
         status: c.status,
         profileId: c.profile_id || '',

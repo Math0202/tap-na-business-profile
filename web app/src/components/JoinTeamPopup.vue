@@ -9,7 +9,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['close', 'done'])
 
-const roleLabel = computed(() => personalTypeLabel(props.invite?.role || 'professional'))
+const roleLabel = computed(() => personalTypeLabel(props.invite?.role || 'business'))
 const submitting = ref(false)
 const error = ref('')
 

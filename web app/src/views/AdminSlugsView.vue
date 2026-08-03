@@ -41,7 +41,7 @@ const slugKindFilter = ref('all')
 const slugGenerating = ref(false)
 const slugExporting = ref(false)
 const slugDeleting = ref(false)
-const slugForm = ref({ count: 10, kind: 'table', personalType: 'professional' })
+const slugForm = ref({ count: 10, kind: 'table', personalType: 'business' })
 const dateFrom = ref('')
 const dateTo = ref('')
 const selected = ref(new Set())
@@ -204,7 +204,7 @@ function copyCardUrl(serial, via) {
 async function generateSlugs() {
   const count = Math.min(200, Math.max(1, Number(slugForm.value.count) || 1))
   const kind = slugForm.value.kind === 'personal' ? 'personal' : 'table'
-  const personalType = kind === 'personal' ? slugForm.value.personalType || 'professional' : ''
+  const personalType = kind === 'personal' ? slugForm.value.personalType || 'business' : ''
   slugGenerating.value = true
   try {
     const remote = await apiProvisionCards({ count, kind, personalType })
@@ -226,7 +226,7 @@ async function generateSlugs() {
 async function changeSlugKind(card, kind) {
   const next = kind === 'personal' ? 'personal' : 'table'
   const personalType =
-    next === 'personal' ? card.personalType || slugForm.value.personalType || 'professional' : ''
+    next === 'personal' ? card.personalType || slugForm.value.personalType || 'business' : ''
   updateCard(card.serial, { kind: next, personalType, productName: kindLabel(next) })
   const res = await apiUpdateCardKind(card.serial, next, { personalType })
   // URLs stay on tapnam.com for both personal and table cards
@@ -598,7 +598,7 @@ watch(filteredSlugs, (rows) => {
                 </select>
                 <select
                   v-if="c.kind === 'personal'"
-                  :value="c.personalType || 'professional'"
+                  :value="c.personalType || 'business'"
                   class="bg-transparent text-xs text-gray-300 border-none outline-none cursor-pointer"
                   aria-label="Change personal tier"
                   @change="changeSlugPersonalType(c, $event.target.value)"

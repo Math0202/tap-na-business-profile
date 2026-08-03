@@ -14,7 +14,7 @@ export const CARD_KINDS = {
   table: { id: 'table', label: 'Table card', icon: 'storefront' }
 }
 
-export { PERSONAL_TYPES, personalTypeLabel, normalizePersonalType } from './teamRoles'
+export { PERSONAL_TYPES, personalTypeLabel, normalizePersonalType, DEFAULT_PERSONAL_TYPE } from './teamRoles'
 
 const PRODUCT_TO_KIND = {
   blue: 'personal',
@@ -112,7 +112,7 @@ function normalizeCard(c) {
   const deleted = c.deleted === true
   const personalType =
     kind === 'personal'
-      ? String(c.personalType || c.personal_type || 'professional')
+      ? String(c.personalType || c.personal_type || 'business')
       : ''
   return {
     id: c.id || uid('card'),
@@ -280,7 +280,7 @@ export function provisionSlugs({
       const card = normalizeCard({
         serial,
         kind,
-        personalType: kind === 'personal' ? personalType || 'professional' : '',
+        personalType: kind === 'personal' ? personalType || 'business' : '',
         productId,
         productName: productName || kindLabel(kind),
         saleId,

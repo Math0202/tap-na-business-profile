@@ -4,6 +4,7 @@ import BrandMark from '../components/BrandMark.vue'
 import {
   assignableRoles,
   canManageRole,
+  DEFAULT_PERSONAL_TYPE,
   memberStatusLabel,
   normalizePersonalType,
   PERSONAL_TYPES,
@@ -26,21 +27,26 @@ const saving = ref(false)
 const toast = ref('')
 const team = ref(null)
 const members = ref([])
-const myRole = ref('professional')
+const myRole = ref(DEFAULT_PERSONAL_TYPE)
+const ownerRole = ref(DEFAULT_PERSONAL_TYPE)
 const isOwner = ref(false)
 const pendingInvites = ref([])
 
 const teamName = ref('')
 const addSlug = ref('')
 const addEmail = ref('')
-const addRole = ref('professional')
+const addRole = ref(DEFAULT_PERSONAL_TYPE)
 
 function flash(msg) {
   toast.value = msg
   setTimeout(() => { toast.value = '' }, 2400)
 }
 
-const roleOptions = computed(() => assignableRoles(myRole.value).map((id) => PERSONAL_TYPES[id]))
+const roleOptions = computed(() => {
+  const byOwner = assignableRoles(ownerRole.value)
+  const byActor = assignableRoles(myRole.value)
+  return byOwner.filter((id) => byActor.includes(id)).map((id) => PERSONAL_TYPES[id])
+})
 
 async function refresh() {
   loading.value = true
@@ -58,7 +64,11 @@ async function refresh() {
     }
     team.value = res.data.team
     members.value = res.data.members || []
-    myRole.value = normalizePersonalType(res.data.myRole || 'professional')
+    myRole.value = normalizePersonalType(res.data.myRole || DEFAULT_PERSONAL_TYPE)
+    ownerRole.value = normalizePersonalType(res.data.ownerRole || res.data.myRole || DEFAULT_PERSONAL_TYPE)
+    if (!roleOptions.value.find((r) => r.id === addRole.value) && roleOptions.value[0]) {
+      addRole.value = roleOptions.value[0].id
+    }
     isOwner.value = !!res.data.isOwner
     pendingInvites.value = res.data.pendingInvites || []
     teamName.value = team.value?.name || ''
