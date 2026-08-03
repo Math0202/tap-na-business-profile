@@ -8,11 +8,13 @@ import {
   memberStatusLabel,
   normalizePersonalType,
   PERSONAL_TYPES,
-  personalTypeLabel
+  personalTypeLabel,
+  personalTypeRank
 } from '../lib/teamRoles'
 import {
   apiAddTeamMember,
   apiGetMyTeam,
+  apiResolveCard,
   apiUpdateMyTeam,
   apiUpdateTeamMember,
   ensureApiSession,
@@ -37,9 +39,28 @@ const addSlug = ref('')
 const addEmail = ref('')
 const addRole = ref(DEFAULT_PERSONAL_TYPE)
 
+const tierGateOpen = ref(false)
+const tierGateTitle = ref('')
+const tierGateMessage = ref('')
+
 function flash(msg) {
   toast.value = msg
   setTimeout(() => { toast.value = '' }, 2400)
+}
+
+function openTierGate(neededRole) {
+  const label = personalTypeLabel(neededRole)
+  const article = /^[aeiou]/i.test(label) ? 'an' : 'a'
+  tierGateTitle.value = `${label} required`
+  tierGateMessage.value =
+    `To add ${article} ${label} card to your team, you need to be ${label}. ` +
+    `Upgrade your personal card type, then try again.`
+  tierGateOpen.value = true
+}
+
+function canInviteCardType(type) {
+  const id = normalizePersonalType(type)
+  return roleOptions.value.some((r) => r.id === id)
 }
 
 const roleOptions = computed(() => {
@@ -108,12 +129,41 @@ async function addMember() {
   }
   saving.value = true
   try {
+    const resolved = await apiResolveCard(slug)
+    if (!resolved?.card) {
+      flash('Card not found for that slug')
+      return
+    }
+    if (resolved.card.kind !== 'personal') {
+      flash('Only personal cards can join a team')
+      return
+    }
+    const cardType = normalizePersonalType(resolved.card.personalType || DEFAULT_PERSONAL_TYPE)
+    if (!canInviteCardType(cardType)) {
+      openTierGate(cardType)
+      return
+    }
+    if (!canInviteCardType(addRole.value)) {
+      openTierGate(addRole.value)
+      return
+    }
+    // Invite at least at the card’s real type when that tier is allowed.
+    const role =
+      personalTypeRank(cardType) > personalTypeRank(addRole.value) && canInviteCardType(cardType)
+        ? cardType
+        : addRole.value
+
     const res = await apiAddTeamMember({
       slug,
       email: addEmail.value.trim(),
-      role: addRole.value
+      role
     })
     if (!res.ok) {
+      const err = String(res.error || '')
+      if (/executive|business|professional|role|type/i.test(err)) {
+        openTierGate(cardType)
+        return
+      }
       flash(res.error || 'Could not add member')
       return
     }
@@ -289,6 +339,30 @@ onMounted(() => {
         >
           {{ toast }}
         </p>
+      </Teleport>
+
+      <Teleport to="body">
+        <div
+          v-if="tierGateOpen"
+          class="app-dialog-overlay fixed inset-0 z-[210] flex items-end sm:items-center justify-center p-4"
+          @click.self="tierGateOpen = false"
+        >
+          <div class="w-full max-w-sm rounded-2xl bg-zinc-900 border border-zinc-700 p-5 shadow-xl">
+            <h2 class="text-lg font-bold tracking-tight">{{ tierGateTitle }}</h2>
+            <p class="text-sm text-gray-400 mt-2 leading-relaxed">{{ tierGateMessage }}</p>
+            <p class="text-xs text-gray-500 mt-3">
+              Your role: {{ personalTypeLabel(myRole) }}
+              <template v-if="!isOwner"> · Team owner: {{ personalTypeLabel(ownerRole) }}</template>
+            </p>
+            <button
+              type="button"
+              class="mt-5 w-full py-3 rounded-full bg-white text-black text-sm font-bold"
+              @click="tierGateOpen = false"
+            >
+              Got it
+            </button>
+          </div>
+        </div>
       </Teleport>
     </main>
   </div>
