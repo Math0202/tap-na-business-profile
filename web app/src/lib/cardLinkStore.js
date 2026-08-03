@@ -14,6 +14,8 @@ export const CARD_KINDS = {
   table: { id: 'table', label: 'Table card', icon: 'storefront' }
 }
 
+export { PERSONAL_TYPES, personalTypeLabel, normalizePersonalType } from './teamRoles'
+
 const PRODUCT_TO_KIND = {
   blue: 'personal',
   black: 'personal',
@@ -108,10 +110,15 @@ function normalizeCard(c) {
     CARD_KINDS[c.kind] ? c.kind : kindFromProductId(c.productId)
   )
   const deleted = c.deleted === true
+  const personalType =
+    kind === 'personal'
+      ? String(c.personalType || c.personal_type || 'professional')
+      : ''
   return {
     id: c.id || uid('card'),
     serial: String(c.serial || '').trim(),
     kind,
+    personalType,
     productId: c.productId || '',
     productName: c.productName || kindLabel(kind),
     saleId: c.saleId || '',
@@ -236,6 +243,7 @@ export function provisionCardsForSale(sale, { count } = {}) {
 export function provisionSlugs({
   count = 1,
   kind = 'table',
+  personalType = '',
   productId = '',
   productName = '',
   saleId = '',
@@ -255,6 +263,7 @@ export function provisionSlugs({
         id: remote.id,
         serial,
         kind: remote.kind || kind,
+        personalType: remote.personalType || personalType || '',
         productId: productId || remote.productId || '',
         productName: productName || kindLabel(remote.kind || kind),
         saleId,
@@ -271,6 +280,7 @@ export function provisionSlugs({
       const card = normalizeCard({
         serial,
         kind,
+        personalType: kind === 'personal' ? personalType || 'professional' : '',
         productId,
         productName: productName || kindLabel(kind),
         saleId,

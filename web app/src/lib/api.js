@@ -185,18 +185,20 @@ export function apiBulkDeleteCards(slugs = []) {
 }
 
 /** Change a card's kind (admin) */
-export function apiUpdateCardKind(slug, kind) {
+export function apiUpdateCardKind(slug, kind, { personalType } = {}) {
+  const body = { kind }
+  if (personalType) body.personalType = personalType
   return request(`/api/cards/${encodeURIComponent(slug)}`, {
     method: 'PATCH',
-    body: { kind }
+    body
   })
 }
 
 /** Provision a batch of blank cards (admin) */
-export function apiProvisionCards({ count = 1, kind = 'table', productId = '' } = {}) {
+export function apiProvisionCards({ count = 1, kind = 'table', productId = '', personalType = '' } = {}) {
   return request('/api/cards/provision', {
     method: 'POST',
-    body: { count, kind, productId }
+    body: { count, kind, productId, personalType }
   })
 }
 
@@ -490,6 +492,26 @@ export function apiMeetingStats() {
 /** Public catalog for a profile (active items only) */
 export function apiPublicCatalog(profileId) {
   return request(`/api/profiles/${encodeURIComponent(profileId)}/catalog`, { timeoutMs: 10000 })
+}
+
+/** Personal card team — owner/member management */
+export function apiGetMyTeam() {
+  return request('/api/me/team', { timeoutMs: 15000 })
+}
+
+export function apiUpdateMyTeam(payload) {
+  return request('/api/me/team', { method: 'PUT', body: payload })
+}
+
+export function apiAddTeamMember(payload) {
+  return request('/api/me/team/members', { method: 'POST', body: payload, timeoutMs: 30000 })
+}
+
+export function apiUpdateTeamMember(id, payload) {
+  return request(`/api/me/team/members/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: payload
+  })
 }
 
 /** Guest submits catalog cart quote / interest (emails owner + guest, stores for owner inbox) */

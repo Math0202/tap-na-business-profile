@@ -36,7 +36,8 @@ const visible = computed(() => {
     p === '/profile' ||
     p === '/cards' ||
     p === '/catalog' ||
-    p === '/catalog-cart'
+    p === '/catalog-cart' ||
+    p === '/team'
   ) {
     return true
   }
@@ -73,8 +74,17 @@ const navItems = computed(() => {
       match: () => false
     }
   ]
-  if (showCartNav.value) {
+  if (loggedIn.value) {
     items.splice(2, 0, {
+      to: '/team',
+      label: 'Team',
+      icon: 'groups',
+      match: (p) => p === '/team'
+    })
+  }
+  if (showCartNav.value) {
+    const cartIndex = loggedIn.value ? 3 : 2
+    items.splice(cartIndex, 0, {
       to: '/catalog-cart',
       label: 'Cart',
       icon: 'shopping_cart',

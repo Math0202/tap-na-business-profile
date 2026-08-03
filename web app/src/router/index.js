@@ -152,6 +152,12 @@ const routes = [
     component: () => import('../views/ProfileCatalogCartView.vue')
   },
   {
+    path: '/team',
+    name: 'team',
+    component: () => import('../views/TeamView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/c/:serial',
     name: 'card-tap',
     component: () => import('../views/CardTapView.vue')

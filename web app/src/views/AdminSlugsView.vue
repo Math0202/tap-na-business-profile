@@ -15,7 +15,9 @@ import {
   restoreCard,
   updateCard,
   slugStats,
-  kindLabel
+  kindLabel,
+  PERSONAL_TYPES,
+  personalTypeLabel
 } from '../lib/cardLinkStore'
 import {
   apiProvisionCards,
@@ -39,13 +41,14 @@ const slugKindFilter = ref('all')
 const slugGenerating = ref(false)
 const slugExporting = ref(false)
 const slugDeleting = ref(false)
-const slugForm = ref({ count: 10, kind: 'table' })
+const slugForm = ref({ count: 10, kind: 'table', personalType: 'professional' })
 const dateFrom = ref('')
 const dateTo = ref('')
 const selected = ref(new Set())
 const selectMode = ref(false)
 
 const kindOptions = computed(() => Object.values(CARD_KINDS))
+const personalTypeOptions = computed(() => Object.values(PERSONAL_TYPES))
 
 function dayStamp(iso) {
   if (!iso) return ''
@@ -147,6 +150,7 @@ async function refresh() {
     ...(local[c.slug] || {}),
     serial: c.slug,
     kind: c.kind,
+    personalType: c.personalType || local[c.slug]?.personalType || '',
     profileId: c.profileId || '',
     profileName: c.profileName || local[c.slug]?.profileName || '',
     productName: local[c.slug]?.productName || kindLabel(c.kind),
@@ -200,14 +204,15 @@ function copyCardUrl(serial, via) {
 async function generateSlugs() {
   const count = Math.min(200, Math.max(1, Number(slugForm.value.count) || 1))
   const kind = slugForm.value.kind === 'personal' ? 'personal' : 'table'
+  const personalType = kind === 'personal' ? slugForm.value.personalType || 'professional' : ''
   slugGenerating.value = true
   try {
-    const remote = await apiProvisionCards({ count, kind })
+    const remote = await apiProvisionCards({ count, kind, personalType })
     let created
     if (remote.ok && remote.data?.cards?.length) {
-      created = provisionSlugs({ count, kind, remoteCards: remote.data.cards })
+      created = provisionSlugs({ count, kind, personalType, remoteCards: remote.data.cards })
     } else {
-      created = provisionSlugs({ count, kind })
+      created = provisionSlugs({ count, kind, personalType })
       flash(remote.error ? `Saved locally (${remote.error})` : '')
     }
     refresh()
@@ -220,8 +225,10 @@ async function generateSlugs() {
 
 async function changeSlugKind(card, kind) {
   const next = kind === 'personal' ? 'personal' : 'table'
-  updateCard(card.serial, { kind: next, productName: kindLabel(next) })
-  const res = await apiUpdateCardKind(card.serial, next)
+  const personalType =
+    next === 'personal' ? card.personalType || slugForm.value.personalType || 'professional' : ''
+  updateCard(card.serial, { kind: next, personalType, productName: kindLabel(next) })
+  const res = await apiUpdateCardKind(card.serial, next, { personalType })
   // URLs stay on tapnam.com for both personal and table cards
   const map = { ...slugQrMap.value }
   delete map[card.serial]
@@ -229,6 +236,16 @@ async function changeSlugKind(card, kind) {
   await refresh()
   flash(res.ok
     ? `Updated ${card.serial} → ${kindLabel(next)}`
+    : `Updated locally (${res.error || 'offline'})`)
+}
+
+async function changeSlugPersonalType(card, personalType) {
+  if (card.kind !== 'personal') return
+  updateCard(card.serial, { personalType })
+  const res = await apiUpdateCardKind(card.serial, 'personal', { personalType })
+  await refresh()
+  flash(res.ok
+    ? `Updated ${card.serial} → ${personalTypeLabel(personalType)}`
     : `Updated locally (${res.error || 'offline'})`)
 }
 
@@ -401,8 +418,7 @@ watch(filteredSlugs, (rows) => {
           <div>
             <p class="text-sm font-semibold">Generate slugs</p>
             <p class="text-[11px] text-gray-500 mt-0.5">
-              Pick the card type here — personal or business (menu, info, review, WiFi).
-              That type is locked forever once the QR is printed.
+              Pick personal or table. For personal cards, also choose Executive Exclusive, Business, or Professional.
             </p>
           </div>
           <div class="flex flex-col sm:flex-row gap-2">
@@ -412,6 +428,11 @@ watch(filteredSlugs, (rows) => {
             <div class="field-shell flex-1 !rounded-2xl">
               <select v-model="slugForm.kind" class="field-input bg-transparent" aria-label="Card type">
                 <option v-for="k in kindOptions" :key="k.id" :value="k.id">{{ k.label }}</option>
+              </select>
+            </div>
+            <div v-if="slugForm.kind === 'personal'" class="field-shell flex-1 !rounded-2xl">
+              <select v-model="slugForm.personalType" class="field-input bg-transparent" aria-label="Personal tier">
+                <option v-for="t in personalTypeOptions" :key="t.id" :value="t.id">{{ t.label }}</option>
               </select>
             </div>
             <button
@@ -565,7 +586,7 @@ watch(filteredSlugs, (rows) => {
                   {{ c.deleted ? 'Deleted' : (c.profileId ? 'Linked' : 'Blank') }}
                 </span>
               </div>
-              <div class="flex items-center gap-1.5 mt-1">
+              <div class="flex items-center gap-1.5 mt-1 flex-wrap">
                 <span class="material-symbols-outlined text-[15px] text-gray-400">{{ kindIcon(c.kind) }}</span>
                 <select
                   :value="c.kind"
@@ -574,6 +595,15 @@ watch(filteredSlugs, (rows) => {
                   @change="changeSlugKind(c, $event.target.value)"
                 >
                   <option v-for="k in kindOptions" :key="k.id" :value="k.id">{{ k.label }}</option>
+                </select>
+                <select
+                  v-if="c.kind === 'personal'"
+                  :value="c.personalType || 'professional'"
+                  class="bg-transparent text-xs text-gray-300 border-none outline-none cursor-pointer"
+                  aria-label="Change personal tier"
+                  @change="changeSlugPersonalType(c, $event.target.value)"
+                >
+                  <option v-for="t in personalTypeOptions" :key="t.id" :value="t.id">{{ t.label }}</option>
                 </select>
               </div>
               <p class="text-[11px] text-gray-500 mt-1">

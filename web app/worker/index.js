@@ -1189,6 +1189,207 @@ function mapCatalogCartRow(row) {
   }
 }
 
+const PERSONAL_TYPE_RANKS = {
+  executive_exclusive: 3,
+  business: 2,
+  professional: 1
+}
+
+function normalizePersonalType(raw, fallback = 'professional') {
+  const key = String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_')
+  if (key === 'executive' || key === 'exclusive' || key === 'exec') return 'executive_exclusive'
+  if (PERSONAL_TYPE_RANKS[key]) return key
+  return fallback || ''
+}
+
+function personalTypeRank(role) {
+  return PERSONAL_TYPE_RANKS[normalizePersonalType(role)] || 1
+}
+
+function canManageTeamRole(actorRole, targetRole) {
+  return personalTypeRank(actorRole) >= personalTypeRank(targetRole)
+}
+
+function mapTeamRow(row) {
+  return {
+    id: row.id,
+    name: row.name || '',
+    ownerProfileId: row.owner_profile_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+function mapTeamMemberRow(row) {
+  return {
+    id: row.id,
+    teamId: row.team_id,
+    profileId: row.profile_id || '',
+    cardId: row.card_id || '',
+    slug: row.slug || '',
+    role: normalizePersonalType(row.role),
+    status: row.status || 'pending_claim',
+    inviteEmail: row.invite_email || '',
+    invitedByProfileId: row.invited_by_profile_id || '',
+    joinedAt: row.joined_at || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    memberName: row.member_name || '',
+    memberEmail: row.member_email || ''
+  }
+}
+
+async function getOrCreateOwnedTeam(env, profile) {
+  const existing = await sb(
+    env,
+    `teams?owner_profile_id=eq.${encodeURIComponent(profile.id)}&deleted=eq.false&select=*&order=created_at.asc&limit=1`
+  )
+  if (existing?.[0]) return existing[0]
+  const id = uid('team')
+  const now = new Date().toISOString()
+  const name =
+    String(profile.company || profile.name || 'My team').trim().slice(0, 120) || 'My team'
+  await sb(env, 'teams', {
+    method: 'POST',
+    body: {
+      id,
+      name,
+      owner_profile_id: profile.id,
+      created_at: now,
+      updated_at: now
+    },
+    prefer: 'return=minimal'
+  })
+  // Owner is always an active executive exclusive member
+  await sb(env, 'team_members', {
+    method: 'POST',
+    body: {
+      id: uid('tmem'),
+      team_id: id,
+      profile_id: profile.id,
+      card_id: null,
+      slug: '',
+      role: 'executive_exclusive',
+      status: 'active',
+      invite_email: String(profile.login_email || profile.email || ''),
+      invited_by_profile_id: profile.id,
+      invite_token: '',
+      joined_at: now,
+      created_at: now,
+      updated_at: now
+    },
+    prefer: 'return=minimal'
+  })
+  const rows = await sb(env, `teams?id=eq.${encodeURIComponent(id)}&select=*`)
+  return rows?.[0]
+}
+
+async function getActorTeamMembership(env, profileId, teamId) {
+  const rows = await sb(
+    env,
+    `team_members?team_id=eq.${encodeURIComponent(teamId)}&profile_id=eq.${encodeURIComponent(profileId)}&deleted=eq.false&status=eq.active&select=*`
+  )
+  return rows?.[0] || null
+}
+
+async function enrichTeamMembers(env, members) {
+  const profileIds = [...new Set(members.map((m) => m.profile_id).filter(Boolean))]
+  const profilesById = {}
+  if (profileIds.length) {
+    const rows = await sb(
+      env,
+      `profiles?id=in.(${profileIds.map(encodeURIComponent).join(',')})&select=id,name,company,login_email,email`
+    )
+    for (const p of rows || []) profilesById[p.id] = p
+  }
+  return (members || []).map((m) => {
+    const p = profilesById[m.profile_id]
+    return mapTeamMemberRow({
+      ...m,
+      member_name: p ? String(p.name || p.company || '').trim() : '',
+      member_email: p
+        ? String(p.login_email || p.email || m.invite_email || '').trim()
+        : String(m.invite_email || '')
+    })
+  })
+}
+
+async function findPendingTeamInviteForCard(env, cardId, profileId = '') {
+  let q =
+    `team_members?deleted=eq.false&status=in.(pending_claim,invited)&select=*&order=created_at.desc&limit=5`
+  if (cardId) q += `&card_id=eq.${encodeURIComponent(cardId)}`
+  else if (profileId) q += `&profile_id=eq.${encodeURIComponent(profileId)}`
+  else return null
+  const rows = await sb(env, q)
+  const row = rows?.[0]
+  if (!row) return null
+  const teams = await sb(
+    env,
+    `teams?id=eq.${encodeURIComponent(row.team_id)}&deleted=eq.false&select=*`
+  )
+  const team = teams?.[0]
+  if (!team) return null
+  let ownerName = ''
+  const owners = await sb(
+    env,
+    `profiles?id=eq.${encodeURIComponent(team.owner_profile_id)}&select=name,company`
+  )
+  ownerName = String(owners?.[0]?.name || owners?.[0]?.company || 'Team owner').trim()
+  return {
+    memberId: row.id,
+    teamId: team.id,
+    teamName: team.name || 'Team',
+    ownerName,
+    role: normalizePersonalType(row.role),
+    status: row.status
+  }
+}
+
+async function sendTeamInviteEmail(env, {
+  to,
+  inviteeName = '',
+  teamName,
+  ownerName,
+  role,
+  slug,
+  pendingClaim = false
+}) {
+  if (!to || !String(to).includes('@')) return
+  const roleLabel =
+    role === 'executive_exclusive'
+      ? 'Executive Exclusive'
+      : role === 'business'
+        ? 'Business'
+        : 'Professional'
+  const subject = pendingClaim
+    ? `You've been invited to join ${teamName} on tap-na`
+    : `${ownerName} invited you to ${teamName} on tap-na`
+  const bodyHtml = pendingClaim
+    ? `<p style="margin:0 0 8px;">When you claim card <strong>${escapeHtml(slug)}</strong>, you'll be asked to join <strong>${escapeHtml(teamName)}</strong> as <strong>${escapeHtml(roleLabel)}</strong>.</p>
+       <p style="margin:12px 0 0;">Open your card link and complete signup to accept or decline.</p>`
+    : `<p style="margin:0 0 8px;"><strong>${escapeHtml(ownerName)}</strong> invited you to join <strong>${escapeHtml(teamName)}</strong> as <strong>${escapeHtml(roleLabel)}</strong>.</p>
+       <p style="margin:12px 0 0;"><a href="https://tapnam.com/team">Open Team</a> to accept or decline.</p>`
+  await sendCloudflareEmail(env, {
+    to,
+    subject,
+    html: transactionalShell({
+      title: pendingClaim ? 'Team invite waiting' : 'Team invitation',
+      intro: `Hi ${inviteeName || 'there'},`,
+      bodyHtml,
+      footerNote: 'Sent via tap-na teams.'
+    }),
+    text: [
+      subject,
+      pendingClaim
+        ? `Claim card ${slug} to join ${teamName} as ${roleLabel}.`
+        : `Open https://tapnam.com/team to respond.`
+    ].join('\n')
+  })
+}
+
 function isCrawler(ua = '') {
   return /bot|crawler|spider|slurp|facebookexternalhit|Facebot|WhatsApp|Twitterbot|LinkedInBot|Slackbot|Discordbot|TelegramBot|SkypeUriPreview|Applebot|Google-InspectionTool|preview/i.test(
     String(ua)
@@ -1940,6 +2141,10 @@ async function handleApi(request, env, url) {
     const body = await readJson(request)
     const count = Math.min(500, Math.max(1, Number(body?.count) || 1))
     const kind = body?.kind === 'personal' ? 'personal' : 'table'
+    const personalType =
+      kind === 'personal'
+        ? normalizePersonalType(body?.personalType || body?.personal_type || 'professional')
+        : ''
     const created = []
     for (let i = 0; i < count; i++) {
       const id = uid('card')
@@ -1950,6 +2155,7 @@ async function handleApi(request, env, url) {
           id,
           slug,
           kind,
+          personal_type: personalType,
           product_id: body?.productId || '',
           status: 'unlinked'
         },
@@ -1959,6 +2165,7 @@ async function handleApi(request, env, url) {
         id,
         slug,
         kind,
+        personalType,
         nfcUrl: cardPageUrl(slug, kind, url.origin),
         qrUrl: `${cardPageUrl(slug, kind, url.origin)}?via=qr`
       })
@@ -1983,11 +2190,16 @@ async function handleApi(request, env, url) {
         id: card.id,
         slug: card.slug,
         kind: card.kind,
+        personalType: card.kind === 'personal' ? normalizePersonalType(card.personal_type || 'professional') : '',
         status: card.status,
         profileId: card.profile_id
       },
       profile: await publicProfile(env, profile),
-      destination: destinationFor(card, profile)
+      destination: destinationFor(card, profile),
+      pendingTeamInvite:
+        card.status === 'unlinked'
+          ? await findPendingTeamInviteForCard(env, card.id)
+          : null
     })
   }
 
@@ -2100,15 +2312,30 @@ async function handleApi(request, env, url) {
     if (gate.error) return gate.error
     const slug = decodeURIComponent(kindMatch[1])
     const body = await readJson(request)
-    const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&select=id`)
+    const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&select=id,kind`)
     if (!cards?.length) return bad('Card not found', 404)
-    const kind = body?.kind === 'personal' ? 'personal' : 'table'
+    const kind =
+      body?.kind !== undefined
+        ? body.kind === 'personal'
+          ? 'personal'
+          : 'table'
+        : cards[0].kind === 'personal'
+          ? 'personal'
+          : 'table'
+    const patch = { kind }
+    if (kind === 'personal') {
+      patch.personal_type = normalizePersonalType(
+        body?.personalType || body?.personal_type || 'professional'
+      )
+    } else {
+      patch.personal_type = ''
+    }
     await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}`, {
       method: 'PATCH',
-      body: { kind },
+      body: patch,
       prefer: 'return=minimal'
     })
-    return json({ ok: true, slug, kind })
+    return json({ ok: true, slug, kind, personalType: patch.personal_type || '' })
   }
 
   if (pathname === '/api/cards/bulk-delete' && method === 'POST') {
@@ -2187,6 +2414,311 @@ async function handleApi(request, env, url) {
     return json({ ok: true, slug, deleted: false, status })
   }
 
+  // ---- Personal card teams ----
+  if (pathname === '/api/me/team' && method === 'GET') {
+    const profile = await getSessionProfile(env, request)
+    if (!profile) return bad('Unauthorized', 401)
+    if (profile.card_type === 'table') return bad('Teams are for personal cards only', 403)
+
+    const memberships = await sb(
+      env,
+      `team_members?profile_id=eq.${encodeURIComponent(profile.id)}&deleted=eq.false&status=in.(active,invited,pending_claim)&select=*`
+    )
+    const teamIds = [...new Set((memberships || []).map((m) => m.team_id).filter(Boolean))]
+    let team = null
+    if (teamIds.length) {
+      const teams = await sb(
+        env,
+        `teams?id=in.(${teamIds.map(encodeURIComponent).join(',')})&deleted=eq.false&select=*`
+      )
+      team = (teams || []).find((t) => t.owner_profile_id === profile.id) || teams?.[0] || null
+    }
+    if (!team) {
+      team = await getOrCreateOwnedTeam(env, profile)
+    }
+
+    const memberRows = await sb(
+      env,
+      `team_members?team_id=eq.${encodeURIComponent(team.id)}&deleted=eq.false&select=*&order=created_at.asc`
+    )
+    const members = await enrichTeamMembers(env, memberRows || [])
+    const myMembership =
+      members.find((m) => m.profileId === profile.id && m.status === 'active') ||
+      members.find((m) => m.profileId === profile.id) ||
+      null
+    const isOwner = team.owner_profile_id === profile.id
+    const myRole = isOwner
+      ? 'executive_exclusive'
+      : myMembership?.role || 'professional'
+
+    const pendingInvites = (memberships || [])
+      .filter((m) => m.status === 'invited' || m.status === 'pending_claim')
+      .map((m) => mapTeamMemberRow(m))
+
+    return json({
+      ok: true,
+      team: mapTeamRow(team),
+      members,
+      myRole,
+      isOwner,
+      canManage: true,
+      pendingInvites
+    })
+  }
+
+  if (pathname === '/api/me/team' && method === 'PUT') {
+    const profile = await getSessionProfile(env, request)
+    if (!profile) return bad('Unauthorized', 401)
+    if (profile.card_type === 'table') return bad('Teams are for personal cards only', 403)
+    const body = await readJson(request)
+    const team = await getOrCreateOwnedTeam(env, profile)
+    if (team.owner_profile_id !== profile.id) return bad('Only the team owner can rename the team', 403)
+    const name = String(body?.name || '').trim().slice(0, 120)
+    if (!name) return bad('Team name is required')
+    await sb(env, `teams?id=eq.${encodeURIComponent(team.id)}`, {
+      method: 'PATCH',
+      body: { name, updated_at: new Date().toISOString() },
+      prefer: 'return=minimal'
+    })
+    return json({ ok: true, team: { ...mapTeamRow(team), name } })
+  }
+
+  if (pathname === '/api/me/team/members' && method === 'POST') {
+    const profile = await getSessionProfile(env, request)
+    if (!profile) return bad('Unauthorized', 401)
+    if (profile.card_type === 'table') return bad('Teams are for personal cards only', 403)
+    const body = await readJson(request)
+    const slug = String(body?.slug || '').trim()
+    if (!slug) return bad('Card slug is required')
+
+    const team = await getOrCreateOwnedTeam(env, profile)
+    const isOwner = team.owner_profile_id === profile.id
+    const actorMembership = await getActorTeamMembership(env, profile.id, team.id)
+    const actorRole = isOwner
+      ? 'executive_exclusive'
+      : normalizePersonalType(actorMembership?.role || '')
+    if (!isOwner && !actorMembership) return bad('You are not an active team member', 403)
+
+    const cards = await sb(
+      env,
+      `cards?slug=eq.${encodeURIComponent(slug)}&deleted=eq.false&select=*`
+    )
+    const card = cards?.[0]
+    if (!card) return bad('Card not found', 404)
+    if (card.kind !== 'personal') return bad('Only personal cards can join a team', 400)
+
+    const existing = await sb(
+      env,
+      `team_members?team_id=eq.${encodeURIComponent(team.id)}&slug=eq.${encodeURIComponent(slug)}&deleted=eq.false&status=neq.rejected&select=id&limit=1`
+    )
+    if (existing?.length) return bad('This card is already on the team', 409)
+
+    const defaultRole = normalizePersonalType(
+      body?.role || card.personal_type || 'professional'
+    )
+    if (!canManageTeamRole(actorRole, defaultRole)) {
+      return bad('You cannot assign or add this role', 403)
+    }
+
+    let inviteEmail = String(body?.email || body?.inviteEmail || '').trim().toLowerCase()
+    let memberProfileId = card.profile_id || null
+    let status = 'pending_claim'
+    if (memberProfileId) {
+      const profiles = await sb(
+        env,
+        `profiles?id=eq.${encodeURIComponent(memberProfileId)}&select=id,login_email,email,name,card_type`
+      )
+      const memberProfile = profiles?.[0]
+      if (!memberProfile || memberProfile.card_type === 'table') {
+        return bad('Linked profile is not a personal card account', 400)
+      }
+      inviteEmail =
+        inviteEmail ||
+        String(memberProfile.login_email || memberProfile.email || '')
+          .trim()
+          .toLowerCase()
+      status = 'invited'
+    } else if (!inviteEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail)) {
+      return bad('Email is required when the card is not claimed yet')
+    }
+
+    // Sync card personal type to assigned role
+    await sb(env, `cards?id=eq.${encodeURIComponent(card.id)}`, {
+      method: 'PATCH',
+      body: { personal_type: defaultRole },
+      prefer: 'return=minimal'
+    })
+
+    const memberId = uid('tmem')
+    const now = new Date().toISOString()
+    await sb(env, 'team_members', {
+      method: 'POST',
+      body: {
+        id: memberId,
+        team_id: team.id,
+        profile_id: memberProfileId,
+        card_id: card.id,
+        slug,
+        role: defaultRole,
+        status,
+        invite_email: inviteEmail,
+        invited_by_profile_id: profile.id,
+        invite_token: uid('tinv'),
+        created_at: now,
+        updated_at: now
+      },
+      prefer: 'return=minimal'
+    })
+
+    const ownerName = String(profile.name || profile.company || 'Team owner').trim()
+    try {
+      await sendTeamInviteEmail(env, {
+        to: inviteEmail,
+        inviteeName: '',
+        teamName: team.name || 'Team',
+        ownerName,
+        role: defaultRole,
+        slug,
+        pendingClaim: status === 'pending_claim'
+      })
+    } catch (err) {
+      await logAppError(env, {
+        source: 'email',
+        message: err?.message || String(err),
+        stack: err?.stack || '',
+        path: pathname,
+        method,
+        context: { kind: 'team_invite_email', memberId }
+      })
+    }
+
+    return json({
+      ok: true,
+      member: mapTeamMemberRow({
+        id: memberId,
+        team_id: team.id,
+        profile_id: memberProfileId,
+        card_id: card.id,
+        slug,
+        role: defaultRole,
+        status,
+        invite_email: inviteEmail,
+        invited_by_profile_id: profile.id,
+        created_at: now,
+        updated_at: now
+      })
+    })
+  }
+
+  const teamMemberPatchMatch = pathname.match(/^\/api\/me\/team\/members\/([^/]+)$/)
+  if (teamMemberPatchMatch && method === 'PATCH') {
+    const profile = await getSessionProfile(env, request)
+    if (!profile) return bad('Unauthorized', 401)
+    const memberId = decodeURIComponent(teamMemberPatchMatch[1])
+    const body = await readJson(request)
+    const rows = await sb(
+      env,
+      `team_members?id=eq.${encodeURIComponent(memberId)}&deleted=eq.false&select=*`
+    )
+    const member = rows?.[0]
+    if (!member) return bad('Member not found', 404)
+
+    const teams = await sb(
+      env,
+      `teams?id=eq.${encodeURIComponent(member.team_id)}&deleted=eq.false&select=*`
+    )
+    const team = teams?.[0]
+    if (!team) return bad('Team not found', 404)
+
+    const isOwner = team.owner_profile_id === profile.id
+    const isSelf = member.profile_id === profile.id
+    const actorMembership = await getActorTeamMembership(env, profile.id, team.id)
+    const actorRole = isOwner
+      ? 'executive_exclusive'
+      : normalizePersonalType(actorMembership?.role || '')
+
+    // Accept / reject invite (self only)
+    if (body?.action === 'accept' || body?.action === 'reject') {
+      if (!isSelf) return bad('Only the invited person can respond', 403)
+      if (!['invited', 'pending_claim'].includes(member.status)) {
+        return bad('This invite is no longer pending', 409)
+      }
+      if (body.action === 'reject') {
+        await sb(env, `team_members?id=eq.${encodeURIComponent(memberId)}`, {
+          method: 'PATCH',
+          body: {
+            status: 'rejected',
+            updated_at: new Date().toISOString()
+          },
+          prefer: 'return=minimal'
+        })
+        return json({ ok: true, id: memberId, status: 'rejected' })
+      }
+      await sb(env, `team_members?id=eq.${encodeURIComponent(memberId)}`, {
+        method: 'PATCH',
+        body: {
+          status: 'active',
+          joined_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          profile_id: profile.id
+        },
+        prefer: 'return=minimal'
+      })
+      return json({ ok: true, id: memberId, status: 'active' })
+    }
+
+    // Members cannot leave after accepting
+    if (body?.action === 'leave') {
+      return bad('Team members cannot leave after accepting an invite', 403)
+    }
+
+    // Soft-remove member (owner or higher-tier manager)
+    if (body?.deleted === true || body?.action === 'remove') {
+      if (member.profile_id === team.owner_profile_id) {
+        return bad('Cannot remove the team owner', 403)
+      }
+      if (!isOwner && !canManageTeamRole(actorRole, member.role)) {
+        return bad('You cannot manage this member', 403)
+      }
+      await softDeleteRow(env, {
+        table: 'team_members',
+        id: memberId,
+        actor: profile.login_email || profile.id,
+        extra: { updated_at: new Date().toISOString() }
+      })
+      return json({ ok: true, id: memberId, deleted: true })
+    }
+
+    // Assign role
+    if (body?.role !== undefined) {
+      const nextRole = normalizePersonalType(body.role)
+      if (member.profile_id === team.owner_profile_id && nextRole !== 'executive_exclusive') {
+        return bad('Team owner must remain Executive Exclusive', 403)
+      }
+      if (!isOwner && !canManageTeamRole(actorRole, member.role)) {
+        return bad('You cannot manage this member', 403)
+      }
+      if (!canManageTeamRole(actorRole, nextRole)) {
+        return bad('You cannot assign this role', 403)
+      }
+      await sb(env, `team_members?id=eq.${encodeURIComponent(memberId)}`, {
+        method: 'PATCH',
+        body: { role: nextRole, updated_at: new Date().toISOString() },
+        prefer: 'return=minimal'
+      })
+      if (member.card_id) {
+        await sb(env, `cards?id=eq.${encodeURIComponent(member.card_id)}`, {
+          method: 'PATCH',
+          body: { personal_type: nextRole },
+          prefer: 'return=minimal'
+        })
+      }
+      return json({ ok: true, id: memberId, role: nextRole })
+    }
+
+    return bad('No changes provided')
+  }
+
   if (pathname === '/api/auth/signup' && method === 'POST') {
     const body = await readJson(request)
     const email = String(body?.loginEmail || body?.email || '').trim().toLowerCase()
@@ -2255,6 +2787,19 @@ async function handleApi(request, env, url) {
         })
         return bad('Card was claimed by another profile', 409)
       }
+      // Attach any pending team invites for this card to the new profile
+      await sb(
+        env,
+        `team_members?card_id=eq.${encodeURIComponent(claimCard.id)}&deleted=eq.false&status=eq.pending_claim`,
+        {
+          method: 'PATCH',
+          body: {
+            profile_id: id,
+            updated_at: new Date().toISOString()
+          },
+          prefer: 'return=minimal'
+        }
+      )
     }
 
     const token = uid('tok')
@@ -2267,6 +2812,9 @@ async function handleApi(request, env, url) {
 
     const profiles = await sb(env, `profiles?id=eq.${encodeURIComponent(id)}&select=*`)
     const pub = await publicProfile(env, profiles?.[0])
+    const pendingTeamInvite = claimCard
+      ? await findPendingTeamInviteForCard(env, claimCard.id, id)
+      : null
     // Fire-and-forget welcome email
     sendWelcomeEmail(env, {
       email,
@@ -2280,7 +2828,7 @@ async function handleApi(request, env, url) {
       method,
       context: { kind: 'welcome_email' }
     }))
-    return json({ ok: true, token, profile: pub })
+    return json({ ok: true, token, profile: pub, pendingTeamInvite })
   }
 
   if (pathname === '/api/auth/login' && method === 'POST') {
@@ -3011,6 +3559,10 @@ async function handleApi(request, env, url) {
       cards: (cards || []).map((c) => ({
         slug: c.slug,
         kind: c.kind === 'personal' ? 'personal' : 'table',
+        personalType:
+          c.kind === 'personal'
+            ? normalizePersonalType(c.personal_type || 'professional')
+            : '',
         status: c.status,
         profileId: c.profile_id || '',
         profileName: c.profile_id ? nameByProfile[c.profile_id] || '' : '',

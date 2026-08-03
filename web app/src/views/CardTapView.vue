@@ -23,6 +23,7 @@ import { hideFloatingChrome } from '../lib/uiChrome'
 import { singleBusinessDestinationHref } from '../lib/businessLinks'
 import BusinessView from './BusinessView.vue'
 import MyCardView from './MyCardView.vue'
+import JoinTeamPopup from '../components/JoinTeamPopup.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -31,6 +32,8 @@ const router = useRouter()
 const mode = ref('')
 const cardKind = ref('table')
 const linkedType = ref('table')
+const pendingTeamInvite = ref(null)
+const joinTeamOpen = ref(false)
 
 const firstName = ref('')
 const surname = ref('')
@@ -160,10 +163,25 @@ async function createProfile(e) {
     })
     if (response.data.token) setApiToken(response.data.token)
     markLoggedIn()
+    if (response.data.pendingTeamInvite) {
+      pendingTeamInvite.value = response.data.pendingTeamInvite
+      joinTeamOpen.value = true
+      return
+    }
     router.replace('/profile')
   } finally {
     submitting.value = false
   }
+}
+
+function onJoinTeamDone() {
+  joinTeamOpen.value = false
+  router.replace('/profile')
+}
+
+function onJoinTeamClose() {
+  joinTeamOpen.value = false
+  router.replace('/profile')
 }
 
 function setClaimChrome(active) {
@@ -178,6 +196,7 @@ onMounted(async () => {
   if (remote?.ok && remote.card) {
     apiLogCardOpen(serial.value, via).catch?.(() => {})
     cardKind.value = remote.card.kind === 'personal' ? 'personal' : 'table'
+    if (remote.pendingTeamInvite) pendingTeamInvite.value = remote.pendingTeamInvite
 
     if (remote.card.status === 'linked' && remote.profile) {
       linkedType.value = remote.profile.cardType === 'personal' ? 'personal' : 'table'
@@ -443,6 +462,20 @@ onUnmounted(() => setClaimChrome(false))
 
       <p v-if="serial" class="text-xs font-mono text-gray-500 pt-1">{{ serial }}</p>
       <p v-if="mode === 'unlinked' && publicUrl" class="text-[10px] text-gray-600 break-all">{{ publicUrl }}</p>
+      <p
+        v-if="mode === 'unlinked' && pendingTeamInvite"
+        class="text-xs text-emerald-400/90 text-center leading-relaxed"
+      >
+        After claiming, you'll be invited to join {{ pendingTeamInvite.teamName }} as
+        {{ pendingTeamInvite.role === 'executive_exclusive' ? 'Executive Exclusive' : pendingTeamInvite.role === 'business' ? 'Business' : 'Professional' }}.
+      </p>
     </div>
   </div>
+
+  <JoinTeamPopup
+    :open="joinTeamOpen"
+    :invite="pendingTeamInvite"
+    @close="onJoinTeamClose"
+    @done="onJoinTeamDone"
+  />
 </template>
