@@ -80,6 +80,11 @@ const isOwner = computed(() => {
   return !!(myId && theirId && myId === theirId)
 })
 
+const catalogShared = ref(false)
+const sharedFromName = ref('')
+const catalogOwnerId = ref('')
+const canEditCatalog = computed(() => isOwner.value && !catalogShared.value)
+
 const visibleItems = computed(() =>
   items.value.filter((x) => x && x.active !== false && String(x.name || '').trim())
 )
@@ -134,17 +139,23 @@ async function refresh() {
     ? publicProfile.value.catalogItems.map((x) => ({ ...x }))
     : []
   items.value = local
+  catalogShared.value = false
+  sharedFromName.value = ''
+  catalogOwnerId.value = ''
 
   const id = profileId.value
   if (id) {
-    setCatalogCartProfile(id)
     const res = await apiPublicCatalog(id)
     if (res.ok && Array.isArray(res.data?.catalogItems)) {
       items.value = res.data.catalogItems.map((x) => ({ ...x }))
+      catalogShared.value = !!res.data.shared
+      sharedFromName.value = String(res.data.sharedFromName || '').trim()
+      catalogOwnerId.value = String(res.data.catalogOwnerId || id).trim()
       if (res.data.ownerName) {
         publicProfile.value = { ...publicProfile.value, name: res.data.ownerName }
       }
     }
+    setCatalogCartProfile(catalogOwnerId.value || id)
   }
   refreshCatalogCart()
   loading.value = false
@@ -210,6 +221,10 @@ function upsertLocal() {
 }
 
 async function persist() {
+  if (!canEditCatalog.value) {
+    flash('This catalog is shared by your team owner')
+    return false
+  }
   saving.value = true
   try {
     const catalogItems = items.value.map((x) => ({
@@ -445,7 +460,7 @@ onUnmounted(() => {
           <div class="min-w-0">
             <h1 class="text-2xl font-bold tracking-tight">Catalog</h1>
             <p class="text-gray-400 text-sm mt-1">
-              {{ isOwner ? 'Products and services you offer.' : 'Products and services from ' + ownerName }}
+              {{ catalogShared ? ('Shared team catalog from ' + (sharedFromName || 'your team owner')) : canEditCatalog ? 'Products and services you offer.' : 'Products and services from ' + ownerName }}
             </p>
           </div>
           <div class="flex items-center gap-2 shrink-0">
@@ -465,7 +480,7 @@ onUnmounted(() => {
               </span>
             </button>
             <button
-              v-if="isOwner"
+              v-if="canEditCatalog"
               type="button"
               class="px-4 py-2 rounded-full bg-white text-black text-sm font-semibold hover:bg-gray-200 transition-colors"
               @click="openNew"
@@ -480,7 +495,17 @@ onUnmounted(() => {
 
       <template v-else>
         <div
-          v-if="!(isOwner ? items : visibleItems).length"
+          v-if="catalogShared && isOwner"
+          class="mb-4 rounded-2xl border border-sky-500/30 bg-sky-500/10 px-4 py-3"
+        >
+          <p class="text-sky-300 text-sm font-semibold">Team catalog shared</p>
+          <p class="text-sky-200/70 text-xs mt-0.5 leading-relaxed">
+            You are showing {{ sharedFromName || 'your team owner' }}’s catalog on your card.
+            Only the team owner can edit these offerings.
+          </p>
+        </div>
+        <div
+          v-if="!(canEditCatalog ? items : visibleItems).length"
           class="card-item-bg rounded-2xl px-4 py-10 text-center"
         >
           <span class="material-symbols-outlined text-gray-500 text-[32px]">inventory_2</span>
@@ -488,7 +513,7 @@ onUnmounted(() => {
             {{ ownerName }} has no products or services listed yet
           </p>
           <button
-            v-if="isOwner"
+            v-if="canEditCatalog"
             type="button"
             class="mt-4 px-4 py-2 rounded-full bg-white text-black text-sm font-semibold"
             @click="openNew"
@@ -499,7 +524,7 @@ onUnmounted(() => {
 
         <ul v-else class="space-y-3">
           <li
-            v-for="item in (isOwner ? items : visibleItems)"
+            v-for="item in (canEditCatalog ? items : visibleItems)"
             :key="item.id"
             class="card-item-bg rounded-2xl p-4"
           >
@@ -523,7 +548,7 @@ onUnmounted(() => {
                 <p class="text-xs text-gray-400 mt-1">
                   <span v-if="formatPrice(item.price)">{{ formatPrice(item.price) }}</span>
                   <span v-else class="text-gray-600">Ask for quote</span>
-                  <template v-if="isOwner">
+                  <template v-if="canEditCatalog">
                     <span class="mx-1.5 text-gray-700">·</span>
                     <span :class="item.active !== false ? 'text-emerald-400' : 'text-gray-500'">
                       {{ item.active !== false ? 'Live' : 'Hidden' }}
@@ -557,7 +582,7 @@ onUnmounted(() => {
                 </div>
               </div>
             </div>
-            <div v-if="isOwner" class="flex gap-2 mt-3">
+            <div v-if="canEditCatalog" class="flex gap-2 mt-3">
               <button
                 type="button"
                 class="flex-1 py-2 rounded-xl bg-zinc-800 text-sm font-medium hover:bg-zinc-700"
@@ -588,7 +613,7 @@ onUnmounted(() => {
 
       <!-- Owner edit modal -->
       <Teleport to="body">
-        <div v-if="editing && isOwner" class="app-dialog-overlay fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4">
+        <div v-if="editing && canEditCatalog" class="app-dialog-overlay fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4">
           <div class="absolute inset-0 bg-black/70" @click="closeForm" />
           <div class="relative w-full max-w-md card-item-bg rounded-3xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div class="flex items-center justify-between mb-3">

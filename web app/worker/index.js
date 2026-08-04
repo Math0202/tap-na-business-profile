@@ -1239,6 +1239,7 @@ function mapTeamRow(row) {
     id: row.id,
     name: row.name || '',
     ownerProfileId: row.owner_profile_id,
+    shareCatalog: row.share_catalog === true,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
@@ -1349,6 +1350,41 @@ async function enrichTeamMembers(env, members) {
         : String(m.invite_email || '')
     })
   })
+}
+
+/**
+ * If profileId is an active member of a team with share_catalog, return the owner's catalog.
+ * Owners always use their own catalog (not "shared").
+ */
+async function resolveSharedCatalogForProfile(env, profileId) {
+  const id = String(profileId || '').trim()
+  if (!id) return null
+  const memberships = await sb(
+    env,
+    `team_members?profile_id=eq.${encodeURIComponent(id)}&deleted=eq.false&status=eq.active&select=team_id&limit=20`
+  )
+  const teamIds = [...new Set((memberships || []).map((m) => m.team_id).filter(Boolean))]
+  if (!teamIds.length) return null
+  const teams = await sb(
+    env,
+    `teams?id=in.(${teamIds.map(encodeURIComponent).join(',')})&deleted=eq.false&share_catalog=eq.true&select=*`
+  )
+  const team = (teams || []).find((t) => t.owner_profile_id && t.owner_profile_id !== id) || null
+  if (!team) return null
+  const owners = await sb(
+    env,
+    `profiles?id=eq.${encodeURIComponent(team.owner_profile_id)}&select=id,name,company,catalog_items,disabled`
+  )
+  const owner = owners?.[0]
+  if (!owner || owner.disabled) return null
+  const items = normalizeCatalogItems(owner.catalog_items).filter((x) => x.active !== false)
+  return {
+    teamId: team.id,
+    teamName: team.name || 'Team',
+    catalogOwnerId: owner.id,
+    sharedFromName: String(owner.name || owner.company || 'Team owner').trim() || 'Team owner',
+    catalogItems: items
+  }
 }
 
 async function findPendingTeamInviteForCard(env, cardId, profileId = '') {
@@ -2565,15 +2601,26 @@ async function handleApi(request, env, url) {
     if (profile.card_type === 'table') return bad('Teams are for personal cards only', 403)
     const body = await readJson(request)
     const team = await getOrCreateOwnedTeam(env, profile)
-    if (team.owner_profile_id !== profile.id) return bad('Only the team owner can rename the team', 403)
-    const name = String(body?.name || '').trim().slice(0, 120)
-    if (!name) return bad('Team name is required')
+    if (team.owner_profile_id !== profile.id) return bad('Only the team owner can update the team', 403)
+
+    const patch = { updated_at: new Date().toISOString() }
+    if (body?.name !== undefined) {
+      const name = String(body.name || '').trim().slice(0, 120)
+      if (!name) return bad('Team name is required')
+      patch.name = name
+    }
+    if (body?.shareCatalog !== undefined || body?.share_catalog !== undefined) {
+      patch.share_catalog = !!(body.shareCatalog ?? body.share_catalog)
+    }
+    if (Object.keys(patch).length <= 1) return bad('No changes provided')
+
     await sb(env, `teams?id=eq.${encodeURIComponent(team.id)}`, {
       method: 'PATCH',
-      body: { name, updated_at: new Date().toISOString() },
+      body: patch,
       prefer: 'return=minimal'
     })
-    return json({ ok: true, team: { ...mapTeamRow(team), name } })
+    const rows = await sb(env, `teams?id=eq.${encodeURIComponent(team.id)}&select=*`)
+    return json({ ok: true, team: mapTeamRow(rows?.[0] || { ...team, ...patch }) })
   }
 
   if (pathname === '/api/me/team/members' && method === 'POST') {
@@ -4234,22 +4281,49 @@ async function handleApi(request, env, url) {
     const row = rows?.[0]
     if (!row) return bad('Profile not found', 404)
     if (row.disabled) return bad('This profile is disabled', 403)
+    const pageName = String(row.name || row.company || '').trim() || 'This person'
+    const shared = await resolveSharedCatalogForProfile(env, profileId)
+    if (shared) {
+      return json({
+        ok: true,
+        profileId: row.id,
+        catalogOwnerId: shared.catalogOwnerId,
+        shared: true,
+        sharedFromName: shared.sharedFromName,
+        teamName: shared.teamName,
+        ownerName: pageName,
+        catalogItems: shared.catalogItems
+      })
+    }
     const items = normalizeCatalogItems(row.catalog_items).filter((x) => x.active !== false)
-    const ownerName = String(row.name || row.company || '').trim() || 'This person'
-    return json({ ok: true, profileId: row.id, ownerName, catalogItems: items })
+    return json({
+      ok: true,
+      profileId: row.id,
+      catalogOwnerId: row.id,
+      shared: false,
+      ownerName: pageName,
+      catalogItems: items
+    })
   }
 
   const catalogCartSubmitMatch = pathname.match(/^\/api\/profiles\/([^/]+)\/catalog-cart$/)
   if (catalogCartSubmitMatch && method === 'POST') {
-    const profileId = decodeURIComponent(catalogCartSubmitMatch[1])
+    const pageProfileId = decodeURIComponent(catalogCartSubmitMatch[1])
     const body = await readJson(request)
+    const shared = await resolveSharedCatalogForProfile(env, pageProfileId)
+    const catalogOwnerId = shared?.catalogOwnerId || pageProfileId
     const rows = await sb(
       env,
-      `profiles?id=eq.${encodeURIComponent(profileId)}&select=id,name,company,email,login_email,disabled`
+      `profiles?id=eq.${encodeURIComponent(catalogOwnerId)}&select=id,name,company,email,login_email,disabled,catalog_items`
     )
     const owner = rows?.[0]
     if (!owner) return bad('Profile not found', 404)
     if (owner.disabled) return bad('This profile is disabled', 403)
+
+    // Validate cart items against the catalog actually shown (owner's when shared)
+    const catalogItems = shared
+      ? shared.catalogItems
+      : normalizeCatalogItems(owner.catalog_items).filter((x) => x.active !== false)
 
     const name = String(body?.name || '').trim().slice(0, 120)
     const email = String(body?.email || '').trim().toLowerCase().slice(0, 200)
@@ -4264,20 +4338,25 @@ async function handleApi(request, env, url) {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return bad('Valid email is required')
     if (!cartItems.length) return bad('Cart is empty')
 
+    const allowedIds = new Set(catalogItems.map((x) => x.id).filter(Boolean))
+    if (allowedIds.size && cartItems.some((l) => l.id && !String(l.id).startsWith('item_') && !allowedIds.has(l.id))) {
+      return bad('One or more cart items are not available', 400)
+    }
+
     const id = uid('pcart')
     const now = new Date().toISOString()
     await sb(env, 'profile_catalog_carts', {
       method: 'POST',
       body: {
         id,
-        profile_id: profileId,
+        profile_id: catalogOwnerId,
         visitor_name: name,
         visitor_email: email,
         visitor_phone: phone,
         items: cartItems,
         note,
         status,
-        source: 'catalog',
+        source: shared ? 'team_shared_catalog' : 'catalog',
         created_at: now,
         updated_at: now
       },

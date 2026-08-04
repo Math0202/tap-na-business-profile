@@ -20,12 +20,13 @@ import {
 import { downloadVcard, profileShareUrl, youtubeEmbedUrl, vcardPhotoLine } from '../lib/shareHelpers'
 import { preferredShareSlug } from '../lib/cardLinkStore'
 import { trackVisit, trackShare, trackClick, LOCAL_ID } from '../lib/adminStore'
-import { apiLogCardEvent } from '../lib/api'
+import { apiLogCardEvent, apiPublicCatalog } from '../lib/api'
 
 const route = useRoute()
 const router = useRouter()
 
 const profile = ref(loadPublicProfile())
+const sharedCatalogItems = ref(null)
 const shareOpen = ref(false)
 const videoOpen = ref(false)
 const bookOpen = ref(false)
@@ -44,7 +45,11 @@ const bookingProfileId = computed(
   () => String(profile.value.remoteProfileId || profile.value.id || '').trim()
 )
 const catalogItems = computed(() => {
-  const list = Array.isArray(profile.value.catalogItems) ? profile.value.catalogItems : []
+  const list = Array.isArray(sharedCatalogItems.value)
+    ? sharedCatalogItems.value
+    : Array.isArray(profile.value.catalogItems)
+      ? profile.value.catalogItems
+      : []
   return list.filter((item) => item && item.active !== false && String(item.name || '').trim())
 })
 function formatCatalogPrice(price) {
@@ -140,6 +145,21 @@ function refresh() {
   document.title = deleted.value
     ? 'Digital Business Card'
     : (profile.value.name + ' - Digital Business Card')
+  loadSharedCatalogPreview()
+}
+
+async function loadSharedCatalogPreview() {
+  sharedCatalogItems.value = null
+  const id = String(profile.value.remoteProfileId || profile.value.id || '').trim()
+  if (!id) return
+  try {
+    const res = await apiPublicCatalog(id)
+    if (res.ok && Array.isArray(res.data?.catalogItems)) {
+      sharedCatalogItems.value = res.data.catalogItems
+    }
+  } catch {
+    /* keep local catalogItems */
+  }
 }
 
 function openShare() {

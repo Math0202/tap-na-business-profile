@@ -35,6 +35,7 @@ const isOwner = ref(false)
 const pendingInvites = ref([])
 
 const teamName = ref('')
+const shareCatalog = ref(false)
 const addSlug = ref('')
 const addEmail = ref('')
 const addRole = ref(DEFAULT_PERSONAL_TYPE)
@@ -93,6 +94,7 @@ async function refresh() {
     isOwner.value = !!res.data.isOwner
     pendingInvites.value = res.data.pendingInvites || []
     teamName.value = team.value?.name || ''
+    shareCatalog.value = !!team.value?.shareCatalog
   } finally {
     loading.value = false
   }
@@ -109,13 +111,32 @@ async function saveTeamName() {
   if (!name || !isOwner.value) return
   saving.value = true
   try {
-    const res = await apiUpdateMyTeam({ name })
+    const res = await apiUpdateMyTeam({ name, shareCatalog: shareCatalog.value })
     if (!res.ok) {
       flash(res.error || 'Could not rename team')
       return
     }
     team.value = res.data.team
+    shareCatalog.value = !!res.data.team?.shareCatalog
     flash('Team name saved')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function saveShareCatalog() {
+  if (!isOwner.value) return
+  saving.value = true
+  try {
+    const res = await apiUpdateMyTeam({ shareCatalog: shareCatalog.value })
+    if (!res.ok) {
+      shareCatalog.value = !shareCatalog.value
+      flash(res.error || 'Could not update catalog sharing')
+      return
+    }
+    team.value = res.data.team
+    shareCatalog.value = !!res.data.team?.shareCatalog
+    flash(shareCatalog.value ? 'Catalog shared with your team' : 'Catalog sharing turned off')
   } finally {
     saving.value = false
   }
@@ -273,6 +294,30 @@ onMounted(() => {
           >
             Save name
           </button>
+          <label
+            v-if="isOwner"
+            class="flex items-start gap-3 pt-1 cursor-pointer"
+          >
+            <input
+              v-model="shareCatalog"
+              type="checkbox"
+              class="mt-1 rounded border-zinc-600"
+              :disabled="saving"
+              @change="saveShareCatalog"
+            >
+            <span class="min-w-0">
+              <span class="block text-sm font-semibold">Share my catalog with the team</span>
+              <span class="block text-xs text-gray-500 mt-0.5 leading-relaxed">
+                When on, active members show your catalog on their cards. Guests request quotes to you.
+              </span>
+            </span>
+          </label>
+          <p
+            v-else-if="shareCatalog"
+            class="text-xs text-sky-300/90 leading-relaxed"
+          >
+            Your team owner is sharing their catalog with members. It appears on your Catalog page.
+          </p>
           <p class="text-xs text-gray-500">
             Your role: <span class="text-gray-300">{{ personalTypeLabel(myRole) }}</span>
             <template v-if="isOwner"> · Owner</template>
