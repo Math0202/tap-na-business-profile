@@ -327,7 +327,7 @@ watch(() => route.path, () => {
               >
                 {{ company }}
               </p>
-              <div class="mt-2 flex items-center gap-2">
+              <div class="mt-2 flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
                   aria-label="Download QR code"
@@ -358,6 +358,14 @@ watch(() => route.path, () => {
                 >
                   <span class="material-symbols-outlined text-[18px]">person_add</span>
                 </button>
+                <RouterLink
+                  v-if="isLoggedIn()"
+                  to="/profile"
+                  class="inline-flex items-center gap-1 h-9 px-3 rounded-full bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold border border-zinc-700 no-underline text-white"
+                >
+                  <span class="material-symbols-outlined text-[16px]">edit</span>
+                  Edit profile
+                </RouterLink>
               </div>
             </div>
           </div>

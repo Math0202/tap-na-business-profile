@@ -11,7 +11,7 @@ import {
   loadProfile,
   isTableBusiness
 } from '../lib/profileStore'
-import { apiLogin, setApiToken } from '../lib/api'
+import { apiForgotPassword, apiLogin, setApiToken } from '../lib/api'
 import {
   isStaffLoggedIn,
   staffLogin
@@ -23,7 +23,9 @@ const router = useRouter()
 const identifier = ref('')
 const password = ref('')
 const error = ref('')
+const success = ref('')
 const submitting = ref(false)
+const resetMode = ref(false)
 
 function currentHome() {
   if (isStaffLoggedIn()) return staffHomePath()
@@ -38,6 +40,9 @@ onMounted(() => {
   document.title = 'Login - tap-na'
   if (typeof route.query.email === 'string' && route.query.email) {
     identifier.value = route.query.email
+  }
+  if (route.query.reset === '1') {
+    resetMode.value = true
   }
   if ((isLoggedIn() || isStaffLoggedIn()) && route.query.claimed !== '1') {
     router.replace(currentHome())
@@ -92,12 +97,31 @@ function applyProfileSession(p, passwordHash, token) {
 async function onSubmit(e) {
   e.preventDefault()
   error.value = ''
+  success.value = ''
   submitting.value = true
   try {
     const id = identifier.value.trim()
+    const next = typeof route.query.next === 'string' ? route.query.next : ''
+
+    if (resetMode.value) {
+      if (!id.includes('@')) {
+        error.value = 'Enter the email for your account.'
+        return
+      }
+      const res = await apiForgotPassword({ identifier: id, email: id })
+      if (!res.ok) {
+        error.value = res.error || 'Could not send reset email.'
+        return
+      }
+      success.value =
+        res.data?.message ||
+        'If an account exists for that email, we sent a temporary password. Log in, then change it from Edit profile.'
+      resetMode.value = false
+      return
+    }
+
     const pw = password.value
     const passwordHash = hashPassword(pw)
-    const next = typeof route.query.next === 'string' ? route.query.next : ''
 
     // 1) Card owner (personal / business)
     const remote = await apiLogin({ identifier: id, passwordHash })
@@ -138,26 +162,44 @@ async function onSubmit(e) {
     submitting.value = false
   }
 }
+
+function openReset() {
+  error.value = ''
+  success.value = ''
+  resetMode.value = true
+}
+
+function cancelReset() {
+  error.value = ''
+  success.value = ''
+  resetMode.value = false
+}
 </script>
 
 <template>
   <main class="w-full max-w-md min-h-screen mx-auto flex flex-col relative z-10 px-6 pt-16 pb-28">
     <BrandMark size="sm" class="mb-4" />
-    <h1 class="text-2xl font-bold tracking-tight">Login</h1>
+    <h1 class="text-2xl font-bold tracking-tight">{{ resetMode ? 'Reset password' : 'Login' }}</h1>
     <p class="text-gray-400 text-sm mt-1 mb-6">
-      {{ route.query.claimed === '1'
-        ? 'Your card is claimed. Log in to finish setting up your profile.'
-        : 'Sign in to your card, business dashboard, or staff account.' }}
+      <template v-if="resetMode">
+        Enter your account email. We’ll send a temporary password so you can log in and change it in Edit profile.
+      </template>
+      <template v-else-if="route.query.claimed === '1'">
+        Your card is claimed. Log in to finish setting up your profile.
+      </template>
+      <template v-else>
+        Sign in to your card, business dashboard, or staff account.
+      </template>
     </p>
 
-    <div v-if="route.query.claimed === '1'" class="card-item-bg rounded-2xl p-4 mb-6 text-sm text-gray-300">
+    <div v-if="route.query.claimed === '1' && !resetMode" class="card-item-bg rounded-2xl p-4 mb-6 text-sm text-gray-300">
       Card claimed successfully. Sign in with the email and password you just created to edit your profile.
     </div>
 
     <form class="space-y-4" @submit="onSubmit">
       <div>
         <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5" for="login-id">
-          Email or phone
+          {{ resetMode ? 'Email' : 'Email or phone' }}
         </label>
         <div class="field-shell">
           <span class="material-symbols-outlined text-gray-400 text-[20px]">person</span>
@@ -166,13 +208,13 @@ async function onSubmit(e) {
             v-model="identifier"
             type="text"
             class="field-input"
-            placeholder="you@example.com"
+            :placeholder="resetMode ? 'you@example.com' : 'you@example.com'"
             autocomplete="username"
             required
           />
         </div>
       </div>
-      <div>
+      <div v-if="!resetMode">
         <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5" for="login-password">
           Password
         </label>
@@ -188,15 +230,37 @@ async function onSubmit(e) {
           />
         </div>
       </div>
-      <p class="text-xs text-red-400 min-h-[1rem]">{{ error }}</p>
+      <p v-if="error" class="text-xs text-red-400 min-h-[1rem]">{{ error }}</p>
+      <p v-else-if="success" class="text-xs text-emerald-400 min-h-[1rem]">{{ success }}</p>
+      <p v-else class="text-xs min-h-[1rem]" />
       <button
         type="submit"
         class="w-full py-4 rounded-full bg-white text-black font-bold text-base hover:bg-gray-200 transition-colors disabled:opacity-50"
         :disabled="submitting"
       >
-        {{ submitting ? 'Signing in…' : 'Login' }}
+        <template v-if="resetMode">{{ submitting ? 'Sending…' : 'Send temporary password' }}</template>
+        <template v-else>{{ submitting ? 'Signing in…' : 'Login' }}</template>
       </button>
     </form>
+
+    <div class="mt-4 text-center">
+      <button
+        v-if="!resetMode"
+        type="button"
+        class="text-sm text-gray-400 hover:text-white underline underline-offset-2"
+        @click="openReset"
+      >
+        Reset password
+      </button>
+      <button
+        v-else
+        type="button"
+        class="text-sm text-gray-400 hover:text-white underline underline-offset-2"
+        @click="cancelReset"
+      >
+        Back to login
+      </button>
+    </div>
 
     <div class="mt-8 card-item-bg rounded-2xl p-4 space-y-3">
       <p class="text-sm font-semibold">New here?</p>

@@ -75,7 +75,13 @@ const navItems = computed(() => {
     }
   ]
   if (loggedIn.value) {
-    items.splice(2, 0, {
+    items.splice(1, 0, {
+      to: '/profile',
+      label: 'Edit',
+      icon: 'edit',
+      match: (p) => p === '/profile'
+    })
+    items.splice(3, 0, {
       to: '/team',
       label: 'Team',
       icon: 'groups',
@@ -83,7 +89,7 @@ const navItems = computed(() => {
     })
   }
   if (showCartNav.value) {
-    const cartIndex = loggedIn.value ? 3 : 2
+    const cartIndex = loggedIn.value ? 4 : 2
     items.splice(cartIndex, 0, {
       to: '/catalog-cart',
       label: 'Cart',

@@ -386,6 +386,14 @@ onUnmounted(() => {
           </div>
           <RouterLink
             v-if="isLoggedIn()"
+            to="/profile"
+            class="inline-flex items-center gap-1.5 mt-3 mr-3 text-xs font-semibold text-gray-400 hover:text-white no-underline"
+          >
+            <span class="material-symbols-outlined text-[16px]">edit</span>
+            Edit profile
+          </RouterLink>
+          <RouterLink
+            v-if="isLoggedIn()"
             to="/venue"
             class="inline-flex items-center gap-1.5 mt-3 text-xs font-semibold text-gray-400 hover:text-white no-underline"
           >

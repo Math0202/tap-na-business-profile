@@ -1762,6 +1762,62 @@ async function sendLoginAlertEmail(env, { email, name }) {
   })
 }
 
+/** Must match web app/src/lib/profileStore.js hashPassword */
+function hashPassword(password) {
+  let str = 'tapna|' + String(password || '')
+  let hash = 2166136261
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return ('00000000' + (hash >>> 0).toString(16)).slice(-8)
+}
+
+function generateTempPassword(length = 10) {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
+  const bytes = new Uint8Array(length)
+  crypto.getRandomValues(bytes)
+  let out = ''
+  for (let i = 0; i < length; i++) out += alphabet[bytes[i] % alphabet.length]
+  return out
+}
+
+async function sendPasswordResetEmail(env, { email, name, password }) {
+  const display = String(name || '').trim() || 'there'
+  const loginEmail = String(email || '').trim().toLowerCase()
+  const loginUrl = `https://tapnam.com/login?email=${encodeURIComponent(loginEmail)}`
+  const html = transactionalShell({
+    title: 'Password reset',
+    intro: `Hi ${display}, use this temporary password to sign in, then change it in Edit profile.`,
+    bodyHtml: `
+      <p style="margin:0 0 12px;">Your previous password cannot be emailed (it is not stored in plain text). A temporary password is set for your account:</p>
+      <p style="margin:0 0 8px;"><strong>Login email:</strong> ${escapeHtml(loginEmail)}</p>
+      <p style="margin:0 0 16px;"><strong>Temporary password:</strong> ${escapeHtml(String(password || ''))}</p>
+      <p style="margin:0 0 12px;"><strong>Login:</strong> <a href="${loginUrl}">${escapeHtml(loginUrl)}</a></p>
+      <p style="margin:0;">After you log in, open <strong>Edit profile</strong> → <strong>Change password</strong> to set a new password.</p>`,
+    footerNote: 'If you did not request this, sign in with the temporary password and change it immediately.'
+  })
+  const text = [
+    'tap-na password reset',
+    '',
+    `Hi ${display},`,
+    'Your previous password cannot be emailed. A temporary password is set for your account:',
+    '',
+    `Login email: ${loginEmail}`,
+    `Temporary password: ${password || ''}`,
+    '',
+    `Login: ${loginUrl}`,
+    '',
+    'After you log in, open Edit profile → Change password to set a new password.'
+  ].join('\n')
+  return sendCloudflareEmail(env, {
+    to: loginEmail,
+    subject: 'tap-na password reset',
+    html,
+    text
+  })
+}
+
 async function sendSalesAgentCredentialsEmail(env, { email, name, password }) {
   const display = String(name || '').trim() || 'there'
   const loginEmail = String(email || '').trim().toLowerCase()
@@ -2914,6 +2970,46 @@ async function handleApi(request, env, url) {
       }))
     }
     return json({ ok: true, token, profile: await publicProfile(env, profile) })
+  }
+
+  if (pathname === '/api/auth/forgot-password' && method === 'POST') {
+    const body = await readJson(request)
+    const id = String(body?.identifier || body?.email || '').trim()
+    const idLower = id.toLowerCase()
+    // Always return the same message to avoid account enumeration.
+    const okMsg =
+      'If an account exists for that email, we sent a temporary password. Log in, then change your password from Edit profile.'
+    if (!id || !id.includes('@')) {
+      return json({ ok: true, message: okMsg })
+    }
+    let profiles = await sb(
+      env,
+      `profiles?or=(login_email.ilike.${encodeURIComponent(idLower)},email.ilike.${encodeURIComponent(idLower)})&select=*&limit=1`
+    )
+    const profile = profiles?.[0]
+    const loginEmail = String(profile?.login_email || profile?.email || '').trim().toLowerCase()
+    if (profile && loginEmail.includes('@')) {
+      const tempPassword = generateTempPassword()
+      const passwordHash = hashPassword(tempPassword)
+      await sb(env, `profiles?id=eq.${encodeURIComponent(profile.id)}`, {
+        method: 'PATCH',
+        body: { password_hash: passwordHash },
+        prefer: 'return=minimal'
+      })
+      sendPasswordResetEmail(env, {
+        email: loginEmail,
+        name: profile.name || '',
+        password: tempPassword
+      }).catch((err) => logAppError(env, {
+        source: 'email',
+        message: err?.message || String(err),
+        stack: err?.stack || '',
+        path: pathname,
+        method,
+        context: { kind: 'password_reset_email' }
+      }))
+    }
+    return json({ ok: true, message: okMsg })
   }
 
   if (pathname === '/api/shop/products' && method === 'GET') {

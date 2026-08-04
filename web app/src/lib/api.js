@@ -216,6 +216,10 @@ export async function apiLogin(payload) {
   return res
 }
 
+export function apiForgotPassword(payload) {
+  return request('/api/auth/forgot-password', { method: 'POST', body: payload })
+}
+
 export function apiGetMe() {
   return request('/api/me')
 }
