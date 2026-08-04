@@ -65,6 +65,7 @@ const checkinForm = ref(normalizeCheckinForm(DEFAULT_CHECKIN_FORM))
 const feedbackForm = ref(normalizeFeedbackForm(DEFAULT_FEEDBACK_FORM))
 const checkinEventsText = ref('')
 const whatsapp = ref('')
+const usePhoneAsWhatsapp = ref(false)
 const linkedin = ref('')
 const youtube = ref('')
 const x = ref('')
@@ -150,6 +151,7 @@ function fillForm(profile) {
     feedbackForm.value = normalizeFeedbackForm(DEFAULT_FEEDBACK_FORM)
     checkinEventsText.value = ''
     whatsapp.value = ''
+    usePhoneAsWhatsapp.value = false
     linkedin.value = ''
     youtube.value = ''
     x.value = ''
@@ -187,6 +189,7 @@ function fillForm(profile) {
     feedbackForm.value = normalizeFeedbackForm(profile.feedbackForm)
     checkinEventsText.value = (checkinForm.value.events || []).join('\n')
     whatsapp.value = profile.whatsapp || ''
+    usePhoneAsWhatsapp.value = phonesMatch(profile.phone, profile.whatsapp)
     linkedin.value = profile.linkedin || ''
     youtube.value = profile.youtube || ''
     x.value = profile.x || ''
@@ -352,6 +355,30 @@ function removeVideo() {
   videoFeedback.value = 'Video removed. Save profile to apply.'
   videoFeedbackClass.value = 'text-xs text-gray-500 min-h-[1rem]'
 }
+
+function phoneDigits(value) {
+  return String(value || '').replace(/[^\d]/g, '')
+}
+
+function phonesMatch(a, b) {
+  const da = phoneDigits(a)
+  const db = phoneDigits(b)
+  return !!(da && db && da === db)
+}
+
+function syncWhatsappFromPhone() {
+  if (!usePhoneAsWhatsapp.value) return
+  whatsapp.value = phone.value.trim()
+}
+
+function onUsePhoneAsWhatsapp(checked) {
+  usePhoneAsWhatsapp.value = !!checked
+  if (usePhoneAsWhatsapp.value) syncWhatsappFromPhone()
+}
+
+watch(phone, () => {
+  if (usePhoneAsWhatsapp.value) syncWhatsappFromPhone()
+})
 
 function testSocial(network) {
   const map = { whatsapp, linkedin, youtube, x, instagram, tiktok, website }
@@ -555,7 +582,7 @@ async function onSave(e) {
     return
   }
   const socials = normalizeSocialFields({
-    whatsapp: whatsapp.value.trim(),
+    whatsapp: (usePhoneAsWhatsapp.value ? phone.value : whatsapp.value).trim(),
     linkedin: linkedin.value.trim(),
     youtube: youtube.value.trim(),
     x: x.value.trim(),
@@ -564,6 +591,7 @@ async function onSave(e) {
     website: website.value.trim()
   })
   whatsapp.value = socials.whatsapp || ''
+  if (usePhoneAsWhatsapp.value) usePhoneAsWhatsapp.value = phonesMatch(phone.value, whatsapp.value)
   linkedin.value = socials.linkedin || ''
   youtube.value = socials.youtube || ''
   x.value = socials.x || ''
@@ -1043,9 +1071,24 @@ onMounted(() => {
           <label class="field-label">WhatsApp</label>
           <div class="social-row">
             <div class="social-icon"><span class="material-symbols-outlined text-[20px]">chat</span></div>
-            <input v-model="whatsapp" type="text" class="field-input" placeholder="+264 81 000 0000" />
+            <input
+              v-model="whatsapp"
+              type="text"
+              class="field-input"
+              placeholder="+264 81 000 0000"
+              :disabled="usePhoneAsWhatsapp"
+            />
             <button type="button" class="social-test-btn" @click="testSocial('whatsapp')">Visit</button>
           </div>
+          <label class="mt-2 flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+            <input
+              type="checkbox"
+              class="rounded border-zinc-600"
+              :checked="usePhoneAsWhatsapp"
+              @change="onUsePhoneAsWhatsapp($event.target.checked)"
+            />
+            Use my phone number for WhatsApp
+          </label>
         </div>
         <template v-if="!isTable">
           <div class="field-group">
