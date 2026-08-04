@@ -9,6 +9,7 @@ import {
   cardPublicUrl,
   cardQrUrl,
   kindIcon,
+  cardImageSrc,
   CARD_KINDS,
   unlinkCard,
   deleteCard,
@@ -151,6 +152,7 @@ async function refresh() {
     serial: c.slug,
     kind: c.kind,
     personalType: c.personalType || local[c.slug]?.personalType || '',
+    productId: c.productId || local[c.slug]?.productId || '',
     profileId: c.profileId || '',
     profileName: c.profileName || local[c.slug]?.profileName || '',
     productName: local[c.slug]?.productName || kindLabel(c.kind),
@@ -558,6 +560,11 @@ watch(filteredSlugs, (rows) => {
             >
               <span class="material-symbols-outlined text-[16px]">check</span>
             </button>
+            <img
+              :src="cardImageSrc(c)"
+              :alt="kindLabel(c.kind)"
+              class="w-14 h-14 rounded-lg object-contain bg-zinc-900/80 p-1 shrink-0 border border-zinc-700"
+            >
             <img
               v-if="slugQrMap[c.serial]"
               :src="slugQrMap[c.serial]"

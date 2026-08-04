@@ -59,7 +59,8 @@ import {
   cardQrUrl,
   kindLabel,
   kindIcon,
-  kindFromProductId
+  kindFromProductId,
+  cardImageSrc
 } from '../lib/cardLinkStore'
 import { apiProvisionCards } from '../lib/api'
 import { LOCAL_ID } from '../lib/adminStore'
@@ -997,7 +998,12 @@ async function undeleteProduct(id) {
 }
 
 function productThumbFor(productId) {
-  return resolveProductImage(productId).src || resolveProductImage(productId).absolute || ''
+  return (
+    resolveProductImage(productId).src ||
+    resolveProductImage(productId).absolute ||
+    cardImageSrc(productId || '') ||
+    ''
+  )
 }
 
 async function downloadActiveInvoicePdf() {
@@ -1436,7 +1442,14 @@ onMounted(async () => {
               class="card-item-bg rounded-2xl p-4"
             >
               <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0">
+                <div class="flex items-start gap-3 min-w-0">
+                  <img
+                    v-if="productThumbFor(s.productId || s.lines?.[0]?.productId)"
+                    :src="productThumbFor(s.productId || s.lines?.[0]?.productId)"
+                    alt=""
+                    class="w-12 h-12 rounded-lg object-contain bg-zinc-900/80 p-0.5 shrink-0 border border-zinc-700"
+                  >
+                  <div class="min-w-0">
                   <div class="flex items-center gap-2 flex-wrap">
                     <p class="text-sm font-semibold truncate">{{ s.customerName }}</p>
                     <span
@@ -1453,6 +1466,7 @@ onMounted(async () => {
                   <p class="text-[11px] text-gray-500 mt-1">
                     {{ formatMoney(s.amount) }} · commission {{ formatMoney(s.commission) }} · {{ formatDate(s.soldAt) }}
                   </p>
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -1601,7 +1615,14 @@ onMounted(async () => {
         <ul v-if="salesListMode === 'orders'" class="space-y-2">
           <li v-for="s in filteredSales" :key="s.id" class="card-item-bg rounded-2xl p-4">
             <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
+              <div class="flex items-start gap-3 min-w-0">
+                <img
+                  v-if="productThumbFor(s.productId || s.lines?.[0]?.productId)"
+                  :src="productThumbFor(s.productId || s.lines?.[0]?.productId)"
+                  alt=""
+                  class="w-12 h-12 rounded-lg object-contain bg-zinc-900/80 p-0.5 shrink-0 border border-zinc-700"
+                >
+                <div class="min-w-0">
                 <div class="flex items-center gap-2 flex-wrap">
                   <p class="text-sm font-semibold truncate">{{ s.customerName }}</p>
                   <span class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full" :class="statusClass(s.status)">
@@ -1614,6 +1635,7 @@ onMounted(async () => {
                 <p class="text-[11px] text-gray-500 mt-1">
                   {{ formatMoney(s.amount) }} · commission {{ formatMoney(s.commission) }} · {{ formatDate(s.soldAt) }}
                 </p>
+                </div>
               </div>
               <div class="flex flex-col gap-1 shrink-0 text-right">
                 <button type="button" class="text-xs font-semibold text-emerald-300 hover:text-emerald-200" @click="openCardsForSale(s)">Cards</button>
@@ -1630,7 +1652,14 @@ onMounted(async () => {
         <ul v-if="salesListMode === 'quotes'" class="space-y-2">
           <li v-for="q in filteredQuotes" :key="q.id" class="card-item-bg rounded-2xl p-4">
             <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
+              <div class="flex items-start gap-3 min-w-0">
+                <img
+                  v-if="productThumbFor(q.productId || q.lines?.[0]?.productId)"
+                  :src="productThumbFor(q.productId || q.lines?.[0]?.productId)"
+                  alt=""
+                  class="w-12 h-12 rounded-lg object-contain bg-zinc-900/80 p-0.5 shrink-0 border border-zinc-700"
+                >
+                <div class="min-w-0">
                 <div class="flex items-center gap-2 flex-wrap">
                   <p class="text-sm font-semibold truncate">{{ q.quoteNumber }}</p>
                   <span class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full" :class="statusClass(q.status)">
@@ -1643,6 +1672,7 @@ onMounted(async () => {
                 <p class="text-[11px] text-gray-500 mt-1">
                   {{ formatMoney(q.amount) }} · {{ agentName(q.agentId) }} · valid {{ formatDay(q.validUntil) }}
                 </p>
+                </div>
               </div>
               <div class="flex flex-col gap-1 shrink-0 text-right">
                 <button
@@ -2359,6 +2389,11 @@ onMounted(async () => {
         <ul v-if="saleCards.length" class="space-y-3">
           <li v-for="c in saleCards" :key="c.serial" class="rounded-2xl border border-[var(--border)] p-3 flex gap-3">
             <img
+              :src="cardImageSrc(c)"
+              :alt="kindLabel(c.kind)"
+              class="w-16 h-16 rounded-lg object-contain bg-zinc-900/80 p-1 shrink-0 border border-zinc-700"
+            >
+            <img
               v-if="cardQrMap[c.serial]"
               :src="cardQrMap[c.serial]"
               :alt="c.serial"
@@ -2366,7 +2401,6 @@ onMounted(async () => {
             >
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2 flex-wrap">
-                <span class="material-symbols-outlined text-[16px] text-gray-400">{{ kindIcon(c.kind) }}</span>
                 <p class="text-sm font-semibold">{{ kindLabel(c.kind) }}</p>
                 <span
                   class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"

@@ -27,6 +27,39 @@ const PRODUCT_TO_KIND = {
   other: 'table'
 }
 
+/** Physical card artwork by product / kind */
+export const CARD_IMAGES = {
+  blue: '/images/blue-card.png',
+  black: '/images/black-card.png',
+  'table-info': '/images/table/NFC%20business%20info%20card.png',
+  'table-menu': '/images/table/NFC%20-%20Menu.png',
+  'table-review': '/images/table/NFC%20business%20review%20card.png',
+  'table-wifi': '/images/table/NFC%20wifi%20and%20conact%20card.png',
+  'table-custom': '/images/table/NFC%20custom%20menu%20card.png',
+  personal: '/images/blue-card.png',
+  table: '/images/table/NFC%20business%20info%20card.png'
+}
+
+/**
+ * Resolve the NFC card product image for lists.
+ * Accepts a card object, productId string, or { kind, productId, personalType }.
+ */
+export function cardImageSrc(cardOrOpts = {}) {
+  if (typeof cardOrOpts === 'string') {
+    if (CARD_IMAGES[cardOrOpts]) return CARD_IMAGES[cardOrOpts]
+    return cardOrOpts === 'personal' ? CARD_IMAGES.personal : CARD_IMAGES.table
+  }
+  const productId = String(cardOrOpts?.productId || cardOrOpts?.product_id || '').trim()
+  if (productId && CARD_IMAGES[productId]) return CARD_IMAGES[productId]
+  const kind = normalizeKind(cardOrOpts?.kind || kindFromProductId(productId))
+  if (kind === 'personal') {
+    const pt = String(cardOrOpts?.personalType || cardOrOpts?.personal_type || '').toLowerCase()
+    if (pt.includes('executive')) return CARD_IMAGES.black
+    return CARD_IMAGES.blue
+  }
+  return CARD_IMAGES.table
+}
+
 /** Map legacy kinds (info/menu/review/…) onto personal | table. */
 export function normalizeKind(kind) {
   return kind === 'personal' ? 'personal' : 'table'

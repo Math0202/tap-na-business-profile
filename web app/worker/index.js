@@ -3668,7 +3668,7 @@ async function handleApi(request, env, url) {
     if (gate.error) return gate.error
     const [profiles, cards] = await Promise.all([
       sb(env, 'profiles?deleted=eq.false&select=id,card_type,name,title,company,email,phone,address,avatar,logo,disabled,created_at,updated_at&order=created_at.desc&limit=500'),
-      sb(env, 'cards?select=slug,kind,status,profile_id,linked_at,created_at,deleted,deleted_at,deleted_by&order=created_at.desc&limit=2000')
+      sb(env, 'cards?select=slug,kind,personal_type,product_id,status,profile_id,linked_at,created_at,deleted,deleted_at,deleted_by&order=created_at.desc&limit=2000')
     ])
     const cardsByProfile = {}
     for (const c of cards || []) {
@@ -3697,6 +3697,11 @@ async function handleApi(request, env, url) {
         slugs: (cardsByProfile[p.id] || []).map((c) => ({
           slug: c.slug,
           kind: c.kind === 'personal' ? 'personal' : 'table',
+          personalType:
+            c.kind === 'personal'
+              ? normalizePersonalType(c.personal_type || 'business')
+              : '',
+          productId: c.product_id || '',
           status: c.status
         }))
       })),
@@ -3707,6 +3712,7 @@ async function handleApi(request, env, url) {
           c.kind === 'personal'
             ? normalizePersonalType(c.personal_type || 'business')
             : '',
+        productId: c.product_id || '',
         status: c.status,
         profileId: c.profile_id || '',
         profileName: c.profile_id ? nameByProfile[c.profile_id] || '' : '',
@@ -3730,7 +3736,7 @@ async function handleApi(request, env, url) {
     if (!profile) return bad('Profile not found', 404)
     const cards = await sb(
       env,
-      `cards?profile_id=eq.${encodeURIComponent(profileId)}&select=id,slug,kind,status`
+      `cards?profile_id=eq.${encodeURIComponent(profileId)}&select=id,slug,kind,personal_type,product_id,status`
     )
     const slugs = (cards || []).map((c) => c.slug).filter(Boolean)
     let opens = []
@@ -3777,7 +3783,16 @@ async function handleApi(request, env, url) {
         email: profile.email || '',
         avatar: profile.avatar || '',
         logo: profile.logo || '',
-        slugs: (cards || []).map((c) => ({ slug: c.slug, kind: c.kind, status: c.status }))
+        slugs: (cards || []).map((c) => ({
+          slug: c.slug,
+          kind: c.kind === 'personal' ? 'personal' : 'table',
+          personalType:
+            c.kind === 'personal'
+              ? normalizePersonalType(c.personal_type || 'business')
+              : '',
+          productId: c.product_id || '',
+          status: c.status
+        }))
       },
       stats: {
         total: activities.length,
@@ -3805,7 +3820,7 @@ async function handleApi(request, env, url) {
     if (!profile) return bad('Profile not found', 404)
     const cards = await sb(
       env,
-      `cards?profile_id=eq.${encodeURIComponent(profileId)}&select=slug,kind,status,linked_at&order=slug.asc`
+      `cards?profile_id=eq.${encodeURIComponent(profileId)}&select=slug,kind,personal_type,product_id,status,linked_at&order=slug.asc`
     )
     const pub = await publicProfile(env, profile)
     return json({
@@ -3819,6 +3834,11 @@ async function handleApi(request, env, url) {
         slugs: (cards || []).map((c) => ({
           slug: c.slug,
           kind: c.kind === 'personal' ? 'personal' : 'table',
+          personalType:
+            c.kind === 'personal'
+              ? normalizePersonalType(c.personal_type || 'business')
+              : '',
+          productId: c.product_id || '',
           status: c.status,
           linkedAt: c.linked_at || null
         }))
@@ -3891,7 +3911,7 @@ async function handleApi(request, env, url) {
     const next = nextRows?.[0]
     const cards = await sb(
       env,
-      `cards?profile_id=eq.${encodeURIComponent(profileId)}&select=slug,kind,status,linked_at&order=slug.asc`
+      `cards?profile_id=eq.${encodeURIComponent(profileId)}&select=slug,kind,personal_type,product_id,status,linked_at&order=slug.asc`
     )
     const pub = await publicProfile(env, next)
     return json({
@@ -3905,6 +3925,11 @@ async function handleApi(request, env, url) {
         slugs: (cards || []).map((c) => ({
           slug: c.slug,
           kind: c.kind === 'personal' ? 'personal' : 'table',
+          personalType:
+            c.kind === 'personal'
+              ? normalizePersonalType(c.personal_type || 'business')
+              : '',
+          productId: c.product_id || '',
           status: c.status,
           linkedAt: c.linked_at || null
         }))

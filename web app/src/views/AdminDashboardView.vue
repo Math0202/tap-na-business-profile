@@ -16,6 +16,7 @@ import {
   apiRestoreSalesCash,
   apiRestoreSalesProduct
 } from '../lib/api'
+import { cardImageSrc } from '../lib/cardLinkStore'
 
 const route = useRoute()
 const router = useRouter()
@@ -239,6 +240,12 @@ function profileThumb(p) {
   return (p.cardType === 'table' ? p.logo : p.avatar) || p.avatar || p.logo || ''
 }
 
+function profileCardImage(p) {
+  const slug = p?.slugs?.[0]
+  if (slug) return cardImageSrc(slug)
+  return cardImageSrc({ kind: p?.cardType === 'table' ? 'table' : 'personal' })
+}
+
 function initials(p) {
   const label = profileLabel(p)
   return label
@@ -422,6 +429,12 @@ onMounted(() => {
             >
               {{ initials(p) }}
             </div>
+
+            <img
+              :src="profileCardImage(p)"
+              alt=""
+              class="w-full max-w-[88px] h-12 object-contain"
+            >
 
             <div class="min-w-0 w-full">
               <p class="font-semibold text-xs lg:text-sm leading-tight line-clamp-2 text-[var(--text)]">{{ profileLabel(p) }}</p>

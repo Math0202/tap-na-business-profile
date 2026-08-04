@@ -13,7 +13,8 @@ import {
 import {
   cardPublicUrl,
   kindLabel,
-  kindIcon
+  kindIcon,
+  cardImageSrc
 } from '../lib/cardLinkStore'
 import {
   apiAdminGetProfile,
@@ -121,6 +122,8 @@ function applyProfile(p) {
   linkedCards.value = (p.slugs || []).map((s) => ({
     serial: s.slug,
     kind: s.kind === 'personal' ? 'personal' : 'table',
+    personalType: s.personalType || '',
+    productId: s.productId || '',
     status: s.status || 'linked'
   }))
   form.value = {
@@ -381,9 +384,11 @@ onMounted(load)
               :key="c.serial"
               class="card-item-bg rounded-2xl p-4 flex items-center gap-3"
             >
-              <div class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center shrink-0">
-                <span class="material-symbols-outlined text-[20px]">{{ kindIcon(c.kind) }}</span>
-              </div>
+              <img
+                :src="cardImageSrc(c)"
+                :alt="kindLabel(c.kind)"
+                class="w-14 h-14 rounded-lg object-contain bg-zinc-900/80 p-1 shrink-0 border border-zinc-700"
+              >
               <div class="min-w-0 flex-1">
                 <p class="text-sm font-mono font-semibold">{{ c.serial }}</p>
                 <p class="text-[11px] text-gray-500 mt-0.5">{{ kindLabel(c.kind) }}</p>
