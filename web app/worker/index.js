@@ -4311,19 +4311,19 @@ async function handleApi(request, env, url) {
     const pageProfileId = decodeURIComponent(catalogCartSubmitMatch[1])
     const body = await readJson(request)
     const shared = await resolveSharedCatalogForProfile(env, pageProfileId)
-    const catalogOwnerId = shared?.catalogOwnerId || pageProfileId
-    const rows = await sb(
-      env,
-      `profiles?id=eq.${encodeURIComponent(catalogOwnerId)}&select=id,name,company,email,login_email,disabled,catalog_items`
-    )
-    const owner = rows?.[0]
-    if (!owner) return bad('Profile not found', 404)
-    if (owner.disabled) return bad('This profile is disabled', 403)
 
-    // Validate cart items against the catalog actually shown (owner's when shared)
+    // Quotes always go to the scanned card's profile (team member), not the catalog owner.
+    const pageRows = await sb(
+      env,
+      `profiles?id=eq.${encodeURIComponent(pageProfileId)}&select=id,name,company,email,login_email,disabled,catalog_items`
+    )
+    const recipient = pageRows?.[0]
+    if (!recipient) return bad('Profile not found', 404)
+    if (recipient.disabled) return bad('This profile is disabled', 403)
+
     const catalogItems = shared
       ? shared.catalogItems
-      : normalizeCatalogItems(owner.catalog_items).filter((x) => x.active !== false)
+      : normalizeCatalogItems(recipient.catalog_items).filter((x) => x.active !== false)
 
     const name = String(body?.name || '').trim().slice(0, 120)
     const email = String(body?.email || '').trim().toLowerCase().slice(0, 200)
@@ -4349,7 +4349,7 @@ async function handleApi(request, env, url) {
       method: 'POST',
       body: {
         id,
-        profile_id: catalogOwnerId,
+        profile_id: pageProfileId,
         visitor_name: name,
         visitor_email: email,
         visitor_phone: phone,
@@ -4363,8 +4363,9 @@ async function handleApi(request, env, url) {
       prefer: 'return=minimal'
     })
 
-    const ownerName = String(owner.name || owner.company || 'tap-na host').trim() || 'tap-na host'
-    const ownerEmail = String(owner.login_email || owner.email || '')
+    const recipientName =
+      String(recipient.name || recipient.company || 'tap-na host').trim() || 'tap-na host'
+    const recipientEmail = String(recipient.login_email || recipient.email || '')
       .trim()
       .toLowerCase()
     const money = (n) =>
@@ -4395,14 +4396,14 @@ async function handleApi(request, env, url) {
       sends.push(
         sendCloudflareEmail(env, {
           to: email,
-          replyTo: ownerEmail.includes('@') ? ownerEmail : undefined,
+          replyTo: recipientEmail.includes('@') ? recipientEmail : undefined,
           subject:
             status === 'meeting_booked'
-              ? `Your interest with ${ownerName}`
-              : `Your quote request for ${ownerName}`,
+              ? `Your interest with ${recipientName}`
+              : `Your quote request for ${recipientName}`,
           html: transactionalShell({
             title: status === 'meeting_booked' ? 'Interest received' : 'Quote request sent',
-            intro: `Hi ${name}, ${ownerName} has received your catalog request.`,
+            intro: `Hi ${name}, ${recipientName} has received your catalog request.`,
             bodyHtml: `
               <table style="width:100%;border-collapse:collapse;font-size:14px;margin:0 0 12px;">${linesHtml}</table>
               <p style="margin:0 0 8px;"><strong>Estimated total:</strong> ${escapeHtml(money(subtotal || null))}</p>
@@ -4411,7 +4412,7 @@ async function handleApi(request, env, url) {
             footerNote: 'Sent via tap-na catalog.'
           }),
           text: [
-            `Request for ${ownerName}`,
+            `Request for ${recipientName}`,
             linesText,
             `Estimated total: ${money(subtotal || null)}`,
             note ? `Note: ${note}` : ''
@@ -4420,15 +4421,15 @@ async function handleApi(request, env, url) {
             .join('\n')
         })
       )
-      if (ownerEmail.includes('@')) {
+      if (recipientEmail.includes('@')) {
         sends.push(
           sendCloudflareEmail(env, {
-            to: ownerEmail,
+            to: recipientEmail,
             replyTo: email,
             subject,
             html: transactionalShell({
               title: status === 'meeting_booked' ? 'Catalog meeting interest' : 'New catalog quote request',
-              intro: `${name} submitted items from your catalog.`,
+              intro: `${name} submitted items from your card catalog${shared ? ` (team catalog from ${shared.sharedFromName})` : ''}.`,
               bodyHtml: `
                 <p style="margin:0 0 8px;"><strong>Guest:</strong> ${escapeHtml(name)}</p>
                 <p style="margin:0 0 8px;"><strong>Email:</strong> ${escapeHtml(email)}</p>

@@ -155,7 +155,7 @@ async function refresh() {
         publicProfile.value = { ...publicProfile.value, name: res.data.ownerName }
       }
     }
-    setCatalogCartProfile(catalogOwnerId.value || id)
+    setCatalogCartProfile(id)
   }
   refreshCatalogCart()
   loading.value = false

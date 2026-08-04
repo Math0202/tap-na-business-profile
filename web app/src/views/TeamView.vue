@@ -308,7 +308,7 @@ onMounted(() => {
             <span class="min-w-0">
               <span class="block text-sm font-semibold">Share my catalog with the team</span>
               <span class="block text-xs text-gray-500 mt-0.5 leading-relaxed">
-                When on, active members show your catalog on their cards. Guests request quotes to you.
+                When on, active members show your catalog on their cards. Quote requests go to the member whose card was scanned.
               </span>
             </span>
           </label>
