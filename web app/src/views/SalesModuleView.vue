@@ -228,7 +228,9 @@ function emptyProduct() {
     active: true,
     description: '',
     images: [],
-    video: ''
+    video: '',
+    label: '',
+    badge: ''
   }
 }
 
@@ -830,7 +832,9 @@ function openEditProduct(p) {
     active: p.active,
     description: p.description || '',
     images: Array.isArray(p.images) ? p.images.slice() : [],
-    video: p.video || ''
+    video: p.video || '',
+    label: p.label || '',
+    badge: p.badge || ''
   }
   productVideoUrl.value = p.video && !String(p.video).startsWith('data:') ? p.video : ''
   productMediaFeedback.value = ''
@@ -1776,6 +1780,11 @@ onMounted(async () => {
                 </span>
               </div>
               <p class="text-xs text-gray-400 mt-0.5">{{ formatMoney(p.defaultPrice) }}</p>
+              <p v-if="p.label || p.badge" class="text-[11px] text-gray-500 mt-1">
+                <span v-if="p.label">{{ p.label }}</span>
+                <span v-if="p.label && p.badge"> · </span>
+                <span v-if="p.badge" class="text-amber-300">{{ p.badge }}</span>
+              </p>
               <p v-if="p.description" class="text-[11px] text-gray-500 mt-1">{{ p.description }}</p>
               <p class="text-[11px] text-gray-500 mt-1">
                 {{ (p.images && p.images.length) || 0 }} image{{ (p.images && p.images.length) === 1 ? '' : 's' }}
@@ -2245,6 +2254,16 @@ onMounted(async () => {
         <div>
           <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Description</label>
           <div class="field-shell"><input v-model="productForm.description" class="field-input" placeholder="Optional"></div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Label</label>
+            <div class="field-shell"><input v-model="productForm.label" class="field-input" placeholder="e.g. Cobalt Blue"></div>
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Badge</label>
+            <div class="field-shell"><input v-model="productForm.badge" class="field-input" placeholder="e.g. Best Seller"></div>
+          </div>
         </div>
 
         <div class="space-y-2">

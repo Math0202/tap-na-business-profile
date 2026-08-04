@@ -208,7 +208,10 @@ onMounted(async () => {
                 {{ p.badge }}
               </span>
             </div>
-            <p class="text-xs text-gray-400 mt-0.5">{{ sectionLabel(p.section) }} · {{ formatPrice(p.price) }}</p>
+            <p class="text-xs text-gray-400 mt-0.5">
+              {{ sectionLabel(p.section) }} · {{ formatPrice(p.price) }}
+              <template v-if="p.label"> · {{ p.label }}</template>
+            </p>
             <p class="text-[11px] text-gray-500 mt-1 line-clamp-2">{{ p.desc || 'No description' }}</p>
             <div class="flex flex-wrap gap-2 mt-3">
               <button type="button" class="text-xs font-semibold underline underline-offset-2" @click="openEdit(p)">Edit</button>

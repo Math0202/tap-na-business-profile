@@ -44,8 +44,8 @@ function salesToShop(p) {
     video: p.video || '',
     alt: p.name || '',
     section: categoryToSection(p.category),
-    label: '',
-    badge: '',
+    label: String(p.label || '').trim(),
+    badge: String(p.badge || '').trim(),
     active: p.active !== false,
     category: p.category
   }
@@ -69,7 +69,9 @@ function shopToSales(payload, existing) {
     active: payload.active !== false,
     description: payload.desc || payload.description || '',
     images,
-    video: payload.video || existing?.video || ''
+    video: payload.video || existing?.video || '',
+    label: String(payload.label || '').trim(),
+    badge: String(payload.badge || '').trim()
   }
 }
 

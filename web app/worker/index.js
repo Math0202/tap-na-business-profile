@@ -445,6 +445,8 @@ function mapSalesProductRow(row) {
       description: row.description || '',
       images,
       video: row.video || '',
+      label: row.shop_label || row.label || '',
+      badge: row.shop_badge || row.badge || '',
       createdAt: row.created_at || '',
       updatedAt: row.updated_at || ''
     },
@@ -465,8 +467,8 @@ function mapSalesProductPublic(row) {
     video: mapped.video,
     alt: mapped.name,
     section,
-    badge: '',
-    label: '',
+    badge: mapped.badge || '',
+    label: mapped.label || '',
     active: mapped.active,
     category: mapped.category
   }
@@ -494,6 +496,8 @@ function salesProductToDb(body, { isNew = false } = {}) {
     description: String(body?.description || body?.desc || '').trim(),
     images,
     video: String(body?.video || '').trim(),
+    shop_label: String(body?.label || body?.shop_label || '').trim().slice(0, 80),
+    shop_badge: String(body?.badge || body?.shop_badge || '').trim().slice(0, 40),
     ...(isNew ? { created_at: new Date().toISOString() } : {}),
     updated_at: new Date().toISOString()
   }
@@ -3015,7 +3019,7 @@ async function handleApi(request, env, url) {
   if (pathname === '/api/shop/products' && method === 'GET') {
     const rows = await sb(
       env,
-      'sales_products?active=eq.true&deleted=eq.false&select=id,name,default_price,category,active,description,images,video,created_at,updated_at&order=name.asc'
+      'sales_products?active=eq.true&deleted=eq.false&select=id,name,default_price,category,active,description,images,video,shop_label,shop_badge,created_at,updated_at&order=name.asc'
     )
     return json({
       ok: true,
@@ -3093,6 +3097,8 @@ async function handleApi(request, env, url) {
       description: row.description,
       images: row.images,
       video: row.video,
+      shop_label: row.shop_label,
+      shop_badge: row.shop_badge,
       updated_at: new Date().toISOString()
     },
     prefer: 'return=minimal'
