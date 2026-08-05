@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, reactive, ref, watch, onMounted } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import BrandMark from '../components/BrandMark.vue'
 import AdminBottomNav from '../components/AdminBottomNav.vue'
@@ -413,6 +413,10 @@ const filteredQuotes = computed(() => {
 })
 
 const productOptions = computed(() => products.value.filter((p) => p.active))
+const cardProducts = computed(() => productOptions.value.filter((p) => p.category !== 'table'))
+const tableProducts = computed(() => productOptions.value.filter((p) => p.category === 'table'))
+const saleProductQty = reactive({})
+const saleUnitPrices = reactive({})
 
 const filteredProducts = computed(() => {
   const q = query.value.trim().toLowerCase()
@@ -534,8 +538,56 @@ const openQuotes = computed(() =>
   quotes.value.filter((q) => q.status === 'draft' || q.status === 'sent' || q.status === 'accepted')
 )
 
-const saleFormTotal = computed(() => linesTotal(saleForm.value.lines))
+const salePickerLines = computed(() =>
+  productOptions.value
+    .filter((p) => (saleProductQty[p.id] || 0) > 0)
+    .map((p) => ({
+      productId: p.id,
+      productName: p.name,
+      quantity: Math.max(1, Number(saleProductQty[p.id]) || 1),
+      unitPrice:
+        saleUnitPrices[p.id] != null && saleUnitPrices[p.id] !== ''
+          ? Number(saleUnitPrices[p.id])
+          : p.defaultPrice
+    }))
+)
+const saleFormTotal = computed(() => linesTotal(salePickerLines.value))
 const quoteFormTotal = computed(() => linesTotal(quoteForm.value.lines))
+
+function resetSaleProductPicker(lines = []) {
+  for (const key of Object.keys(saleProductQty)) delete saleProductQty[key]
+  for (const key of Object.keys(saleUnitPrices)) delete saleUnitPrices[key]
+  for (const p of productOptions.value) {
+    saleProductQty[p.id] = 0
+    saleUnitPrices[p.id] = p.defaultPrice
+  }
+  for (const line of lines || []) {
+    if (!line?.productId) continue
+    saleProductQty[line.productId] = Math.max(0, Number(line.quantity) || 0)
+    if (line.unitPrice != null && line.unitPrice !== '') {
+      saleUnitPrices[line.productId] = Number(line.unitPrice)
+    }
+  }
+}
+
+function buildSaleLinesFromPicker() {
+  return salePickerLines.value.map((line) => ({ ...line }))
+}
+
+function saleProductQtyValue(productId) {
+  return saleProductQty[productId] || 0
+}
+
+function setSaleProductQty(productId, value) {
+  saleProductQty[productId] = Math.max(0, Number(value) || 0)
+}
+
+watch(productOptions, (list) => {
+  for (const p of list) {
+    if (saleProductQty[p.id] == null) saleProductQty[p.id] = 0
+    if (saleUnitPrices[p.id] == null) saleUnitPrices[p.id] = p.defaultPrice
+  }
+})
 
 function syncLineUnitPrice(lines, index) {
   const line = lines?.[index]
@@ -546,21 +598,8 @@ function syncLineUnitPrice(lines, index) {
   if (p) line.unitPrice = p.defaultPrice
 }
 
-function onSaleLineProduct(index) {
-  syncLineUnitPrice(saleForm.value.lines, index)
-}
-
 function onQuoteLineProduct(index) {
   syncLineUnitPrice(quoteForm.value.lines, index)
-}
-
-function addSaleLine() {
-  saleForm.value.lines.push(emptyLine())
-}
-
-function removeSaleLine(index) {
-  if (saleForm.value.lines.length <= 1) return
-  saleForm.value.lines.splice(index, 1)
 }
 
 function addQuoteLine() {
@@ -575,6 +614,7 @@ function removeQuoteLine(index) {
 function openNewSale() {
   editingSaleId.value = ''
   saleForm.value = emptySale()
+  resetSaleProductPicker()
   if (isSalesScoped.value && myAgentId.value) {
     saleForm.value.agentId = myAgentId.value
   } else {
@@ -600,6 +640,7 @@ function openEditSale(s) {
     notes: s.notes,
     quoteId: s.quoteId || ''
   }
+  resetSaleProductPicker(saleForm.value.lines)
   showSaleForm.value = true
 }
 
@@ -704,9 +745,15 @@ async function submitSale(e) {
     flash('Customer name is required')
     return
   }
+  const lines = buildSaleLinesFromPicker()
+  if (!lines.length) {
+    flash('Add at least one product with quantity')
+    return
+  }
   const wasEdit = Boolean(editingSaleId.value)
   const payload = {
     ...saleForm.value,
+    lines,
     id: editingSaleId.value || undefined,
     agentId: isSalesScoped.value ? myAgentId.value : saleForm.value.agentId,
     soldAt: saleForm.value.soldAt
@@ -950,13 +997,6 @@ function isProductVideoData(src) {
 function productThumb(p) {
   if (!p) return ''
   return (p.images && p.images[0]) || productThumbFor(p.id) || ''
-}
-
-function selectSaleProduct(idx, productId) {
-  const line = saleForm.value.lines?.[idx]
-  if (!line) return
-  line.productId = productId
-  onSaleLineProduct(idx)
 }
 
 function selectQuoteProduct(idx, productId) {
@@ -2064,41 +2104,22 @@ onMounted(async () => {
           </select>
         </div>
 
-        <div class="space-y-2">
-          <div class="flex items-center justify-between gap-2">
-            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400">Products</label>
-            <button type="button" class="text-xs font-semibold text-gray-300 hover:text-white" @click="addSaleLine">
-              + Add product
-            </button>
-          </div>
-          <div
-            v-for="(line, idx) in saleForm.lines"
-            :key="'sale-line-' + idx"
-            class="rounded-2xl border border-[var(--border)] p-3 space-y-2"
-          >
-            <div class="flex items-center justify-between gap-2">
-              <p class="text-[11px] font-semibold text-gray-400">Item {{ idx + 1 }}</p>
-              <button
-                v-if="saleForm.lines.length > 1"
-                type="button"
-                class="text-xs font-semibold text-red-400"
-                @click="removeSaleLine(idx)"
+        <div class="space-y-3">
+          <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400">Products</label>
+
+          <div v-if="cardProducts.length" class="space-y-2">
+            <p class="text-[11px] font-semibold text-gray-400">Cards</p>
+            <div class="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 snap-x snap-mandatory">
+              <div
+                v-for="p in cardProducts"
+                :key="'sale-card-' + p.id"
+                class="w-28 shrink-0 snap-start space-y-2"
               >
-                Remove
-              </button>
-            </div>
-            <div>
-              <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-2">Product</label>
-              <div class="grid grid-cols-2 gap-2">
-                <button
-                  v-for="p in productOptions"
-                  :key="p.id"
-                  type="button"
-                  class="rounded-2xl border p-2 text-left transition-colors"
-                  :class="line.productId === p.id
+                <div
+                  class="rounded-2xl border p-2 transition-colors"
+                  :class="saleProductQtyValue(p.id) > 0
                     ? 'border-white bg-white/10'
-                    : 'border-[var(--border)] hover:border-zinc-500'"
-                  @click="selectSaleProduct(idx, p.id)"
+                    : 'border-[var(--border)]'"
                 >
                   <div class="aspect-[3/4] rounded-xl bg-zinc-900/80 overflow-hidden flex items-center justify-center mb-2">
                     <img
@@ -2107,36 +2128,95 @@ onMounted(async () => {
                       :alt="p.name"
                       class="w-full h-full object-contain p-1"
                     >
-                    <span v-else class="material-symbols-outlined text-gray-500 text-[28px]">credit_card</span>
+                    <span v-else class="material-symbols-outlined text-gray-500 text-[24px]">credit_card</span>
                   </div>
-                  <p class="text-xs font-semibold leading-tight line-clamp-2">{{ p.name }}</p>
-                  <p class="text-[11px] text-gray-400 mt-0.5">{{ formatMoney(p.defaultPrice) }}</p>
-                </button>
+                  <p class="text-[11px] font-semibold leading-tight line-clamp-2 min-h-[2rem]">{{ p.name }}</p>
+                  <p class="text-[10px] text-gray-400 mt-0.5">{{ formatMoney(p.defaultPrice) }}</p>
+                </div>
+                <div>
+                  <label class="block text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Qty</label>
+                  <div class="field-shell !rounded-xl">
+                    <input
+                      :value="saleProductQtyValue(p.id)"
+                      type="number"
+                      min="0"
+                      inputmode="numeric"
+                      class="field-input !py-2 text-center"
+                      @input="setSaleProductQty(p.id, $event.target.value)"
+                    >
+                  </div>
+                </div>
               </div>
+            </div>
+          </div>
+
+          <div v-if="tableProducts.length" class="space-y-2">
+            <p class="text-[11px] font-semibold text-gray-400">Table</p>
+            <div class="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 snap-x snap-mandatory">
               <div
-                v-if="productThumbFor(line.productId)"
-                class="mt-3 rounded-2xl border border-[var(--border)] bg-zinc-900/50 p-3 flex justify-center"
+                v-for="p in tableProducts"
+                :key="'sale-table-' + p.id"
+                class="w-28 shrink-0 snap-start space-y-2"
               >
-                <img
-                  :src="productThumbFor(line.productId)"
-                  alt="Selected card preview"
-                  class="max-h-36 w-auto object-contain drop-shadow-lg"
+                <div
+                  class="rounded-2xl border p-2 transition-colors"
+                  :class="saleProductQtyValue(p.id) > 0
+                    ? 'border-white bg-white/10'
+                    : 'border-[var(--border)]'"
+                >
+                  <div class="aspect-[3/4] rounded-xl bg-zinc-900/80 overflow-hidden flex items-center justify-center mb-2">
+                    <img
+                      v-if="productThumb(p)"
+                      :src="productThumb(p)"
+                      :alt="p.name"
+                      class="w-full h-full object-contain p-1"
+                    >
+                    <span v-else class="material-symbols-outlined text-gray-500 text-[24px]">storefront</span>
+                  </div>
+                  <p class="text-[11px] font-semibold leading-tight line-clamp-2 min-h-[2rem]">{{ p.name }}</p>
+                  <p class="text-[10px] text-gray-400 mt-0.5">{{ formatMoney(p.defaultPrice) }}</p>
+                </div>
+                <div>
+                  <label class="block text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Qty</label>
+                  <div class="field-shell !rounded-xl">
+                    <input
+                      :value="saleProductQtyValue(p.id)"
+                      type="number"
+                      min="0"
+                      inputmode="numeric"
+                      class="field-input !py-2 text-center"
+                      @input="setSaleProductQty(p.id, $event.target.value)"
+                    >
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <p v-if="!cardProducts.length && !tableProducts.length" class="text-sm text-gray-500">
+            No active products. Add products in the Products tab first.
+          </p>
+
+          <div v-if="salePickerLines.length" class="rounded-2xl border border-[var(--border)] p-3 space-y-2">
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Selected</p>
+            <div
+              v-for="line in salePickerLines"
+              :key="'sale-picked-' + line.productId"
+              class="grid grid-cols-[1fr_auto_auto] gap-2 items-center text-xs"
+            >
+              <span class="font-medium truncate">{{ line.productName }} × {{ line.quantity }}</span>
+              <div class="field-shell !rounded-xl w-24">
+                <input
+                  v-model.number="saleUnitPrices[line.productId]"
+                  type="number"
+                  min="0"
+                  step="1"
+                  class="field-input !py-1.5 text-right"
+                  title="Unit price"
                 >
               </div>
+              <span class="font-semibold tabular-nums shrink-0">{{ formatMoney(line.quantity * line.unitPrice) }}</span>
             </div>
-            <div class="grid grid-cols-2 gap-2">
-              <div>
-                <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Qty</label>
-                <div class="field-shell"><input v-model.number="line.quantity" type="number" min="1" class="field-input"></div>
-              </div>
-              <div>
-                <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Unit price (N$)</label>
-                <div class="field-shell"><input v-model.number="line.unitPrice" type="number" min="0" step="1" class="field-input"></div>
-              </div>
-            </div>
-            <p class="text-[11px] text-gray-500 text-right">
-              Line {{ formatMoney((line.quantity || 0) * (line.unitPrice || 0)) }}
-            </p>
           </div>
         </div>
 
