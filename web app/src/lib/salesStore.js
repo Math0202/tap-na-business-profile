@@ -684,7 +684,8 @@ export async function refreshFinanceFromApi() {
   ensureSeeded()
   try {
     const { apiSalesFinance } = await import('./api.js')
-    const { refreshStaffSession, getStaffAccessToken } = await import('./staffAuth.js')
+    const { refreshStaffSession, getStaffAccessToken, canManageSalesOrg, staffAgentId, isStaffSales } =
+      await import('./staffAuth.js')
     if (!getStaffAccessToken()) {
       await refreshStaffSession()
     }
@@ -731,13 +732,22 @@ export async function refreshFinanceFromApi() {
     const mergedOrders = mergeById(localBefore.orders, data.orders || [], normalizeSale)
     const mergedQuotes = mergeById(localBefore.quotes, data.quotes || [], normalizeQuote)
     const mergedInvoices = mergeById(localBefore.invoices, data.invoices || [], normalizeInvoice)
-    const mergedCash = mergeById(localBefore.cashflow, data.cashflow || [], normalizeCash)
+
+    const salesAgentScoped = isStaffSales() && !canManageSalesOrg()
+    const scopedAgentId = salesAgentScoped ? staffAgentId() : ''
+    const localCashForMerge = salesAgentScoped
+      ? localBefore.cashflow.filter((c) => c.agentId === scopedAgentId)
+      : localBefore.cashflow
+    const mergedCash = mergeById(localCashForMerge, data.cashflow || [], normalizeCash)
+    const finalCash = salesAgentScoped
+      ? mergedCash.filter((c) => c.agentId === scopedAgentId)
+      : mergedCash
 
     writeJson(AGENTS_KEY, mergedAgents)
     writeJson(SALES_KEY, mergedOrders)
     writeJson(QUOTES_KEY, mergedQuotes)
     writeJson(INVOICES_KEY, mergedInvoices)
-    writeJson(CASH_KEY, mergedCash)
+    writeJson(CASH_KEY, finalCash)
 
     // Upload anything that still only exists on this device
     await pushMissingFinance({
@@ -1458,6 +1468,13 @@ export function listCashFlow({ includeDeleted = false } = {}) {
   let list = readJson(CASH_KEY, []).map(normalizeCash)
   if (!includeDeleted) list = list.filter((c) => !c.deleted)
   return list.sort((a, b) => String(b.at).localeCompare(String(a.at)))
+}
+
+/** Cash entries attributed to one sales agent (strict agentId match). */
+export function listCashFlowForAgent(agentId, { includeDeleted = false } = {}) {
+  const aid = String(agentId || '').trim()
+  if (!aid) return []
+  return listCashFlow({ includeDeleted }).filter((c) => c.agentId === aid)
 }
 
 function cashForSale(saleId, category) {

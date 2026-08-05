@@ -34,6 +34,7 @@ import {
   refreshProductsFromApi,
   refreshFinanceFromApi,
   listCashFlow,
+  listCashFlowForAgent,
   saveCashEntryToCloud,
   deleteCashEntryFromCloud,
   summarizeCashFlow,
@@ -290,9 +291,7 @@ async function refresh() {
     invoices.value = allInvoices.filter(
       (inv) => !inv.deleted && (inv.agentId === aid || (inv.saleId && saleIds.has(inv.saleId)))
     )
-    cash.value = allCash.filter(
-      (c) => !c.deleted && (c.agentId === aid || (c.saleId && saleIds.has(c.saleId)))
-    )
+    cash.value = listCashFlowForAgent(aid, { includeDeleted: false })
     const paid = sales.value.filter((s) => s.status === 'paid' || s.status === 'fulfilled')
     const pending = sales.value.filter((s) => s.status === 'pending')
     const inflow = cash.value.filter((c) => c.type === 'in').reduce((sum, c) => sum + (Number(c.amount) || 0), 0)
