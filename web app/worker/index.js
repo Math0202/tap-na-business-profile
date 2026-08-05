@@ -3225,6 +3225,11 @@ async function handleApi(request, env, url) {
     sb(env, 'sales_invoices?' + scope + 'select=*&order=issued_at.desc&limit=2000'),
     sb(env, 'sales_cashflow?' + scope + 'select=*&order=occurred_at.desc&limit=2000')
   ])
+  let cashflow = (cash || []).map(mapSalesCashRow)
+  if (!isElevated) {
+    const orderIds = new Set((orders || []).map((o) => o.id))
+    cashflow = cashflow.filter((c) => c.saleId && orderIds.has(c.saleId))
+  }
   return json({
     ok: true,
     scope: isElevated ? 'all' : 'agent',
@@ -3232,7 +3237,7 @@ async function handleApi(request, env, url) {
     orders: (orders || []).map(mapSalesOrderRow),
     quotes: (quotes || []).map(mapSalesQuoteRow),
     invoices: (invoices || []).map(mapSalesInvoiceRow),
-    cashflow: (cash || []).map(mapSalesCashRow)
+    cashflow
   })
   }
 

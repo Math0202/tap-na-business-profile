@@ -291,7 +291,7 @@ async function refresh() {
     invoices.value = allInvoices.filter(
       (inv) => !inv.deleted && (inv.agentId === aid || (inv.saleId && saleIds.has(inv.saleId)))
     )
-    cash.value = listCashFlowForAgent(aid, { includeDeleted: false })
+    cash.value = listCashFlowForAgent(aid, { includeDeleted: false, saleIds })
     const paid = sales.value.filter((s) => s.status === 'paid' || s.status === 'fulfilled')
     const pending = sales.value.filter((s) => s.status === 'pending')
     const inflow = cash.value.filter((c) => c.type === 'in').reduce((sum, c) => sum + (Number(c.amount) || 0), 0)
@@ -1624,7 +1624,12 @@ onMounted(async () => {
           >
             Add product
           </button>
-          <button type="button" class="px-4 py-2.5 rounded-full text-xs font-semibold border border-[var(--border)]" @click="tab = 'cash'; openNewCash()">
+          <button
+            v-if="!isSalesScoped"
+            type="button"
+            class="px-4 py-2.5 rounded-full text-xs font-semibold border border-[var(--border)]"
+            @click="tab = 'cash'; openNewCash()"
+          >
             Cash entry
           </button>
           <button
@@ -1967,7 +1972,7 @@ onMounted(async () => {
             <input v-model="cashFrom" type="date" class="field-shell w-full field-input !py-2.5 text-xs" title="From date">
             <input v-model="cashTo" type="date" class="field-shell w-full field-input !py-2.5 text-xs" title="To date">
           </div>
-          <div class="flex justify-end">
+          <div v-if="!isSalesScoped" class="flex justify-end">
             <button type="button" class="px-4 py-2.5 rounded-full text-xs font-bold bg-white text-black shrink-0" @click="openNewCash">
               Add entry
             </button>
@@ -2005,7 +2010,7 @@ onMounted(async () => {
               <p v-if="!isSalesScoped" class="text-[10px] text-gray-500 mt-0.5 tabular-nums">
                 bal {{ formatMoney(c.runningBalance) }}
               </p>
-              <div class="flex gap-2 justify-end mt-1">
+              <div v-if="!isSalesScoped" class="flex gap-2 justify-end mt-1">
                 <button v-if="!c.deleted" type="button" class="text-[11px] font-semibold text-gray-400 hover:text-white" @click="openEditCash(c)">Edit</button>
                 <button v-if="!c.deleted" type="button" class="text-[11px] font-semibold text-red-400" @click="removeCash(c.id)">Delete</button>
                 <button v-else-if="canManageAgents" type="button" class="text-[11px] font-semibold text-emerald-300" @click="undeleteCash(c.id)">Restore</button>

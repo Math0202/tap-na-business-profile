@@ -739,8 +739,11 @@ export async function refreshFinanceFromApi() {
       ? localBefore.cashflow.filter((c) => c.agentId === scopedAgentId)
       : localBefore.cashflow
     const mergedCash = mergeById(localCashForMerge, data.cashflow || [], normalizeCash)
+    const agentSaleIds = new Set(
+      mergedOrders.filter((o) => o.agentId === scopedAgentId).map((o) => o.id)
+    )
     const finalCash = salesAgentScoped
-      ? mergedCash.filter((c) => c.agentId === scopedAgentId)
+      ? filterCashForSalesAgent(mergedCash, scopedAgentId, agentSaleIds)
       : mergedCash
 
     writeJson(AGENTS_KEY, mergedAgents)
@@ -1471,10 +1474,23 @@ export function listCashFlow({ includeDeleted = false } = {}) {
 }
 
 /** Cash entries attributed to one sales agent (strict agentId match). */
-export function listCashFlowForAgent(agentId, { includeDeleted = false } = {}) {
+export function filterCashForSalesAgent(entries, agentId, saleIds) {
   const aid = String(agentId || '').trim()
   if (!aid) return []
-  return listCashFlow({ includeDeleted }).filter((c) => c.agentId === aid)
+  const ids = saleIds instanceof Set ? saleIds : new Set(saleIds || [])
+  return (entries || []).filter((c) => {
+    if (c.agentId !== aid) return false
+    const saleId = String(c.saleId || '').trim()
+    return saleId && ids.has(saleId)
+  })
+}
+
+export function listCashFlowForAgent(agentId, { includeDeleted = false, saleIds = null } = {}) {
+  const aid = String(agentId || '').trim()
+  if (!aid) return []
+  let list = listCashFlow({ includeDeleted }).filter((c) => c.agentId === aid)
+  if (saleIds) list = filterCashForSalesAgent(list, aid, saleIds)
+  return list
 }
 
 function cashForSale(saleId, category) {
