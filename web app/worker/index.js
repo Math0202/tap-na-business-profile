@@ -1015,6 +1015,54 @@ async function restoreRow(env, {
   return patch
 }
 
+/** Permanently remove a profile and related data. NFC cards are unlinked, not deleted. */
+async function hardDeleteProfile(env, profileId, staff) {
+  const id = String(profileId || '').trim()
+  if (!id) throw new Error('Profile id required')
+
+  const profiles = await sb(env, `profiles?id=eq.${encodeURIComponent(id)}&select=*`)
+  const profile = profiles?.[0]
+  if (!profile) return null
+
+  const cards = await sb(
+    env,
+    `cards?profile_id=eq.${encodeURIComponent(id)}&select=id,slug`
+  )
+  const slugs = (cards || []).map((c) => c.slug).filter(Boolean)
+
+  await sb(env, `cards?profile_id=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: { profile_id: null, status: 'unlinked', linked_at: null },
+    prefer: 'return=minimal'
+  })
+
+  await sb(env, `sessions?profile_id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' })
+  await sb(env, `checkins?profile_id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' })
+  await sb(env, `feedback?profile_id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' })
+
+  // meetings, followups, profile_catalog_carts, and owned teams cascade on profile delete.
+  await sb(env, `profiles?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' })
+
+  await writeSalesChangeLog(env, {
+    staff,
+    action: 'delete',
+    entityType: 'profile',
+    entityId: id,
+    entityLabel: profile.name || profile.company || id,
+    summary: `Permanently deleted profile: ${profile.name || profile.company || id}`,
+    before: {
+      id,
+      name: profile.name || '',
+      company: profile.company || '',
+      cardType: profile.card_type || '',
+      slugs
+    },
+    after: {}
+  })
+
+  return { id, unlinkedSlugs: slugs }
+}
+
 function mapChangeLogRow(row) {
   return {
     id: row.id,
@@ -4034,6 +4082,27 @@ async function handleApi(request, env, url) {
         }))
       }
     })
+  }
+
+  if (adminProfileMatch && method === 'DELETE') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
+    const profileId = decodeURIComponent(adminProfileMatch[1])
+    try {
+      const result = await hardDeleteProfile(env, profileId, gate.staff)
+      if (!result) return bad('Profile not found', 404)
+      return json({ ok: true, id: result.id, unlinkedSlugs: result.unlinkedSlugs || [] })
+    } catch (err) {
+      await logAppError(env, {
+        source: 'api',
+        message: err?.message || 'profile hard-delete failed',
+        stack: err?.stack || '',
+        path: pathname,
+        method,
+        context: { profileId }
+      })
+      return bad(err?.message || 'Could not delete profile', 500)
+    }
   }
 
   if (pathname === '/api/upload' && method === 'POST') {

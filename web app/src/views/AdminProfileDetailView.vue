@@ -19,6 +19,7 @@ import {
 import {
   apiAdminGetProfile,
   apiAdminUpdateProfile,
+  apiAdminDeleteProfile,
   apiAdminProfileActivities
 } from '../lib/api'
 
@@ -34,6 +35,7 @@ const tab = ref('activity') // activity | manage
 const savedMsg = ref('')
 const saveError = ref('')
 const showDeleteConfirm = ref(false)
+const deleteConfirmText = ref('')
 const toast = ref('')
 const loading = ref(true)
 const loadError = ref('')
@@ -62,6 +64,8 @@ const form = ref({
 })
 
 const profileId = computed(() => String(route.params.id || ''))
+
+const canConfirmDelete = computed(() => deleteConfirmText.value.trim().toUpperCase() === 'DELETE')
 
 const notFound = computed(() => !loading.value && !entry.value)
 
@@ -271,13 +275,14 @@ async function saveManage(e) {
 }
 
 async function confirmDelete() {
-  if (!entry.value || saving.value) return
+  if (!entry.value || saving.value || !canConfirmDelete.value) return
   saving.value = true
-  const res = await apiAdminUpdateProfile(entry.value.id, { disabled: true })
+  const res = await apiAdminDeleteProfile(entry.value.id)
   saving.value = false
   showDeleteConfirm.value = false
+  deleteConfirmText.value = ''
   if (!res.ok) {
-    saveError.value = res.error || 'Could not disable profile'
+    saveError.value = res.error || 'Could not delete profile'
     return
   }
   router.replace('/admin')
@@ -537,9 +542,9 @@ onMounted(load)
             <button
               type="button"
               class="px-4 py-2.5 rounded-full text-xs font-semibold border border-red-500/40 text-red-400"
-              @click="showDeleteConfirm = true"
+              @click="showDeleteConfirm = true; deleteConfirmText = ''"
             >
-              Delete
+              Delete profile
             </button>
           </div>
 
@@ -668,24 +673,38 @@ onMounted(load)
     >
       <div class="absolute inset-0 bg-black/70" @click="showDeleteConfirm = false" />
       <div class="relative w-full max-w-sm card-item-bg rounded-3xl p-6 shadow-2xl">
-        <h2 class="text-lg font-bold">Disable profile?</h2>
+        <h2 class="text-lg font-bold">Delete profile permanently?</h2>
         <p class="text-sm text-gray-400 mt-2">
-          This disables <strong class="text-white">{{ profileLabel(entry) }}</strong> so their card no longer shows as live.
+          This permanently removes
+          <strong class="text-white">{{ profileLabel(entry) }}</strong>
+          and all profile data. Linked NFC cards will be unlinked but kept in inventory.
+          This cannot be undone.
         </p>
+        <label class="block mt-4">
+          <span class="text-xs font-semibold uppercase tracking-wide text-gray-400">Type DELETE to confirm</span>
+          <input
+            v-model="deleteConfirmText"
+            type="text"
+            class="field-input mt-1.5 w-full"
+            placeholder="DELETE"
+            autocomplete="off"
+          >
+        </label>
         <div class="flex gap-2 mt-5">
           <button
             type="button"
             class="flex-1 py-3 rounded-full border border-[var(--border)] text-sm font-semibold"
-            @click="showDeleteConfirm = false"
+            @click="showDeleteConfirm = false; deleteConfirmText = ''"
           >
             Cancel
           </button>
           <button
             type="button"
-            class="flex-1 py-3 rounded-full bg-red-500 text-white text-sm font-bold"
+            class="flex-1 py-3 rounded-full bg-red-500 text-white text-sm font-bold disabled:opacity-40"
+            :disabled="!canConfirmDelete || saving"
             @click="confirmDelete"
           >
-            Disable
+            {{ saving ? 'Deleting…' : 'Delete forever' }}
           </button>
         </div>
       </div>

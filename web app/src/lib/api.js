@@ -419,6 +419,14 @@ export function apiAdminUpdateProfile(profileId, payload) {
   })
 }
 
+/** Permanently delete a profile (admin only; cannot be restored) */
+export function apiAdminDeleteProfile(profileId) {
+  return request(`/api/admin/profiles/${encodeURIComponent(profileId)}`, {
+    method: 'DELETE',
+    timeoutMs: 20000
+  })
+}
+
 
 /** Upload an image/video to the Supabase "assets bucket" via the Worker */
 export async function apiUploadAsset(file, { kind = "avatar" } = {}) {
