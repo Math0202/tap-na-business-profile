@@ -39,6 +39,7 @@ const shareCatalog = ref(false)
 const addSlug = ref('')
 const addEmail = ref('')
 const addRole = ref(DEFAULT_PERSONAL_TYPE)
+const showDeleted = ref(false)
 
 const tierGateOpen = ref(false)
 const tierGateTitle = ref('')
@@ -79,7 +80,7 @@ async function refresh() {
       router.replace('/login')
       return
     }
-    const res = await apiGetMyTeam()
+    const res = await apiGetMyTeam({ includeDeleted: true })
     if (!res.ok) {
       flash(res.error || 'Could not load team')
       return
@@ -100,7 +101,13 @@ async function refresh() {
   }
 }
 
+const visibleMembers = computed(() => {
+  if (showDeleted.value) return members.value
+  return members.value.filter((m) => !m.deleted)
+})
+
 function canEditMember(member) {
+  if (member.deleted) return false
   if (member.status !== 'active' && member.status !== 'invited' && member.status !== 'pending_claim') return false
   if (isOwner.value) return true
   return canManageRole(myRole.value, member.role)
@@ -210,13 +217,24 @@ async function changeRole(member, role) {
 
 async function removeMember(member) {
   if (!canEditMember(member)) return
-  if (!confirm(`Remove ${member.memberName || member.slug || 'this member'} from the team?`)) return
+  if (!confirm(`Remove ${member.memberName || member.slug || 'this member'} from the team? You can restore them later.`)) return
   const res = await apiUpdateTeamMember(member.id, { action: 'remove' })
   if (!res.ok) {
     flash(res.error || 'Could not remove member')
     return
   }
   flash('Member removed')
+  await refresh()
+}
+
+async function restoreMember(member) {
+  if (!isOwner.value && !canManageRole(myRole.value, member.role)) return
+  const res = await apiUpdateTeamMember(member.id, { action: 'restore' })
+  if (!res.ok) {
+    flash(res.error || 'Could not restore member')
+    return
+  }
+  flash('Member restored')
   await refresh()
 }
 
@@ -341,9 +359,20 @@ onMounted(() => {
           </button>
         </div>
 
-        <p class="text-[10px] uppercase tracking-wide text-gray-500 mb-2">Members</p>
+        <div class="flex items-center justify-between gap-3 mb-2">
+          <p class="text-[10px] uppercase tracking-wide text-gray-500">Members</p>
+          <label class="inline-flex items-center gap-2 text-[11px] text-gray-400">
+            <input v-model="showDeleted" type="checkbox" class="rounded">
+            Show removed
+          </label>
+        </div>
         <ul class="space-y-3">
-          <li v-for="m in members" :key="m.id" class="card-item-bg rounded-2xl p-4">
+          <li
+            v-for="m in visibleMembers"
+            :key="m.id"
+            class="card-item-bg rounded-2xl p-4"
+            :class="m.deleted ? 'opacity-60' : ''"
+          >
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
                 <p class="text-sm font-semibold truncate">{{ m.memberName || m.slug || 'Member' }}</p>
@@ -351,7 +380,7 @@ onMounted(() => {
                 <p v-if="m.slug" class="text-xs text-gray-500 mt-0.5">Slug {{ m.slug }}</p>
               </div>
               <span class="text-[10px] uppercase tracking-wide px-2 py-1 rounded-full bg-zinc-800 text-gray-300 shrink-0">
-                {{ memberStatusLabel(m.status) }}
+                {{ m.deleted ? 'Removed' : memberStatusLabel(m.status) }}
               </span>
             </div>
             <div class="mt-3 flex flex-col gap-2">
@@ -371,6 +400,14 @@ onMounted(() => {
                 @click="removeMember(m)"
               >
                 Remove
+              </button>
+              <button
+                v-else-if="m.deleted && (isOwner || canManageRole(myRole, m.role))"
+                type="button"
+                class="py-2 rounded-xl bg-zinc-800 text-sm text-emerald-300"
+                @click="restoreMember(m)"
+              >
+                Restore
               </button>
             </div>
           </li>

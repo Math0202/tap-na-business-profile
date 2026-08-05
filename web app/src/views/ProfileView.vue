@@ -819,8 +819,8 @@ onMounted(() => {
             class="w-full py-3 rounded-full bg-red-500/15 text-red-400 border border-red-500/30 font-semibold text-sm hover:bg-red-500/25 transition-colors flex items-center justify-center gap-2"
             @click="showDeleteModal = true"
           >
-            <span class="material-symbols-outlined text-[18px]">delete</span>
-            Delete Profile
+            <span class="material-symbols-outlined text-[18px]">phonelink_erase</span>
+            Clear this device
           </button>
           <button
             type="button"
@@ -1516,11 +1516,13 @@ onMounted(() => {
     <div v-if="showDeleteModal" class="app-dialog-overlay fixed inset-0 z-[200] flex items-center justify-center p-6">
       <div class="absolute inset-0 bg-black/70" @click="showDeleteModal = false" />
       <div class="relative w-full max-w-sm card-item-bg rounded-3xl p-6 shadow-2xl">
-        <h2 class="text-lg font-bold">Delete profile?</h2>
-        <p class="text-gray-400 text-sm mt-2">This removes your profile data from this device. You can create a new one later.</p>
+        <h2 class="text-lg font-bold">Clear this device?</h2>
+        <p class="text-gray-400 text-sm mt-2">
+          Removes profile data saved on this device and signs you out. Your cloud profile stays intact — ask an admin if you need the account permanently deleted.
+        </p>
         <div class="mt-5 flex gap-3">
           <button type="button" class="flex-1 py-3 rounded-full bg-zinc-700 hover:bg-zinc-600 font-semibold text-sm" @click="showDeleteModal = false">Cancel</button>
-          <button type="button" class="flex-1 py-3 rounded-full bg-red-500 hover:bg-red-600 text-white font-semibold text-sm" @click="confirmDelete">Delete</button>
+          <button type="button" class="flex-1 py-3 rounded-full bg-red-500 hover:bg-red-600 text-white font-semibold text-sm" @click="confirmDelete">Clear device</button>
         </div>
       </div>
     </div>

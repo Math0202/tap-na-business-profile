@@ -6,6 +6,7 @@ import {
   listShopProducts,
   saveShopProduct,
   deleteShopProduct,
+  restoreShopProduct,
   setShopProductActive,
   refreshProducts,
   formatPrice,
@@ -15,6 +16,7 @@ import {
 const products = ref([])
 const query = ref('')
 const sectionFilter = ref('all')
+const showDeleted = ref(false)
 const toast = ref('')
 const showForm = ref(false)
 const form = ref(emptyForm())
@@ -35,11 +37,11 @@ function emptyForm() {
 }
 
 function refresh() {
-  products.value = listShopProducts({ includeInactive: true })
+  products.value = listShopProducts({ includeInactive: true, includeDeleted: true })
 }
 
 async function refreshFromDb() {
-  await refreshProducts({ includeInactive: true })
+  await refreshProducts({ includeInactive: true, includeDeleted: true })
   refresh()
 }
 
@@ -51,18 +53,22 @@ function flash(msg) {
 const filtered = computed(() => {
   const q = query.value.trim().toLowerCase()
   return products.value.filter((p) => {
+    if (!showDeleted.value && p.deleted) return false
     if (sectionFilter.value !== 'all' && p.section !== sectionFilter.value) return false
     if (!q) return true
     return [p.name, p.desc, p.label, p.badge, p.id, p.section].join(' ').toLowerCase().includes(q)
   })
 })
 
-const stats = computed(() => ({
-  total: products.value.length,
-  live: products.value.filter((p) => p.active).length,
-  cards: products.value.filter((p) => p.section === 'business-cards').length,
-  table: products.value.filter((p) => p.section === 'table-brochure').length
-}))
+const stats = computed(() => {
+  const liveList = products.value.filter((p) => !p.deleted)
+  return {
+    total: liveList.length,
+    live: liveList.filter((p) => p.active).length,
+    cards: liveList.filter((p) => p.section === 'business-cards').length,
+    table: liveList.filter((p) => p.section === 'table-brochure').length
+  }
+})
 
 function sectionLabel(id) {
   return SHOP_SECTIONS.find((s) => s.id === id)?.label || id
@@ -106,13 +112,23 @@ async function toggleActive(p) {
 }
 
 async function removeProduct(p) {
-  if (!confirm(`Remove “${p.name}” from the shop catalog?`)) return
+  if (!confirm(`Mark “${p.name}” as deleted? You can restore it later.`)) return
   try {
     await deleteShopProduct(p.id)
     await refreshFromDb()
-    flash('Product removed')
+    flash('Product marked deleted')
   } catch (err) {
     flash(err?.message || 'Could not delete product')
+  }
+}
+
+async function undeleteProduct(p) {
+  try {
+    await restoreShopProduct(p.id)
+    await refreshFromDb()
+    flash('Product restored')
+  } catch (err) {
+    flash(err?.message || 'Could not restore product')
   }
 }
 
@@ -157,6 +173,10 @@ onMounted(async () => {
           <span class="material-symbols-outlined field-icon">search</span>
           <input v-model="query" type="search" class="field-input" placeholder="Search products…">
         </div>
+        <label class="inline-flex items-center gap-2 px-3 py-2.5 rounded-2xl text-xs text-gray-400 bg-zinc-900 border border-zinc-700 shrink-0">
+          <input v-model="showDeleted" type="checkbox" class="rounded">
+          Show deleted
+        </label>
         <button
           type="button"
           class="px-4 py-2.5 rounded-full text-xs font-bold bg-white text-black"
@@ -190,6 +210,7 @@ onMounted(async () => {
           v-for="p in filtered"
           :key="p.id"
           class="card-item-bg rounded-2xl p-4 flex gap-3"
+          :class="p.deleted ? 'opacity-60' : ''"
         >
           <div class="w-16 h-16 rounded-xl bg-zinc-800 overflow-hidden shrink-0 flex items-center justify-center">
             <img v-if="p.image" :src="p.image" :alt="p.alt || p.name" class="w-full h-full object-contain">
@@ -199,6 +220,13 @@ onMounted(async () => {
             <div class="flex items-center gap-2 flex-wrap">
               <p class="font-semibold text-sm truncate">{{ p.name }}</p>
               <span
+                v-if="p.deleted"
+                class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-red-500/15 text-red-300"
+              >
+                Deleted
+              </span>
+              <span
+                v-else
                 class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
                 :class="p.active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-500/20 text-gray-400'"
               >
@@ -214,11 +242,14 @@ onMounted(async () => {
             </p>
             <p class="text-[11px] text-gray-500 mt-1 line-clamp-2">{{ p.desc || 'No description' }}</p>
             <div class="flex flex-wrap gap-2 mt-3">
-              <button type="button" class="text-xs font-semibold underline underline-offset-2" @click="openEdit(p)">Edit</button>
-              <button type="button" class="text-xs font-semibold text-gray-400 hover:text-white" @click="toggleActive(p)">
-                {{ p.active ? 'Hide' : 'Show' }}
-              </button>
-              <button type="button" class="text-xs font-semibold text-red-400" @click="removeProduct(p)">Delete</button>
+              <template v-if="!p.deleted">
+                <button type="button" class="text-xs font-semibold underline underline-offset-2" @click="openEdit(p)">Edit</button>
+                <button type="button" class="text-xs font-semibold text-gray-400 hover:text-white" @click="toggleActive(p)">
+                  {{ p.active ? 'Hide' : 'Show' }}
+                </button>
+                <button type="button" class="text-xs font-semibold text-red-400" @click="removeProduct(p)">Delete</button>
+              </template>
+              <button v-else type="button" class="text-xs font-semibold text-emerald-300" @click="undeleteProduct(p)">Restore</button>
             </div>
           </div>
         </li>

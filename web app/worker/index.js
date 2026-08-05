@@ -1343,7 +1343,10 @@ function mapTeamMemberRow(row) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     memberName: row.member_name || '',
-    memberEmail: row.member_email || ''
+    memberEmail: row.member_email || '',
+    deleted: row.deleted === true,
+    deletedAt: row.deleted_at || '',
+    deletedBy: row.deleted_by || ''
   }
 }
 
@@ -2654,14 +2657,15 @@ async function handleApi(request, env, url) {
       team = await getOrCreateOwnedTeam(env, profile)
     }
 
-    const memberRows = await sb(
-      env,
-      `team_members?team_id=eq.${encodeURIComponent(team.id)}&deleted=eq.false&select=*&order=created_at.asc`
-    )
+    const includeDeleted = url.searchParams.get('deleted') === '1'
+    const memberQ = includeDeleted
+      ? `team_members?team_id=eq.${encodeURIComponent(team.id)}&select=*&order=created_at.asc`
+      : `team_members?team_id=eq.${encodeURIComponent(team.id)}&deleted=eq.false&select=*&order=created_at.asc`
+    const memberRows = await sb(env, memberQ)
     const members = await enrichTeamMembers(env, memberRows || [])
     const myMembership =
-      members.find((m) => m.profileId === profile.id && m.status === 'active') ||
-      members.find((m) => m.profileId === profile.id) ||
+      members.find((m) => m.profileId === profile.id && !m.deleted && m.status === 'active') ||
+      members.find((m) => m.profileId === profile.id && !m.deleted) ||
       null
     const isOwner = team.owner_profile_id === profile.id
     const ownerRole = await getProfilePersonalType(env, team.owner_profile_id)
@@ -2855,9 +2859,12 @@ async function handleApi(request, env, url) {
     if (!profile) return bad('Unauthorized', 401)
     const memberId = decodeURIComponent(teamMemberPatchMatch[1])
     const body = await readJson(request)
+    const restoring = body?.deleted === false || body?.action === 'restore'
     const rows = await sb(
       env,
-      `team_members?id=eq.${encodeURIComponent(memberId)}&deleted=eq.false&select=*`
+      restoring
+        ? `team_members?id=eq.${encodeURIComponent(memberId)}&select=*`
+        : `team_members?id=eq.${encodeURIComponent(memberId)}&deleted=eq.false&select=*`
     )
     const member = rows?.[0]
     if (!member) return bad('Member not found', 404)
@@ -2927,6 +2934,19 @@ async function handleApi(request, env, url) {
         extra: { updated_at: new Date().toISOString() }
       })
       return json({ ok: true, id: memberId, deleted: true })
+    }
+
+    // Restore soft-removed member
+    if (body?.deleted === false || body?.action === 'restore') {
+      if (!isOwner && !canManageTeamRole(actorRole, member.role)) {
+        return bad('You cannot restore this member', 403)
+      }
+      await restoreRow(env, {
+        table: 'team_members',
+        id: memberId,
+        extra: { updated_at: new Date().toISOString() }
+      })
+      return json({ ok: true, id: memberId, deleted: false })
     }
 
     // Assign role
@@ -4283,11 +4303,21 @@ async function handleApi(request, env, url) {
   if (pathname === '/api/venue/checkins' && method === 'GET') {
     const profile = await getSessionProfile(env, request)
     if (!profile) return bad('Unauthorized', 401)
-    const rows = await sb(
-      env,
-      `checkins?profile_id=eq.${encodeURIComponent(profile.id)}&order=created_at.desc&limit=500`
-    )
-    return json({ ok: true, checkins: rows || [] })
+    const includeDeleted = url.searchParams.get('deleted') === '1'
+    let q =
+      `checkins?profile_id=eq.${encodeURIComponent(profile.id)}` +
+      `&select=*&order=created_at.desc&limit=500`
+    if (!includeDeleted) q += '&deleted=eq.false'
+    const rows = await sb(env, q)
+    return json({
+      ok: true,
+      checkins: (rows || []).map((c) => ({
+        ...c,
+        deleted: c.deleted === true,
+        deletedAt: c.deleted_at || '',
+        deletedBy: c.deleted_by || ''
+      }))
+    })
   }
 
   if (pathname === '/api/venue/checkins' && method === 'POST') {
@@ -4324,14 +4354,56 @@ async function handleApi(request, env, url) {
     return json({ ok: true, id })
   }
 
+  const venueCheckinMatch = pathname.match(/^\/api\/venue\/checkins\/([^/]+)$/)
+  if (venueCheckinMatch && method === 'DELETE') {
+    const profile = await getSessionProfile(env, request)
+    if (!profile) return bad('Unauthorized', 401)
+    const id = decodeURIComponent(venueCheckinMatch[1])
+    const rows = await sb(
+      env,
+      `checkins?id=eq.${encodeURIComponent(id)}&profile_id=eq.${encodeURIComponent(profile.id)}&deleted=eq.false&select=id`
+    )
+    if (!rows?.[0]) return bad('Check-in not found', 404)
+    await softDeleteRow(env, {
+      table: 'checkins',
+      id,
+      actor: profile.email || profile.id
+    })
+    return json({ ok: true, id, deleted: true })
+  }
+
+  const venueCheckinRestoreMatch = pathname.match(/^\/api\/venue\/checkins\/([^/]+)\/restore$/)
+  if (venueCheckinRestoreMatch && method === 'POST') {
+    const profile = await getSessionProfile(env, request)
+    if (!profile) return bad('Unauthorized', 401)
+    const id = decodeURIComponent(venueCheckinRestoreMatch[1])
+    const rows = await sb(
+      env,
+      `checkins?id=eq.${encodeURIComponent(id)}&profile_id=eq.${encodeURIComponent(profile.id)}&select=id`
+    )
+    if (!rows?.[0]) return bad('Check-in not found', 404)
+    await restoreRow(env, { table: 'checkins', id })
+    return json({ ok: true, id, deleted: false })
+  }
+
   if (pathname === '/api/venue/feedback' && method === 'GET') {
     const profile = await getSessionProfile(env, request)
     if (!profile) return bad('Unauthorized', 401)
-    const rows = await sb(
-      env,
-      `feedback?profile_id=eq.${encodeURIComponent(profile.id)}&order=created_at.desc&limit=500`
-    )
-    return json({ ok: true, feedback: rows || [] })
+    const includeDeleted = url.searchParams.get('deleted') === '1'
+    let q =
+      `feedback?profile_id=eq.${encodeURIComponent(profile.id)}` +
+      `&select=*&order=created_at.desc&limit=500`
+    if (!includeDeleted) q += '&deleted=eq.false'
+    const rows = await sb(env, q)
+    return json({
+      ok: true,
+      feedback: (rows || []).map((f) => ({
+        ...f,
+        deleted: f.deleted === true,
+        deletedAt: f.deleted_at || '',
+        deletedBy: f.deleted_by || ''
+      }))
+    })
   }
 
   if (pathname === '/api/venue/feedback' && method === 'POST') {
@@ -4368,11 +4440,49 @@ async function handleApi(request, env, url) {
     return json({ ok: true, id })
   }
 
+  const venueFeedbackMatch = pathname.match(/^\/api\/venue\/feedback\/([^/]+)$/)
+  if (venueFeedbackMatch && method === 'DELETE') {
+    const profile = await getSessionProfile(env, request)
+    if (!profile) return bad('Unauthorized', 401)
+    const id = decodeURIComponent(venueFeedbackMatch[1])
+    const rows = await sb(
+      env,
+      `feedback?id=eq.${encodeURIComponent(id)}&profile_id=eq.${encodeURIComponent(profile.id)}&deleted=eq.false&select=id`
+    )
+    if (!rows?.[0]) return bad('Feedback not found', 404)
+    await softDeleteRow(env, {
+      table: 'feedback',
+      id,
+      actor: profile.email || profile.id
+    })
+    return json({ ok: true, id, deleted: true })
+  }
+
+  const venueFeedbackRestoreMatch = pathname.match(/^\/api\/venue\/feedback\/([^/]+)\/restore$/)
+  if (venueFeedbackRestoreMatch && method === 'POST') {
+    const profile = await getSessionProfile(env, request)
+    if (!profile) return bad('Unauthorized', 401)
+    const id = decodeURIComponent(venueFeedbackRestoreMatch[1])
+    const rows = await sb(
+      env,
+      `feedback?id=eq.${encodeURIComponent(id)}&profile_id=eq.${encodeURIComponent(profile.id)}&select=id`
+    )
+    if (!rows?.[0]) return bad('Feedback not found', 404)
+    await restoreRow(env, { table: 'feedback', id })
+    return json({ ok: true, id, deleted: false })
+  }
+
   if (pathname === '/api/venue/stats' && method === 'GET') {
     const profile = await getSessionProfile(env, request)
     if (!profile) return bad('Unauthorized', 401)
-    const checkins = await sb(env, `checkins?profile_id=eq.${encodeURIComponent(profile.id)}&select=guests`)
-    const fb = await sb(env, `feedback?profile_id=eq.${encodeURIComponent(profile.id)}&select=rating`)
+    const checkins = await sb(
+      env,
+      `checkins?profile_id=eq.${encodeURIComponent(profile.id)}&deleted=eq.false&select=guests`
+    )
+    const fb = await sb(
+      env,
+      `feedback?profile_id=eq.${encodeURIComponent(profile.id)}&deleted=eq.false&select=rating`
+    )
     const guests = (checkins || []).reduce((s, r) => s + (Number(r.guests) || 0), 0)
     const ratings = (fb || []).map((r) => Number(r.rating) || 0)
     const avg = ratings.length ? ratings.reduce((a, b) => a + b, 0) / ratings.length : 0
@@ -5054,6 +5164,28 @@ async function handleApi(request, env, url) {
       extra: { updated_at: new Date().toISOString() }
     })
     return json({ ok: true, id: followupId, deleted: true })
+  }
+
+  const followupRestoreMatch = pathname.match(/^\/api\/followups\/([^/]+)\/restore$/)
+  if (followupRestoreMatch && method === 'POST') {
+    const profile = await getSessionProfile(env, request)
+    if (!profile) return bad('Unauthorized', 401)
+    const followupId = decodeURIComponent(followupRestoreMatch[1])
+    const existing = await sb(
+      env,
+      'followups?id=eq.' +
+        encodeURIComponent(followupId) +
+        '&profile_id=eq.' +
+        encodeURIComponent(profile.id) +
+        '&select=id'
+    )
+    if (!existing?.length) return bad('Follow-up not found', 404)
+    await restoreRow(env, {
+      table: 'followups',
+      id: followupId,
+      extra: { updated_at: new Date().toISOString() }
+    })
+    return json({ ok: true, id: followupId, deleted: false })
   }
 
   if (pathname === '/api/shop/order-quote' && method === 'POST') {

@@ -471,12 +471,30 @@ export function apiSubmitFeedback(payload) {
   return request('/api/venue/feedback', { method: 'POST', body: payload })
 }
 
-export function apiListCheckins() {
-  return request('/api/venue/checkins')
+export function apiListCheckins({ includeDeleted = false } = {}) {
+  const q = includeDeleted ? '?deleted=1' : ''
+  return request(`/api/venue/checkins${q}`)
 }
 
-export function apiListFeedback() {
-  return request('/api/venue/feedback')
+export function apiListFeedback({ includeDeleted = false } = {}) {
+  const q = includeDeleted ? '?deleted=1' : ''
+  return request(`/api/venue/feedback${q}`)
+}
+
+export function apiDeleteCheckin(id) {
+  return request(`/api/venue/checkins/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export function apiRestoreCheckin(id) {
+  return request(`/api/venue/checkins/${encodeURIComponent(id)}/restore`, { method: 'POST' })
+}
+
+export function apiDeleteFeedback(id) {
+  return request(`/api/venue/feedback/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export function apiRestoreFeedback(id) {
+  return request(`/api/venue/feedback/${encodeURIComponent(id)}/restore`, { method: 'POST' })
 }
 
 export function apiVenueStats() {
@@ -507,8 +525,9 @@ export function apiPublicCatalog(profileId) {
 }
 
 /** Personal card team — owner/member management */
-export function apiGetMyTeam() {
-  return request('/api/me/team', { timeoutMs: 15000 })
+export function apiGetMyTeam({ includeDeleted = false } = {}) {
+  const q = includeDeleted ? '?deleted=1' : ''
+  return request(`/api/me/team${q}`, { timeoutMs: 15000 })
 }
 
 export function apiUpdateMyTeam(payload) {
@@ -573,6 +592,10 @@ export function apiUpdateFollowup(id, payload) {
 
 export function apiDeleteFollowup(id) {
   return request(`/api/followups/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export function apiRestoreFollowup(id) {
+  return request(`/api/followups/${encodeURIComponent(id)}/restore`, { method: 'POST' })
 }
 
 /** Public shop checkout — emails order quote via Cloudflare Email Sending */

@@ -7,6 +7,7 @@ import {
   listProducts,
   saveProduct as saveSalesProduct,
   deleteProduct as deleteSalesProduct,
+  restoreProduct as restoreSalesProduct,
   getProduct as getSalesProduct,
   refreshProductsFromApi,
   resetProductsToDefaults
@@ -47,7 +48,10 @@ function salesToShop(p) {
     label: String(p.label || '').trim(),
     badge: String(p.badge || '').trim(),
     active: p.active !== false,
-    category: p.category
+    category: p.category,
+    deleted: p.deleted === true,
+    deletedAt: p.deletedAt || '',
+    deletedBy: p.deletedBy || ''
   }
 }
 
@@ -76,16 +80,19 @@ function shopToSales(payload, existing) {
 }
 
 /** Full catalog for admin (includes inactive). Sync after refreshProducts(). */
-export function listShopProducts({ includeInactive = true } = {}) {
-  const list = listProducts().map(salesToShop)
-  if (includeInactive) return list
-  return list.filter((p) => p.active)
+export function listShopProducts({ includeInactive = true, includeDeleted = false } = {}) {
+  const list = listProducts({ includeDeleted: true }).map(salesToShop)
+  return list.filter((p) => {
+    if (!includeDeleted && p.deleted) return false
+    if (!includeInactive && !p.active) return false
+    return true
+  })
 }
 
 /** Fetch latest products from DB into local cache. */
-export async function refreshProducts({ includeInactive = true } = {}) {
-  await refreshProductsFromApi({ includeInactive })
-  return listShopProducts({ includeInactive })
+export async function refreshProducts({ includeInactive = true, includeDeleted = false } = {}) {
+  await refreshProductsFromApi({ includeInactive: true })
+  return listShopProducts({ includeInactive, includeDeleted })
 }
 
 /** Public storefront catalog (active only). */
@@ -101,7 +108,12 @@ export async function saveShopProduct(payload) {
 
 export async function deleteShopProduct(id) {
   await deleteSalesProduct(id)
-  return listShopProducts({ includeInactive: true })
+  return listShopProducts({ includeInactive: true, includeDeleted: true })
+}
+
+export async function restoreShopProduct(id) {
+  await restoreSalesProduct(id)
+  return listShopProducts({ includeInactive: true, includeDeleted: true })
 }
 
 export async function setShopProductActive(id, active) {

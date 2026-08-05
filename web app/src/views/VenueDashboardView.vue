@@ -19,7 +19,16 @@ import {
   isLoggedIn,
   logoUrl
 } from '../lib/profileStore'
-import { apiListCheckins, apiListFeedback, apiVenueStats, getApiToken } from '../lib/api'
+import {
+  apiListCheckins,
+  apiListFeedback,
+  apiVenueStats,
+  apiDeleteCheckin,
+  apiRestoreCheckin,
+  apiDeleteFeedback,
+  apiRestoreFeedback,
+  getApiToken
+} from '../lib/api'
 import { formatAnswersLine } from '../lib/venueForms'
 
 const router = useRouter()
@@ -31,6 +40,7 @@ const feedback = ref([])
 const stats = ref(getVenueCustomerStats())
 const toast = ref('')
 const loadingRemote = ref(false)
+const showDeleted = ref(false)
 
 function flash(msg) {
   toast.value = msg
@@ -39,16 +49,17 @@ function flash(msg) {
 
 async function refresh() {
   profile.value = loadProfile()
-  checkins.value = listCheckins()
-  feedback.value = listFeedback()
-  stats.value = getVenueCustomerStats()
-
-  if (!getApiToken()) return
+  if (!getApiToken()) {
+    checkins.value = listCheckins().map((c) => ({ ...c, deleted: false }))
+    feedback.value = listFeedback().map((f) => ({ ...f, deleted: false }))
+    stats.value = getVenueCustomerStats()
+    return
+  }
   loadingRemote.value = true
   try {
     const [ci, fb, st] = await Promise.all([
-      apiListCheckins(),
-      apiListFeedback(),
+      apiListCheckins({ includeDeleted: true }),
+      apiListFeedback({ includeDeleted: true }),
       apiVenueStats()
     ])
     if (ci.ok && ci.data?.checkins) {
@@ -62,7 +73,9 @@ async function refresh() {
         event: c.event,
         guests: c.guests,
         answers: c.answers || {},
-        at: c.created_at
+        at: c.created_at,
+        deleted: c.deleted === true,
+        deletedAt: c.deletedAt || c.deleted_at || ''
       }))
     }
     if (fb.ok && fb.data?.feedback) {
@@ -76,7 +89,9 @@ async function refresh() {
         rating: f.rating,
         message: f.message,
         answers: f.answers || {},
-        at: f.created_at
+        at: f.created_at,
+        deleted: f.deleted === true,
+        deletedAt: f.deletedAt || f.deleted_at || ''
       }))
     }
     if (st.ok && st.data?.stats) {
@@ -108,17 +123,23 @@ const venueName = computed(
 const logo = computed(() => logoUrl(profile.value))
 
 const filteredCheckins = computed(() => {
+  const list = showDeleted.value
+    ? checkins.value
+    : checkins.value.filter((c) => !c.deleted)
   const q = query.value.trim().toLowerCase()
-  if (!q) return checkins.value
-  return checkins.value.filter((c) =>
+  if (!q) return list
+  return list.filter((c) =>
     [c.name, c.contact, c.event, c.venue].join(' ').toLowerCase().includes(q)
   )
 })
 
 const filteredFeedback = computed(() => {
+  const list = showDeleted.value
+    ? feedback.value
+    : feedback.value.filter((f) => !f.deleted)
   const q = query.value.trim().toLowerCase()
-  if (!q) return feedback.value
-  return feedback.value.filter((f) =>
+  if (!q) return list
+  return list.filter((f) =>
     [f.name, f.contact, f.message, f.venue, String(f.rating)].join(' ').toLowerCase().includes(q)
   )
 })
@@ -139,18 +160,58 @@ function exportAll() {
   flash('All customer data exported')
 }
 
-function removeCheckin(id) {
-  if (!confirm('Delete this check-in?')) return
-  deleteCheckin(id)
-  refresh()
-  flash('Check-in deleted')
+async function removeCheckin(id) {
+  if (!confirm('Mark this check-in as deleted? You can restore it later.')) return
+  if (getApiToken()) {
+    const res = await apiDeleteCheckin(id)
+    if (!res.ok) {
+      flash(res.error || 'Could not delete check-in')
+      return
+    }
+  } else {
+    deleteCheckin(id)
+  }
+  await refresh()
+  flash('Check-in marked deleted')
 }
 
-function removeFeedback(id) {
-  if (!confirm('Delete this feedback?')) return
-  deleteFeedback(id)
-  refresh()
-  flash('Feedback deleted')
+async function restoreCheckin(id) {
+  if (getApiToken()) {
+    const res = await apiRestoreCheckin(id)
+    if (!res.ok) {
+      flash(res.error || 'Could not restore check-in')
+      return
+    }
+  }
+  await refresh()
+  flash('Check-in restored')
+}
+
+async function removeFeedback(id) {
+  if (!confirm('Mark this feedback as deleted? You can restore it later.')) return
+  if (getApiToken()) {
+    const res = await apiDeleteFeedback(id)
+    if (!res.ok) {
+      flash(res.error || 'Could not delete feedback')
+      return
+    }
+  } else {
+    deleteFeedback(id)
+  }
+  await refresh()
+  flash('Feedback marked deleted')
+}
+
+async function restoreFeedback(id) {
+  if (getApiToken()) {
+    const res = await apiRestoreFeedback(id)
+    if (!res.ok) {
+      flash(res.error || 'Could not restore feedback')
+      return
+    }
+  }
+  await refresh()
+  flash('Feedback restored')
 }
 
 onMounted(async () => {
@@ -273,6 +334,10 @@ onMounted(async () => {
             :placeholder="tab === 'checkins' ? 'Search check-ins…' : 'Search feedback…'"
           >
         </div>
+        <label class="inline-flex items-center gap-2 px-3 py-2.5 rounded-2xl text-xs text-gray-400 bg-zinc-900 border border-zinc-700 shrink-0">
+          <input v-model="showDeleted" type="checkbox" class="rounded">
+          Show deleted
+        </label>
         <button
           type="button"
           class="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-2xl text-xs font-bold bg-zinc-800 border border-zinc-600 shrink-0"
@@ -285,12 +350,20 @@ onMounted(async () => {
 
       <section v-if="tab === 'checkins'" class="mb-8 space-y-2">
         <ul class="space-y-2">
-          <li v-for="c in filteredCheckins" :key="c.id" class="card-item-bg rounded-2xl p-4 flex gap-3">
+          <li
+            v-for="c in filteredCheckins"
+            :key="c.id"
+            class="card-item-bg rounded-2xl p-4 flex gap-3"
+            :class="c.deleted ? 'opacity-60' : ''"
+          >
             <div class="w-11 h-11 rounded-2xl bg-emerald-500/15 text-emerald-300 flex items-center justify-center shrink-0">
               <span class="material-symbols-outlined text-[22px]">how_to_reg</span>
             </div>
             <div class="min-w-0 flex-1">
-              <p class="text-sm font-semibold">{{ c.name }}</p>
+              <p class="text-sm font-semibold">
+                {{ c.name }}
+                <span v-if="c.deleted" class="ml-2 text-[10px] uppercase tracking-wide text-red-300">Deleted</span>
+              </p>
               <p class="text-xs text-gray-400 mt-0.5">{{ c.contact || 'No contact' }}</p>
               <p class="text-[11px] text-gray-500 mt-1">
                 {{ c.event }} · {{ c.guests }} guest{{ c.guests === 1 ? '' : 's' }} · {{ formatDate(c.at) }}
@@ -299,8 +372,21 @@ onMounted(async () => {
                 {{ formatAnswersLine(c.answers) }}
               </p>
             </div>
-            <button type="button" class="text-xs font-semibold text-red-400 shrink-0" @click="removeCheckin(c.id)">
+            <button
+              v-if="!c.deleted"
+              type="button"
+              class="text-xs font-semibold text-red-400 shrink-0"
+              @click="removeCheckin(c.id)"
+            >
               Delete
+            </button>
+            <button
+              v-else
+              type="button"
+              class="text-xs font-semibold text-emerald-300 shrink-0"
+              @click="restoreCheckin(c.id)"
+            >
+              Restore
             </button>
           </li>
         </ul>
@@ -318,12 +404,20 @@ onMounted(async () => {
 
       <section v-else class="mb-8 space-y-2">
         <ul class="space-y-2">
-          <li v-for="f in filteredFeedback" :key="f.id" class="card-item-bg rounded-2xl p-4 flex gap-3">
+          <li
+            v-for="f in filteredFeedback"
+            :key="f.id"
+            class="card-item-bg rounded-2xl p-4 flex gap-3"
+            :class="f.deleted ? 'opacity-60' : ''"
+          >
             <div class="w-11 h-11 rounded-2xl bg-amber-500/15 text-amber-300 flex items-center justify-center shrink-0 font-bold text-sm">
               {{ f.rating || '—' }}★
             </div>
             <div class="min-w-0 flex-1">
-              <p class="text-sm font-semibold">{{ f.name }}</p>
+              <p class="text-sm font-semibold">
+                {{ f.name }}
+                <span v-if="f.deleted" class="ml-2 text-[10px] uppercase tracking-wide text-red-300">Deleted</span>
+              </p>
               <p v-if="f.contact" class="text-xs text-gray-400 mt-0.5">{{ f.contact }}</p>
               <p class="text-xs text-gray-300 mt-1 leading-relaxed">{{ f.message || '—' }}</p>
               <p v-if="formatAnswersLine(f.answers)" class="text-[11px] text-gray-400 mt-1 leading-relaxed">
@@ -331,8 +425,21 @@ onMounted(async () => {
               </p>
               <p class="text-[11px] text-gray-500 mt-1">{{ formatDate(f.at) }}</p>
             </div>
-            <button type="button" class="text-xs font-semibold text-red-400 shrink-0" @click="removeFeedback(f.id)">
+            <button
+              v-if="!f.deleted"
+              type="button"
+              class="text-xs font-semibold text-red-400 shrink-0"
+              @click="removeFeedback(f.id)"
+            >
               Delete
+            </button>
+            <button
+              v-else
+              type="button"
+              class="text-xs font-semibold text-emerald-300 shrink-0"
+              @click="restoreFeedback(f.id)"
+            >
+              Restore
             </button>
           </li>
         </ul>

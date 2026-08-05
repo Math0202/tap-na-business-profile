@@ -46,6 +46,7 @@ const guestEmail = ref('')
 const guestPhone = ref('')
 const guestNote = ref('')
 const guestCartBadge = ref(anyCatalogCartCount())
+const showDeleted = ref(false)
 
 const isOwnerMode = computed(() => loggedIn.value && !isTableBusiness(loadProfile()))
 
@@ -94,11 +95,16 @@ async function refreshOwner() {
     ownerCarts.value = []
     return
   }
-  const res = await apiListCatalogCarts()
+  const res = await apiListCatalogCarts({ includeDeleted: true })
   if (res.ok && Array.isArray(res.data?.carts)) {
     ownerCarts.value = res.data.carts
   }
 }
+
+const visibleOwnerCarts = computed(() => {
+  if (showDeleted.value) return ownerCarts.value
+  return ownerCarts.value.filter((c) => !c.deleted)
+})
 
 async function refreshGuest() {
   const bags = loadAllCatalogCarts()
@@ -136,12 +142,20 @@ async function markClosed(cart) {
 }
 
 async function softDelete(cart) {
-  if (!confirm('Remove this cart entry?')) return
+  if (!confirm('Remove this cart entry? You can restore it later.')) return
   const res = await apiUpdateCatalogCart(cart.id, { deleted: true })
   if (res.ok) {
     flash('Removed')
     await refreshOwner()
   } else flash(res.error || 'Remove failed')
+}
+
+async function restoreCart(cart) {
+  const res = await apiUpdateCatalogCart(cart.id, { deleted: false })
+  if (res.ok) {
+    flash('Restored')
+    await refreshOwner()
+  } else flash(res.error || 'Restore failed')
 }
 
 async function submitQuote() {
@@ -260,7 +274,14 @@ onUnmounted(() => {
 
       <!-- Owner inbox -->
       <template v-else-if="isOwnerMode">
-        <div v-if="!ownerCarts.length" class="card-item-bg rounded-2xl px-4 py-10 text-center">
+        <div class="flex items-center justify-between gap-3 mb-3">
+          <p class="text-[10px] uppercase tracking-wide text-gray-500">Inbox</p>
+          <label class="inline-flex items-center gap-2 text-[11px] text-gray-400">
+            <input v-model="showDeleted" type="checkbox" class="rounded">
+            Show removed
+          </label>
+        </div>
+        <div v-if="!visibleOwnerCarts.length" class="card-item-bg rounded-2xl px-4 py-10 text-center">
           <span class="material-symbols-outlined text-gray-500 text-[32px]">shopping_cart</span>
           <p class="text-sm text-gray-300 mt-3">No catalog cart activity yet</p>
           <RouterLink to="/catalog" class="inline-block mt-4 text-sm text-emerald-400 no-underline">
@@ -268,7 +289,12 @@ onUnmounted(() => {
           </RouterLink>
         </div>
         <ul v-else class="space-y-3">
-          <li v-for="cart in ownerCarts" :key="cart.id" class="card-item-bg rounded-2xl p-4">
+          <li
+            v-for="cart in visibleOwnerCarts"
+            :key="cart.id"
+            class="card-item-bg rounded-2xl p-4"
+            :class="cart.deleted ? 'opacity-60' : ''"
+          >
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
                 <p class="text-sm font-semibold truncate">{{ cart.visitorName || 'Guest' }}</p>
@@ -293,14 +319,14 @@ onUnmounted(() => {
             <p v-if="cart.note" class="text-xs text-gray-400 mt-2">Note: {{ cart.note }}</p>
             <div class="flex gap-2 mt-3">
               <a
-                v-if="cart.visitorEmail"
+                v-if="cart.visitorEmail && !cart.deleted"
                 :href="'mailto:' + cart.visitorEmail"
                 class="flex-1 py-2 rounded-xl bg-zinc-800 text-sm font-medium text-center no-underline text-inherit"
               >
                 Email
               </a>
               <button
-                v-if="cart.status !== 'closed'"
+                v-if="!cart.deleted && cart.status !== 'closed'"
                 type="button"
                 class="px-3 py-2 rounded-xl bg-zinc-800 text-sm"
                 @click="markClosed(cart)"
@@ -308,11 +334,20 @@ onUnmounted(() => {
                 Close
               </button>
               <button
+                v-if="!cart.deleted"
                 type="button"
                 class="px-3 py-2 rounded-xl bg-zinc-800 text-sm text-red-300"
                 @click="softDelete(cart)"
               >
                 Remove
+              </button>
+              <button
+                v-else
+                type="button"
+                class="px-3 py-2 rounded-xl bg-zinc-800 text-sm text-emerald-300"
+                @click="restoreCart(cart)"
+              >
+                Restore
               </button>
             </div>
           </li>
