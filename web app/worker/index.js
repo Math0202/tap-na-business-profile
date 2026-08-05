@@ -1234,6 +1234,41 @@ async function getProfilePersonalType(env, profileId) {
   return 'business'
 }
 
+/** Keep team_members.role aligned with cards.personal_type for a profile or card. */
+async function syncPersonalTypeAcrossDb(env, { profileId = '', cardId = '', personalType = '' } = {}) {
+  const role = normalizePersonalType(personalType)
+  if (!role) return
+
+  if (cardId) {
+    await sb(env, `cards?id=eq.${encodeURIComponent(cardId)}&kind=eq.personal&deleted=eq.false`, {
+      method: 'PATCH',
+      body: { personal_type: role },
+      prefer: 'return=minimal'
+    })
+  }
+
+  if (profileId) {
+    await sb(
+      env,
+      `cards?profile_id=eq.${encodeURIComponent(profileId)}&kind=eq.personal&deleted=eq.false`,
+      {
+        method: 'PATCH',
+        body: { personal_type: role },
+        prefer: 'return=minimal'
+      }
+    )
+    await sb(
+      env,
+      `team_members?profile_id=eq.${encodeURIComponent(profileId)}&deleted=eq.false&status=eq.active`,
+      {
+        method: 'PATCH',
+        body: { role, updated_at: new Date().toISOString() },
+        prefer: 'return=minimal'
+      }
+    )
+  }
+}
+
 function mapTeamRow(row) {
   return {
     id: row.id,
@@ -2438,14 +2473,15 @@ async function handleApi(request, env, url) {
     if (gate.error) return gate.error
     const slug = decodeURIComponent(kindMatch[1])
     const body = await readJson(request)
-    const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&select=id,kind`)
+    const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&select=id,kind,profile_id`)
     if (!cards?.length) return bad('Card not found', 404)
+    const cardRow = cards[0]
     const kind =
       body?.kind !== undefined
         ? body.kind === 'personal'
           ? 'personal'
           : 'table'
-        : cards[0].kind === 'personal'
+        : cardRow.kind === 'personal'
           ? 'personal'
           : 'table'
     const patch = { kind }
@@ -2461,6 +2497,13 @@ async function handleApi(request, env, url) {
       body: patch,
       prefer: 'return=minimal'
     })
+    if (kind === 'personal' && patch.personal_type) {
+      await syncPersonalTypeAcrossDb(env, {
+        profileId: cardRow.profile_id || '',
+        cardId: cardRow.id,
+        personalType: patch.personal_type
+      })
+    }
     return json({ ok: true, slug, kind, personalType: patch.personal_type || '' })
   }
 
@@ -2861,13 +2904,11 @@ async function handleApi(request, env, url) {
         body: { role: nextRole, updated_at: new Date().toISOString() },
         prefer: 'return=minimal'
       })
-      if (member.card_id) {
-        await sb(env, `cards?id=eq.${encodeURIComponent(member.card_id)}`, {
-          method: 'PATCH',
-          body: { personal_type: nextRole },
-          prefer: 'return=minimal'
-        })
-      }
+      await syncPersonalTypeAcrossDb(env, {
+        profileId: member.profile_id || '',
+        cardId: member.card_id || '',
+        personalType: nextRole
+      })
       return json({ ok: true, id: memberId, role: nextRole })
     }
 
