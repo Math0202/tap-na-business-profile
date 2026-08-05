@@ -47,7 +47,10 @@ import {
   QUOTE_STATUSES,
   PAYMENT_METHODS,
   CASH_CATEGORIES,
-  COMPANY
+  COMPANY,
+  BANKING_DETAILS,
+  shouldIncludeBankingDetails,
+  bankingReferenceAdvice
 } from '../lib/salesStore'
 import {
   provisionCardsForSale,
@@ -945,7 +948,22 @@ function isProductVideoData(src) {
 }
 
 function productThumb(p) {
-  return (p.images && p.images[0]) || ''
+  if (!p) return ''
+  return (p.images && p.images[0]) || productThumbFor(p.id) || ''
+}
+
+function selectSaleProduct(idx, productId) {
+  const line = saleForm.value.lines?.[idx]
+  if (!line) return
+  line.productId = productId
+  onSaleLineProduct(idx)
+}
+
+function selectQuoteProduct(idx, productId) {
+  const line = quoteForm.value.lines?.[idx]
+  if (!line) return
+  line.productId = productId
+  onQuoteLineProduct(idx)
 }
 
 async function submitProduct(e) {
@@ -1402,7 +1420,15 @@ onMounted(async () => {
             <p class="text-[11px] uppercase tracking-wide text-gray-500">Pending</p>
             <p class="text-xl font-bold mt-1 text-amber-300">{{ formatMoney(stats.pendingAmount) }}</p>
           </div>
-          <div class="card-item-bg rounded-2xl p-4">
+          <div v-if="isSalesScoped" class="card-item-bg rounded-2xl p-4">
+            <p class="text-[11px] uppercase tracking-wide text-gray-500">Money made</p>
+            <p class="text-xl font-bold mt-1 text-emerald-400">{{ formatMoney(stats.inflow) }}</p>
+          </div>
+          <div v-if="isSalesScoped" class="card-item-bg rounded-2xl p-4">
+            <p class="text-[11px] uppercase tracking-wide text-gray-500">Money spent</p>
+            <p class="text-xl font-bold mt-1 text-red-400">{{ formatMoney(stats.outflow) }}</p>
+          </div>
+          <div v-else class="card-item-bg rounded-2xl p-4">
             <p class="text-[11px] uppercase tracking-wide text-gray-500">Cash balance</p>
             <p class="text-xl font-bold mt-1" :class="stats.balance >= 0 ? 'text-emerald-400' : 'text-red-400'">
               {{ formatMoney(stats.balance) }}
@@ -1803,16 +1829,16 @@ onMounted(async () => {
 
       <!-- Cash flow -->
       <section v-if="tab === 'cash'" class="mb-8 space-y-4">
-        <div class="grid grid-cols-3 gap-3">
+        <div class="grid gap-3" :class="isSalesScoped ? 'grid-cols-2' : 'grid-cols-3'">
           <div class="card-item-bg rounded-2xl p-3">
-            <p class="text-[10px] uppercase tracking-wide text-gray-500">In</p>
+            <p class="text-[10px] uppercase tracking-wide text-gray-500">{{ isSalesScoped ? 'Money made' : 'In' }}</p>
             <p class="text-lg font-bold text-emerald-400">{{ formatMoney(cashSummary.inflow) }}</p>
           </div>
           <div class="card-item-bg rounded-2xl p-3">
-            <p class="text-[10px] uppercase tracking-wide text-gray-500">Out</p>
+            <p class="text-[10px] uppercase tracking-wide text-gray-500">{{ isSalesScoped ? 'Money spent' : 'Out' }}</p>
             <p class="text-lg font-bold text-red-400">{{ formatMoney(cashSummary.outflow) }}</p>
           </div>
-          <div class="card-item-bg rounded-2xl p-3">
+          <div v-if="!isSalesScoped" class="card-item-bg rounded-2xl p-3">
             <p class="text-[10px] uppercase tracking-wide text-gray-500">Balance</p>
             <p
               class="text-lg font-bold"
@@ -1921,7 +1947,7 @@ onMounted(async () => {
               <p class="text-sm font-bold" :class="c.type === 'in' ? 'text-emerald-400' : 'text-red-400'">
                 {{ c.type === 'in' ? '+' : '−' }}{{ formatMoney(c.amount) }}
               </p>
-              <p class="text-[10px] text-gray-500 mt-0.5 tabular-nums">
+              <p v-if="!isSalesScoped" class="text-[10px] text-gray-500 mt-0.5 tabular-nums">
                 bal {{ formatMoney(c.runningBalance) }}
               </p>
               <div class="flex gap-2 justify-end mt-1">
@@ -2062,14 +2088,41 @@ onMounted(async () => {
               </button>
             </div>
             <div>
-              <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Product</label>
-              <select
-                v-model="line.productId"
-                class="field-shell w-full field-input !py-3"
-                @change="onSaleLineProduct(idx)"
+              <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-2">Product</label>
+              <div class="grid grid-cols-2 gap-2">
+                <button
+                  v-for="p in productOptions"
+                  :key="p.id"
+                  type="button"
+                  class="rounded-2xl border p-2 text-left transition-colors"
+                  :class="line.productId === p.id
+                    ? 'border-white bg-white/10'
+                    : 'border-[var(--border)] hover:border-zinc-500'"
+                  @click="selectSaleProduct(idx, p.id)"
+                >
+                  <div class="aspect-[3/4] rounded-xl bg-zinc-900/80 overflow-hidden flex items-center justify-center mb-2">
+                    <img
+                      v-if="productThumb(p)"
+                      :src="productThumb(p)"
+                      :alt="p.name"
+                      class="w-full h-full object-contain p-1"
+                    >
+                    <span v-else class="material-symbols-outlined text-gray-500 text-[28px]">credit_card</span>
+                  </div>
+                  <p class="text-xs font-semibold leading-tight line-clamp-2">{{ p.name }}</p>
+                  <p class="text-[11px] text-gray-400 mt-0.5">{{ formatMoney(p.defaultPrice) }}</p>
+                </button>
+              </div>
+              <div
+                v-if="productThumbFor(line.productId)"
+                class="mt-3 rounded-2xl border border-[var(--border)] bg-zinc-900/50 p-3 flex justify-center"
               >
-                <option v-for="p in productOptions" :key="p.id" :value="p.id">{{ p.name }} · {{ formatMoney(p.defaultPrice) }}</option>
-              </select>
+                <img
+                  :src="productThumbFor(line.productId)"
+                  alt="Selected card preview"
+                  class="max-h-36 w-auto object-contain drop-shadow-lg"
+                >
+              </div>
             </div>
             <div class="grid grid-cols-2 gap-2">
               <div>
@@ -2179,14 +2232,41 @@ onMounted(async () => {
               </button>
             </div>
             <div>
-              <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Product</label>
-              <select
-                v-model="line.productId"
-                class="field-shell w-full field-input !py-3"
-                @change="onQuoteLineProduct(idx)"
+              <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-2">Product</label>
+              <div class="grid grid-cols-2 gap-2">
+                <button
+                  v-for="p in productOptions"
+                  :key="p.id"
+                  type="button"
+                  class="rounded-2xl border p-2 text-left transition-colors"
+                  :class="line.productId === p.id
+                    ? 'border-white bg-white/10'
+                    : 'border-[var(--border)] hover:border-zinc-500'"
+                  @click="selectQuoteProduct(idx, p.id)"
+                >
+                  <div class="aspect-[3/4] rounded-xl bg-zinc-900/80 overflow-hidden flex items-center justify-center mb-2">
+                    <img
+                      v-if="productThumb(p)"
+                      :src="productThumb(p)"
+                      :alt="p.name"
+                      class="w-full h-full object-contain p-1"
+                    >
+                    <span v-else class="material-symbols-outlined text-gray-500 text-[28px]">credit_card</span>
+                  </div>
+                  <p class="text-xs font-semibold leading-tight line-clamp-2">{{ p.name }}</p>
+                  <p class="text-[11px] text-gray-400 mt-0.5">{{ formatMoney(p.defaultPrice) }}</p>
+                </button>
+              </div>
+              <div
+                v-if="productThumbFor(line.productId)"
+                class="mt-3 rounded-2xl border border-[var(--border)] bg-zinc-900/50 p-3 flex justify-center"
               >
-                <option v-for="p in productOptions" :key="p.id" :value="p.id">{{ p.name }} · {{ formatMoney(p.defaultPrice) }}</option>
-              </select>
+                <img
+                  :src="productThumbFor(line.productId)"
+                  alt="Selected card preview"
+                  class="max-h-36 w-auto object-contain drop-shadow-lg"
+                >
+              </div>
             </div>
             <div class="grid grid-cols-2 gap-2">
               <div>
@@ -2494,6 +2574,41 @@ onMounted(async () => {
             <span class="text-xs uppercase tracking-wide text-gray-500">Amount due</span>
             <span class="text-lg font-bold">{{ formatMoney(activeInvoice.amount) }}</span>
           </div>
+          <div
+            v-if="shouldIncludeBankingDetails(activeInvoice, { kind: 'invoice' })"
+            class="border-t border-[var(--border)] pt-3 space-y-2"
+          >
+            <p class="text-[10px] uppercase tracking-wide text-gray-500">Banking details</p>
+            <p class="text-xs text-gray-300 leading-relaxed">
+              {{ bankingReferenceAdvice(activeInvoice.invoiceNumber, { kind: 'invoice' }) }}
+            </p>
+            <dl class="text-xs space-y-1 text-gray-300">
+              <div class="flex justify-between gap-3">
+                <dt class="text-gray-500 shrink-0">Reference</dt>
+                <dd class="font-mono text-right">{{ activeInvoice.invoiceNumber }}</dd>
+              </div>
+              <div class="flex justify-between gap-3">
+                <dt class="text-gray-500 shrink-0">Account holder</dt>
+                <dd class="text-right">{{ BANKING_DETAILS.accountHolder }}</dd>
+              </div>
+              <div class="flex justify-between gap-3">
+                <dt class="text-gray-500 shrink-0">Account type</dt>
+                <dd class="text-right">{{ BANKING_DETAILS.accountType }}</dd>
+              </div>
+              <div class="flex justify-between gap-3">
+                <dt class="text-gray-500 shrink-0">Account number</dt>
+                <dd class="font-mono text-right">{{ BANKING_DETAILS.accountNumber }}</dd>
+              </div>
+              <div class="flex justify-between gap-3">
+                <dt class="text-gray-500 shrink-0">Branch code</dt>
+                <dd class="font-mono text-right">{{ BANKING_DETAILS.branchCode }}</dd>
+              </div>
+              <div class="flex justify-between gap-3">
+                <dt class="text-gray-500 shrink-0">Swift code</dt>
+                <dd class="font-mono text-right">{{ BANKING_DETAILS.swiftCode }}</dd>
+              </div>
+            </dl>
+          </div>
           <p class="text-[11px] text-gray-500 leading-relaxed">
             {{ COMPANY.legalName }} · {{ COMPANY.address }} · {{ COMPANY.phone }} · {{ COMPANY.email }}
           </p>
@@ -2558,6 +2673,38 @@ onMounted(async () => {
             :alt="activeQuote.productName"
             class="w-28 h-28 object-contain rounded-2xl bg-white/5"
           >
+        </div>
+        <div class="rounded-2xl border border-[var(--border)] p-4 space-y-2">
+          <p class="text-[10px] uppercase tracking-wide text-gray-500">Banking details</p>
+          <p class="text-xs text-gray-300 leading-relaxed">
+            {{ bankingReferenceAdvice(activeQuote.quoteNumber, { kind: 'quote' }) }}
+          </p>
+          <dl class="text-xs space-y-1 text-gray-300">
+            <div class="flex justify-between gap-3">
+              <dt class="text-gray-500 shrink-0">Reference</dt>
+              <dd class="font-mono text-right">{{ activeQuote.quoteNumber }}</dd>
+            </div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-gray-500 shrink-0">Account holder</dt>
+              <dd class="text-right">{{ BANKING_DETAILS.accountHolder }}</dd>
+            </div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-gray-500 shrink-0">Account type</dt>
+              <dd class="text-right">{{ BANKING_DETAILS.accountType }}</dd>
+            </div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-gray-500 shrink-0">Account number</dt>
+              <dd class="font-mono text-right">{{ BANKING_DETAILS.accountNumber }}</dd>
+            </div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-gray-500 shrink-0">Branch code</dt>
+              <dd class="font-mono text-right">{{ BANKING_DETAILS.branchCode }}</dd>
+            </div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-gray-500 shrink-0">Swift code</dt>
+              <dd class="font-mono text-right">{{ BANKING_DETAILS.swiftCode }}</dd>
+            </div>
+          </dl>
         </div>
         <p class="text-[11px] text-gray-500 leading-relaxed">
           {{ COMPANY.legalName }} · {{ COMPANY.address }} · {{ COMPANY.phone }} · {{ COMPANY.email }}

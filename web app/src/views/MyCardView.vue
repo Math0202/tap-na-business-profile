@@ -18,7 +18,7 @@ import {
   isLoggedIn
 } from '../lib/profileStore'
 import { downloadVcard, profileShareUrl, youtubeEmbedUrl, vcardPhotoLine } from '../lib/shareHelpers'
-import { preferredShareSlug } from '../lib/cardLinkStore'
+import { preferredShareSlug, listCardsForProfile, cardImageSrc, kindLabel, personalTypeLabel } from '../lib/cardLinkStore'
 import { trackVisit, trackShare, trackClick, LOCAL_ID } from '../lib/adminStore'
 import { apiLogCardEvent, apiPublicCatalog } from '../lib/api'
 
@@ -100,6 +100,32 @@ const shareSlug = computed(() => {
 const shareUrl = computed(() =>
   profileShareUrl(shareSlug.value, undefined, { cardType: profile.value.cardType || 'personal' })
 )
+
+const ownLinkedCards = computed(() => {
+  if (!isLoggedIn()) return []
+  const pid = profile.value.remoteProfileId || profile.value.id || LOCAL_ID
+  return listCardsForProfile(pid)
+})
+const ownCardPreview = computed(() => {
+  if (!isLoggedIn()) return null
+  const card = ownLinkedCards.value[0]
+  if (card) {
+    return {
+      src: cardImageSrc(card),
+      label:
+        card.kind === 'personal' && card.personalType
+          ? `${kindLabel(card.kind)} · ${personalTypeLabel(card.personalType)}`
+          : kindLabel(card.kind),
+      serial: card.serial || ''
+    }
+  }
+  const kind = profile.value.cardType === 'table' ? 'table' : 'personal'
+  return {
+    src: cardImageSrc({ kind, personalType: kind === 'personal' ? 'business' : '' }),
+    label: kind === 'table' ? 'Table card' : 'Personal card',
+    serial: shareSlug.value || ''
+  }
+})
 
 const shareText = computed(() => {
   const n = profile.value.name || 'this digital business card'
@@ -393,6 +419,28 @@ watch(() => route.path, () => {
       </section>
 
       <div class="page-sheet flex-1 mt-6">
+        <div
+          v-if="ownCardPreview"
+          class="mx-6 mb-4 rounded-2xl border border-[var(--border)] bg-zinc-900/40 p-4 space-y-3"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-sm font-semibold">Your NFC card</p>
+              <p class="text-xs text-gray-400 mt-0.5">{{ ownCardPreview.label }}</p>
+              <p v-if="ownCardPreview.serial" class="text-[11px] font-mono text-gray-500 mt-1">
+                {{ ownCardPreview.serial }}
+              </p>
+            </div>
+          </div>
+          <div class="flex justify-center">
+            <img
+              :src="ownCardPreview.src"
+              :alt="ownCardPreview.label"
+              class="max-h-40 w-auto object-contain drop-shadow-lg"
+            >
+          </div>
+        </div>
+
         <div
           v-if="disabled"
           class="mx-6 mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3"

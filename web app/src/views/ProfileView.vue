@@ -17,7 +17,13 @@ import {
   publicPage,
   normalizeMenuImages
 } from '../lib/profileStore'
-import { listCardsForProfile, preferredShareSlug, kindLabel } from '../lib/cardLinkStore'
+import {
+  listCardsForProfile,
+  preferredShareSlug,
+  kindLabel,
+  cardImageSrc,
+  personalTypeLabel
+} from '../lib/cardLinkStore'
 import { LOCAL_ID } from '../lib/adminStore'
 import { profileShareUrl } from '../lib/shareHelpers'
 import { apiUploadAsset, apiUpdateMe, ensureApiSession, getApiToken } from '../lib/api'
@@ -113,6 +119,20 @@ const hasVideo = computed(() => !!(videoData.value && String(videoData.value).tr
 const isDataVideo = computed(() => String(videoData.value || '').startsWith('data:video'))
 const shareSlug = ref('')
 const linkedCards = computed(() => listCardsForProfile(LOCAL_ID))
+const primaryLinkedCard = computed(() => linkedCards.value[0] || null)
+const linkedCardPreviewSrc = computed(() => {
+  if (primaryLinkedCard.value) return cardImageSrc(primaryLinkedCard.value)
+  return cardImageSrc({
+    kind: isTable.value ? 'table' : 'personal',
+    personalType: cardType.value === 'table' ? '' : 'business'
+  })
+})
+const linkedCardPreviewLabel = computed(() => {
+  const c = primaryLinkedCard.value
+  if (!c) return isTable.value ? 'Table card' : 'Personal card'
+  const tier = c.kind === 'personal' && c.personalType ? personalTypeLabel(c.personalType) : ''
+  return tier ? `${kindLabel(c.kind)} · ${tier}` : kindLabel(c.kind)
+})
 const displaySlug = computed(() => {
   return (
     shareSlug.value ||
@@ -844,6 +864,28 @@ onMounted(() => {
             <div class="w-11 h-6 bg-emerald-500 peer-focus:outline-none rounded-full peer peer-checked:bg-red-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5" />
           </label>
         </div>
+      </div>
+
+      <div class="card-item-bg rounded-2xl p-4 space-y-3">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-sm font-semibold">Your NFC card</p>
+            <p class="text-xs text-gray-400 mt-0.5">{{ linkedCardPreviewLabel }}</p>
+            <p v-if="primaryLinkedCard?.serial" class="text-[11px] font-mono text-gray-500 mt-1">
+              {{ primaryLinkedCard.serial }}
+            </p>
+          </div>
+        </div>
+        <div class="rounded-2xl border border-[var(--border)] bg-zinc-900/50 p-4 flex justify-center">
+          <img
+            :src="linkedCardPreviewSrc"
+            :alt="linkedCardPreviewLabel"
+            class="max-h-44 w-auto object-contain drop-shadow-lg"
+          >
+        </div>
+        <p v-if="linkedCards.length > 1" class="text-[11px] text-gray-500">
+          {{ linkedCards.length }} cards linked to this profile
+        </p>
       </div>
 
       <!-- Personal card fields -->

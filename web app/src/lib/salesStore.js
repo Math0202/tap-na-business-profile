@@ -43,6 +43,69 @@ export const COMPANY = {
   mailFrom: 'tap-na <welcome@tapnam.com>'
 }
 
+/** Bank details for EFT on quotes and unpaid invoices */
+export const BANKING_DETAILS = {
+  accountHolder: 'Tangeni Matheus',
+  accountType: 'FUTURE FORWARD',
+  accountNumber: '62272845812',
+  branchCode: '280873',
+  swiftCode: 'FIRNNANX'
+}
+
+/** Show banking block on invoices only when not yet paid (and not void). */
+export function shouldIncludeBankingDetails(doc, { kind } = {}) {
+  if (kind === 'quote') return true
+  if (kind === 'invoice') {
+    const status = String(doc?.status || '').toLowerCase()
+    return status !== 'paid' && status !== 'void'
+  }
+  return false
+}
+
+export function bankingReferenceAdvice(docNumber, { kind } = {}) {
+  const label = kind === 'quote' ? 'quote' : 'invoice'
+  const num = String(docNumber || '').trim() || `your ${label} number`
+  return `Please use your ${label} number as the payment reference: ${num}`
+}
+
+export function bankingDetailsLines(docNumber, { kind } = {}) {
+  const b = BANKING_DETAILS
+  return [
+    bankingReferenceAdvice(docNumber, { kind }),
+    `Reference: ${String(docNumber || '').trim() || (kind === 'quote' ? 'Quote number' : 'Invoice number')}`,
+    `Account holder: ${b.accountHolder}`,
+    `Account type: ${b.accountType}`,
+    `Account number: ${b.accountNumber}`,
+    `Branch code: ${b.branchCode}`,
+    `Swift code: ${b.swiftCode}`
+  ]
+}
+
+export function bankingDetailsHtml(docNumber, { kind } = {}) {
+  const lines = bankingDetailsLines(docNumber, { kind })
+  const advice = escapeHtml(lines[0])
+  const rows = lines
+    .slice(1)
+    .map((line) => {
+      const idx = line.indexOf(':')
+      if (idx < 0) return `<div>${escapeHtml(line)}</div>`
+      const label = escapeHtml(line.slice(0, idx + 1))
+      const value = escapeHtml(line.slice(idx + 1).trim())
+      return `<div><span style="color:#777;">${label}</span> ${value}</div>`
+    })
+    .join('')
+  return `
+  <div style="margin:16px 0;padding:14px 16px;border:1px solid #e5e5e5;border-radius:12px;background:#fafafa;font-size:13px;line-height:1.55;">
+    <p style="margin:0 0 8px;font-weight:700;font-size:14px;">Banking details</p>
+    <p style="margin:0 0 10px;color:#444;">${advice}</p>
+    ${rows}
+  </div>`.trim()
+}
+
+export function bankingDetailsText(docNumber, { kind } = {}) {
+  return ['Banking details', ...bankingDetailsLines(docNumber, { kind })].join('\n')
+}
+
 const PRODUCT_FALLBACK_IMAGES = {
   blue: '/images/blue-card.png',
   black: '/images/black-card.png',
@@ -1147,6 +1210,11 @@ export function buildInvoiceEmailPayload(invoice, { to } = {}) {
   </table>
   <p style="font-size:16px;font-weight:700;margin:0 0 16px;">Amount due: ${escapeHtml(formatMoney(invoice.amount))}</p>
   <p style="font-size:12px;color:#777;margin:0;">Payment: ${escapeHtml(invoice.paymentMethod || '—')}${invoice.notes ? ' · ' + escapeHtml(invoice.notes) : ''}</p>
+  ${
+    shouldIncludeBankingDetails(invoice, { kind: 'invoice' })
+      ? bankingDetailsHtml(invoice.invoiceNumber, { kind: 'invoice' })
+      : ''
+  }
   <p style="font-size:12px;color:#777;margin:12px 0 0;">A PDF copy of this invoice is attached.</p>
   ${companyContactBlockHtml()}
 </body>
@@ -1164,6 +1232,9 @@ export function buildInvoiceEmailPayload(invoice, { to } = {}) {
     `Total: ${formatMoney(invoice.amount)}`,
     `Payment: ${invoice.paymentMethod || '—'}`,
     '',
+    ...(shouldIncludeBankingDetails(invoice, { kind: 'invoice' })
+      ? [bankingDetailsText(invoice.invoiceNumber, { kind: 'invoice' }), '']
+      : []),
     'A PDF copy of this invoice is attached.'
   ].join('\n')
 
@@ -1218,6 +1289,7 @@ export function buildQuoteEmailPayload(quote, { to } = {}) {
   </table>
   <p style="font-size:16px;font-weight:700;margin:0 0 16px;">Quoted total: ${escapeHtml(formatMoney(quote.amount))}</p>
   <p style="font-size:12px;color:#777;margin:0;">${quote.notes ? escapeHtml(quote.notes) : 'Reply to this email to accept or ask questions.'}</p>
+  ${bankingDetailsHtml(quote.quoteNumber, { kind: 'quote' })}
   <p style="font-size:12px;color:#777;margin:12px 0 0;">A PDF copy of this quote is attached.</p>
   ${companyContactBlockHtml()}
 </body>
@@ -1233,6 +1305,8 @@ export function buildQuoteEmailPayload(quote, { to } = {}) {
     linesTextBlock(quote),
     `Total: ${formatMoney(quote.amount)}`,
     `Valid until: ${valid}`,
+    '',
+    bankingDetailsText(quote.quoteNumber, { kind: 'quote' }),
     '',
     'A PDF copy of this quote is attached.'
   ].join('\n')

@@ -423,23 +423,66 @@ watch(filteredSlugs, (rows) => {
               Pick personal or table. For personal cards, also choose Executive Exclusive, Business, or Professional.
             </p>
           </div>
+          <div class="grid grid-cols-2 gap-2">
+            <button
+              v-for="k in kindOptions"
+              :key="k.id"
+              type="button"
+              class="rounded-2xl border p-2 text-left transition-colors"
+              :class="slugForm.kind === k.id
+                ? 'border-white bg-white/10'
+                : 'border-[var(--border)] hover:border-zinc-500'"
+              @click="slugForm.kind = k.id"
+            >
+              <div class="aspect-[3/4] rounded-xl bg-zinc-900/80 overflow-hidden flex items-center justify-center mb-2">
+                <img
+                  :src="cardImageSrc({
+                    kind: k.id,
+                    personalType: k.id === 'personal' ? slugForm.personalType : ''
+                  })"
+                  :alt="k.label"
+                  class="w-full h-full object-contain p-1"
+                >
+              </div>
+              <p class="text-xs font-semibold">{{ k.label }}</p>
+            </button>
+          </div>
+          <div v-if="slugForm.kind === 'personal'" class="grid grid-cols-3 gap-2">
+            <button
+              v-for="t in personalTypeOptions"
+              :key="t.id"
+              type="button"
+              class="rounded-xl border p-2 text-center transition-colors"
+              :class="slugForm.personalType === t.id
+                ? 'border-white bg-white/10'
+                : 'border-[var(--border)] hover:border-zinc-500'"
+              @click="slugForm.personalType = t.id"
+            >
+              <img
+                :src="cardImageSrc({ kind: 'personal', personalType: t.id })"
+                :alt="t.label"
+                class="w-full max-h-16 object-contain mb-1"
+              >
+              <p class="text-[10px] font-semibold leading-tight">{{ t.label }}</p>
+            </button>
+          </div>
+          <div class="rounded-2xl border border-[var(--border)] bg-zinc-900/50 p-3 flex justify-center">
+            <img
+              :src="cardImageSrc({
+                kind: slugForm.kind,
+                personalType: slugForm.kind === 'personal' ? slugForm.personalType : ''
+              })"
+              alt="Card preview"
+              class="max-h-36 w-auto object-contain drop-shadow-lg"
+            >
+          </div>
           <div class="flex flex-col sm:flex-row gap-2">
             <div class="field-shell sm:w-28 !rounded-2xl">
               <input v-model="slugForm.count" type="number" min="1" max="200" class="field-input" aria-label="How many slugs">
             </div>
-            <div class="field-shell flex-1 !rounded-2xl">
-              <select v-model="slugForm.kind" class="field-input bg-transparent" aria-label="Card type">
-                <option v-for="k in kindOptions" :key="k.id" :value="k.id">{{ k.label }}</option>
-              </select>
-            </div>
-            <div v-if="slugForm.kind === 'personal'" class="field-shell flex-1 !rounded-2xl">
-              <select v-model="slugForm.personalType" class="field-input bg-transparent" aria-label="Personal tier">
-                <option v-for="t in personalTypeOptions" :key="t.id" :value="t.id">{{ t.label }}</option>
-              </select>
-            </div>
             <button
               type="button"
-              class="px-5 py-3 rounded-full text-xs font-bold bg-white text-black shrink-0 disabled:opacity-50"
+              class="px-5 py-3 rounded-full text-xs font-bold bg-white text-black shrink-0 disabled:opacity-50 flex-1 sm:flex-none"
               :disabled="slugGenerating"
               @click="generateSlugs"
             >

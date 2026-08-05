@@ -7,7 +7,10 @@ import {
   COMPANY,
   formatMoney,
   normalizeLines,
-  resolveProductImage
+  resolveProductImage,
+  BANKING_DETAILS,
+  shouldIncludeBankingDetails,
+  bankingReferenceAdvice
 } from './salesStore'
 
 function formatDay(iso) {
@@ -185,6 +188,47 @@ async function buildPdfBytes({ kind, row, imageDataUrl }) {
     const notes = doc.splitTextToSize('Notes: ' + row.notes, 170)
     doc.text(notes, 20, y)
     y += notes.length * 5
+  }
+
+  if (shouldIncludeBankingDetails(row, { kind })) {
+    if (y > 220) {
+      doc.addPage()
+      y = 20
+    } else {
+      y += 6
+    }
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(11)
+    doc.setTextColor(17, 17, 17)
+    doc.text('Banking details', 20, y)
+    y += 6
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.setTextColor(50, 50, 50)
+    const advice = doc.splitTextToSize(bankingReferenceAdvice(number, { kind }), 170)
+    doc.text(advice, 20, y)
+    y += advice.length * 4.5 + 2
+
+    const bankLines = [
+      ['Reference', number],
+      ['Account holder', BANKING_DETAILS.accountHolder],
+      ['Account type', BANKING_DETAILS.accountType],
+      ['Account number', BANKING_DETAILS.accountNumber],
+      ['Branch code', BANKING_DETAILS.branchCode],
+      ['Swift code', BANKING_DETAILS.swiftCode]
+    ]
+    for (const [label, value] of bankLines) {
+      if (y > 275) {
+        doc.addPage()
+        y = 20
+      }
+      doc.setTextColor(110, 110, 110)
+      doc.text(label + ':', 20, y)
+      doc.setTextColor(30, 30, 30)
+      doc.text(String(value), 55, y)
+      y += 5
+    }
   }
 
   y = Math.max(y + 16, 250)
