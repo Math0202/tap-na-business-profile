@@ -416,6 +416,8 @@ const cardProducts = computed(() => productOptions.value.filter((p) => p.categor
 const tableProducts = computed(() => productOptions.value.filter((p) => p.category === 'table'))
 const saleProductQty = reactive({})
 const saleUnitPrices = reactive({})
+const quoteProductQty = reactive({})
+const quoteUnitPrices = reactive({})
 
 const filteredProducts = computed(() => {
   const q = query.value.trim().toLowerCase()
@@ -551,64 +553,77 @@ const salePickerLines = computed(() =>
     }))
 )
 const saleFormTotal = computed(() => linesTotal(salePickerLines.value))
-const quoteFormTotal = computed(() => linesTotal(quoteForm.value.lines))
+const quotePickerLines = computed(() =>
+  productOptions.value
+    .filter((p) => (quoteProductQty[p.id] || 0) > 0)
+    .map((p) => ({
+      productId: p.id,
+      productName: p.name,
+      quantity: Math.max(1, Number(quoteProductQty[p.id]) || 1),
+      unitPrice:
+        quoteUnitPrices[p.id] != null && quoteUnitPrices[p.id] !== ''
+          ? Number(quoteUnitPrices[p.id])
+          : p.defaultPrice
+    }))
+)
+const quoteFormTotal = computed(() => linesTotal(quotePickerLines.value))
 
-function resetSaleProductPicker(lines = []) {
-  for (const key of Object.keys(saleProductQty)) delete saleProductQty[key]
-  for (const key of Object.keys(saleUnitPrices)) delete saleUnitPrices[key]
+function resetProductPicker(qtyMap, priceMap, lines = []) {
+  for (const key of Object.keys(qtyMap)) delete qtyMap[key]
+  for (const key of Object.keys(priceMap)) delete priceMap[key]
   for (const p of productOptions.value) {
-    saleProductQty[p.id] = 0
-    saleUnitPrices[p.id] = p.defaultPrice
+    qtyMap[p.id] = 0
+    priceMap[p.id] = p.defaultPrice
   }
   for (const line of lines || []) {
     if (!line?.productId) continue
-    saleProductQty[line.productId] = Math.max(0, Number(line.quantity) || 0)
+    qtyMap[line.productId] = Math.max(0, Number(line.quantity) || 0)
     if (line.unitPrice != null && line.unitPrice !== '') {
-      saleUnitPrices[line.productId] = Number(line.unitPrice)
+      priceMap[line.productId] = Number(line.unitPrice)
     }
   }
+}
+
+function resetSaleProductPicker(lines = []) {
+  resetProductPicker(saleProductQty, saleUnitPrices, lines)
+}
+
+function resetQuoteProductPicker(lines = []) {
+  resetProductPicker(quoteProductQty, quoteUnitPrices, lines)
 }
 
 function buildSaleLinesFromPicker() {
   return salePickerLines.value.map((line) => ({ ...line }))
 }
 
+function buildQuoteLinesFromPicker() {
+  return quotePickerLines.value.map((line) => ({ ...line }))
+}
+
 function saleProductQtyValue(productId) {
   return saleProductQty[productId] || 0
+}
+
+function quoteProductQtyValue(productId) {
+  return quoteProductQty[productId] || 0
 }
 
 function setSaleProductQty(productId, value) {
   saleProductQty[productId] = Math.max(0, Number(value) || 0)
 }
 
+function setQuoteProductQty(productId, value) {
+  quoteProductQty[productId] = Math.max(0, Number(value) || 0)
+}
+
 watch(productOptions, (list) => {
   for (const p of list) {
     if (saleProductQty[p.id] == null) saleProductQty[p.id] = 0
     if (saleUnitPrices[p.id] == null) saleUnitPrices[p.id] = p.defaultPrice
+    if (quoteProductQty[p.id] == null) quoteProductQty[p.id] = 0
+    if (quoteUnitPrices[p.id] == null) quoteUnitPrices[p.id] = p.defaultPrice
   }
 })
-
-function syncLineUnitPrice(lines, index) {
-  const line = lines?.[index]
-  if (!line) return
-  const p =
-    productOptions.value.find((x) => x.id === line.productId) ||
-    products.value.find((x) => x.id === line.productId)
-  if (p) line.unitPrice = p.defaultPrice
-}
-
-function onQuoteLineProduct(index) {
-  syncLineUnitPrice(quoteForm.value.lines, index)
-}
-
-function addQuoteLine() {
-  quoteForm.value.lines.push(emptyLine())
-}
-
-function removeQuoteLine(index) {
-  if (quoteForm.value.lines.length <= 1) return
-  quoteForm.value.lines.splice(index, 1)
-}
 
 function openNewSale() {
   editingSaleId.value = ''
@@ -794,6 +809,7 @@ async function undeleteSale(id) {
 function openNewQuote() {
   editingQuoteId.value = ''
   quoteForm.value = emptyQuote()
+  resetQuoteProductPicker()
   if (isSalesScoped.value && myAgentId.value) {
     quoteForm.value.agentId = myAgentId.value
   } else {
@@ -819,6 +835,7 @@ function openEditQuote(q) {
     validUntil: q.validUntil ? q.validUntil.slice(0, 10) : '',
     notes: q.notes
   }
+  resetQuoteProductPicker(quoteForm.value.lines)
   showQuoteForm.value = true
 }
 
@@ -828,8 +845,14 @@ function submitQuote(e) {
     flash('Customer name is required')
     return
   }
+  const lines = buildQuoteLinesFromPicker()
+  if (!lines.length) {
+    flash('Add at least one product with quantity')
+    return
+  }
   saveQuote({
     ...quoteForm.value,
+    lines,
     id: editingQuoteId.value || undefined,
     agentId: isSalesScoped.value ? myAgentId.value : quoteForm.value.agentId,
     validUntil: quoteForm.value.validUntil
@@ -996,13 +1019,6 @@ function isProductVideoData(src) {
 function productThumb(p) {
   if (!p) return ''
   return (p.images && p.images[0]) || productThumbFor(p.id) || ''
-}
-
-function selectQuoteProduct(idx, productId) {
-  const line = quoteForm.value.lines?.[idx]
-  if (!line) return
-  line.productId = productId
-  onQuoteLineProduct(idx)
 }
 
 async function submitProduct(e) {
@@ -2241,10 +2257,15 @@ onMounted(async () => {
           <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Notes</label>
           <div class="field-shell"><input v-model="saleForm.notes" class="field-input" placeholder="Optional"></div>
         </div>
-        <p class="text-xs text-gray-500">
-          Total {{ formatMoney(saleFormTotal) }}
-          · An invoice is generated when you save a new sale
-        </p>
+
+        <div class="rounded-2xl border border-white/20 bg-white/5 px-4 py-3 flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Total</p>
+            <p class="text-[11px] text-gray-500 mt-0.5">An invoice is generated when you save a new sale</p>
+          </div>
+          <p class="text-2xl font-bold tabular-nums shrink-0">{{ formatMoney(saleFormTotal) }}</p>
+        </div>
+
         <div class="flex gap-2 pt-1">
           <button type="button" class="flex-1 py-3 rounded-full border border-[var(--border)] text-sm font-semibold" @click="showSaleForm = false">Cancel</button>
           <button type="submit" class="flex-1 py-3 rounded-full bg-white text-black text-sm font-bold">Save</button>
@@ -2287,41 +2308,22 @@ onMounted(async () => {
           </select>
         </div>
 
-        <div class="space-y-2">
-          <div class="flex items-center justify-between gap-2">
-            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400">Products</label>
-            <button type="button" class="text-xs font-semibold text-gray-300 hover:text-white" @click="addQuoteLine">
-              + Add product
-            </button>
-          </div>
-          <div
-            v-for="(line, idx) in quoteForm.lines"
-            :key="'quote-line-' + idx"
-            class="rounded-2xl border border-[var(--border)] p-3 space-y-2"
-          >
-            <div class="flex items-center justify-between gap-2">
-              <p class="text-[11px] font-semibold text-gray-400">Item {{ idx + 1 }}</p>
-              <button
-                v-if="quoteForm.lines.length > 1"
-                type="button"
-                class="text-xs font-semibold text-red-400"
-                @click="removeQuoteLine(idx)"
+        <div class="space-y-3">
+          <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400">Products</label>
+
+          <div v-if="cardProducts.length" class="space-y-2">
+            <p class="text-[11px] font-semibold text-gray-400">Cards</p>
+            <div class="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 snap-x snap-mandatory">
+              <div
+                v-for="p in cardProducts"
+                :key="'quote-card-' + p.id"
+                class="w-28 shrink-0 snap-start space-y-2"
               >
-                Remove
-              </button>
-            </div>
-            <div>
-              <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-2">Product</label>
-              <div class="grid grid-cols-2 gap-2">
-                <button
-                  v-for="p in productOptions"
-                  :key="p.id"
-                  type="button"
-                  class="rounded-2xl border p-2 text-left transition-colors"
-                  :class="line.productId === p.id
+                <div
+                  class="rounded-2xl border p-2 transition-colors"
+                  :class="quoteProductQtyValue(p.id) > 0
                     ? 'border-white bg-white/10'
-                    : 'border-[var(--border)] hover:border-zinc-500'"
-                  @click="selectQuoteProduct(idx, p.id)"
+                    : 'border-[var(--border)]'"
                 >
                   <div class="aspect-[3/4] rounded-xl bg-zinc-900/80 overflow-hidden flex items-center justify-center mb-2">
                     <img
@@ -2330,36 +2332,95 @@ onMounted(async () => {
                       :alt="p.name"
                       class="w-full h-full object-contain p-1"
                     >
-                    <span v-else class="material-symbols-outlined text-gray-500 text-[28px]">credit_card</span>
+                    <span v-else class="material-symbols-outlined text-gray-500 text-[24px]">credit_card</span>
                   </div>
-                  <p class="text-xs font-semibold leading-tight line-clamp-2">{{ p.name }}</p>
-                  <p class="text-[11px] text-gray-400 mt-0.5">{{ formatMoney(p.defaultPrice) }}</p>
-                </button>
+                  <p class="text-[11px] font-semibold leading-tight line-clamp-2 min-h-[2rem]">{{ p.name }}</p>
+                  <p class="text-[10px] text-gray-400 mt-0.5">{{ formatMoney(p.defaultPrice) }}</p>
+                </div>
+                <div>
+                  <label class="block text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Qty</label>
+                  <div class="field-shell !rounded-xl">
+                    <input
+                      :value="quoteProductQtyValue(p.id)"
+                      type="number"
+                      min="0"
+                      inputmode="numeric"
+                      class="field-input !py-2 text-center"
+                      @input="setQuoteProductQty(p.id, $event.target.value)"
+                    >
+                  </div>
+                </div>
               </div>
+            </div>
+          </div>
+
+          <div v-if="tableProducts.length" class="space-y-2">
+            <p class="text-[11px] font-semibold text-gray-400">Table</p>
+            <div class="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 snap-x snap-mandatory">
               <div
-                v-if="productThumbFor(line.productId)"
-                class="mt-3 rounded-2xl border border-[var(--border)] bg-zinc-900/50 p-3 flex justify-center"
+                v-for="p in tableProducts"
+                :key="'quote-table-' + p.id"
+                class="w-28 shrink-0 snap-start space-y-2"
               >
-                <img
-                  :src="productThumbFor(line.productId)"
-                  alt="Selected card preview"
-                  class="max-h-36 w-auto object-contain drop-shadow-lg"
+                <div
+                  class="rounded-2xl border p-2 transition-colors"
+                  :class="quoteProductQtyValue(p.id) > 0
+                    ? 'border-white bg-white/10'
+                    : 'border-[var(--border)]'"
+                >
+                  <div class="aspect-[3/4] rounded-xl bg-zinc-900/80 overflow-hidden flex items-center justify-center mb-2">
+                    <img
+                      v-if="productThumb(p)"
+                      :src="productThumb(p)"
+                      :alt="p.name"
+                      class="w-full h-full object-contain p-1"
+                    >
+                    <span v-else class="material-symbols-outlined text-gray-500 text-[24px]">storefront</span>
+                  </div>
+                  <p class="text-[11px] font-semibold leading-tight line-clamp-2 min-h-[2rem]">{{ p.name }}</p>
+                  <p class="text-[10px] text-gray-400 mt-0.5">{{ formatMoney(p.defaultPrice) }}</p>
+                </div>
+                <div>
+                  <label class="block text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Qty</label>
+                  <div class="field-shell !rounded-xl">
+                    <input
+                      :value="quoteProductQtyValue(p.id)"
+                      type="number"
+                      min="0"
+                      inputmode="numeric"
+                      class="field-input !py-2 text-center"
+                      @input="setQuoteProductQty(p.id, $event.target.value)"
+                    >
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <p v-if="!cardProducts.length && !tableProducts.length" class="text-sm text-gray-500">
+            No active products. Add products in the Products tab first.
+          </p>
+
+          <div v-if="quotePickerLines.length" class="rounded-2xl border border-[var(--border)] p-3 space-y-2">
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Selected</p>
+            <div
+              v-for="line in quotePickerLines"
+              :key="'quote-picked-' + line.productId"
+              class="grid grid-cols-[1fr_auto_auto] gap-2 items-center text-xs"
+            >
+              <span class="font-medium truncate">{{ line.productName }} × {{ line.quantity }}</span>
+              <div class="field-shell !rounded-xl w-24">
+                <input
+                  v-model.number="quoteUnitPrices[line.productId]"
+                  type="number"
+                  min="0"
+                  step="1"
+                  class="field-input !py-1.5 text-right"
+                  title="Unit price"
                 >
               </div>
+              <span class="font-semibold tabular-nums shrink-0">{{ formatMoney(line.quantity * line.unitPrice) }}</span>
             </div>
-            <div class="grid grid-cols-2 gap-2">
-              <div>
-                <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Qty</label>
-                <div class="field-shell"><input v-model.number="line.quantity" type="number" min="1" class="field-input"></div>
-              </div>
-              <div>
-                <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Unit price (N$)</label>
-                <div class="field-shell"><input v-model.number="line.unitPrice" type="number" min="0" step="1" class="field-input"></div>
-              </div>
-            </div>
-            <p class="text-[11px] text-gray-500 text-right">
-              Line {{ formatMoney((line.quantity || 0) * (line.unitPrice || 0)) }}
-            </p>
           </div>
         </div>
 
@@ -2379,9 +2440,15 @@ onMounted(async () => {
           <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Notes</label>
           <div class="field-shell"><input v-model="quoteForm.notes" class="field-input" placeholder="Optional"></div>
         </div>
-        <p class="text-xs text-gray-500">
-          Total {{ formatMoney(quoteFormTotal) }}
-        </p>
+
+        <div class="rounded-2xl border border-white/20 bg-white/5 px-4 py-3 flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Total</p>
+            <p class="text-[11px] text-gray-500 mt-0.5">Banking details are included when you email the quote</p>
+          </div>
+          <p class="text-2xl font-bold tabular-nums shrink-0">{{ formatMoney(quoteFormTotal) }}</p>
+        </div>
+
         <div class="flex gap-2 pt-1">
           <button type="button" class="flex-1 py-3 rounded-full border border-[var(--border)] text-sm font-semibold" @click="showQuoteForm = false">Cancel</button>
           <button type="submit" class="flex-1 py-3 rounded-full bg-white text-black text-sm font-bold">Save quote</button>
