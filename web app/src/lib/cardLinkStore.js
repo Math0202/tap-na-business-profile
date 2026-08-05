@@ -5,6 +5,7 @@
 import { LOCAL_ID } from './adminStore'
 import { loadProfile, saveProfile, isTableBusiness } from './profileStore'
 import { publicOriginForKind } from './hosts'
+import { PERSONAL_CARD_IMAGES, personalCardImageSrc } from './teamRoles'
 
 const CARDS_KEY = 'tapna_linked_cards'
 
@@ -14,7 +15,14 @@ export const CARD_KINDS = {
   table: { id: 'table', label: 'Table card', icon: 'storefront' }
 }
 
-export { PERSONAL_TYPES, personalTypeLabel, normalizePersonalType, DEFAULT_PERSONAL_TYPE } from './teamRoles'
+export {
+  PERSONAL_TYPES,
+  PERSONAL_CARD_IMAGES,
+  personalTypeLabel,
+  normalizePersonalType,
+  personalCardImageSrc,
+  DEFAULT_PERSONAL_TYPE
+} from './teamRoles'
 
 const PRODUCT_TO_KIND = {
   blue: 'personal',
@@ -29,14 +37,20 @@ const PRODUCT_TO_KIND = {
 
 /** Physical card artwork by product / kind */
 export const CARD_IMAGES = {
-  blue: '/images/blue-card.png',
-  black: '/images/black-card.png',
+  'blue-card': PERSONAL_CARD_IMAGES.professional,
+  'black-card': PERSONAL_CARD_IMAGES.business,
+  'black-card-front': PERSONAL_CARD_IMAGES.executive_exclusive,
+  blue: PERSONAL_CARD_IMAGES.professional,
+  black: PERSONAL_CARD_IMAGES.business,
+  executive_exclusive: PERSONAL_CARD_IMAGES.executive_exclusive,
+  business: PERSONAL_CARD_IMAGES.business,
+  professional: PERSONAL_CARD_IMAGES.professional,
   'table-info': '/images/table/NFC%20business%20info%20card.png',
   'table-menu': '/images/table/NFC%20-%20Menu.png',
   'table-review': '/images/table/NFC%20business%20review%20card.png',
   'table-wifi': '/images/table/NFC%20wifi%20and%20conact%20card.png',
   'table-custom': '/images/table/NFC%20custom%20menu%20card.png',
-  personal: '/images/blue-card.png',
+  personal: PERSONAL_CARD_IMAGES.business,
   table: '/images/table/NFC%20business%20info%20card.png'
 }
 
@@ -53,9 +67,7 @@ export function cardImageSrc(cardOrOpts = {}) {
   if (productId && CARD_IMAGES[productId]) return CARD_IMAGES[productId]
   const kind = normalizeKind(cardOrOpts?.kind || kindFromProductId(productId))
   if (kind === 'personal') {
-    const pt = String(cardOrOpts?.personalType || cardOrOpts?.personal_type || '').toLowerCase()
-    if (pt.includes('executive')) return CARD_IMAGES.black
-    return CARD_IMAGES.blue
+    return personalCardImageSrc(cardOrOpts?.personalType || cardOrOpts?.personal_type || '')
   }
   return CARD_IMAGES.table
 }

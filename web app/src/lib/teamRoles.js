@@ -1,5 +1,24 @@
 /** Personal card tiers and team role hierarchy */
 
+/** Physical card artwork by personal tier */
+export const PERSONAL_CARD_IMAGES = {
+  executive_exclusive: '/images/executive_black.png',
+  business: '/images/business_charcoal.png',
+  professional: '/images/professional_cobalt_blue.png'
+}
+
+/** Legacy sales / shop product ids for each personal tier */
+export const PERSONAL_TYPE_PRODUCT_IDS = {
+  executive_exclusive: 'black-card-front',
+  business: 'black-card',
+  professional: 'blue-card'
+}
+
+export function personalCardImageSrc(personalType) {
+  const key = normalizePersonalType(personalType, { fallback: DEFAULT_PERSONAL_TYPE })
+  return PERSONAL_CARD_IMAGES[key] || PERSONAL_CARD_IMAGES[DEFAULT_PERSONAL_TYPE]
+}
+
 export const PERSONAL_TYPES = {
   executive_exclusive: {
     id: 'executive_exclusive',

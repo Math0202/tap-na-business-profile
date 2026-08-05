@@ -2,6 +2,8 @@
  * Sales module store — agents, sales, quotes, invoices, and cash flow (localStorage).
  */
 
+import { PERSONAL_CARD_IMAGES } from './teamRoles'
+
 const AGENTS_KEY = 'tapna_sales_agents'
 const SALES_KEY = 'tapna_sales_orders'
 const QUOTES_KEY = 'tapna_sales_quotes'
@@ -106,9 +108,16 @@ export function bankingDetailsText(docNumber, { kind } = {}) {
   return ['Banking details', ...bankingDetailsLines(docNumber, { kind })].join('\n')
 }
 
+
 const PRODUCT_FALLBACK_IMAGES = {
-  blue: '/images/blue-card.png',
-  black: '/images/black-card.png',
+  'blue-card': PERSONAL_CARD_IMAGES.professional,
+  'black-card': PERSONAL_CARD_IMAGES.business,
+  'black-card-front': PERSONAL_CARD_IMAGES.executive_exclusive,
+  blue: PERSONAL_CARD_IMAGES.professional,
+  black: PERSONAL_CARD_IMAGES.business,
+  executive_exclusive: PERSONAL_CARD_IMAGES.executive_exclusive,
+  business: PERSONAL_CARD_IMAGES.business,
+  professional: PERSONAL_CARD_IMAGES.professional,
   'table-info': '/images/table/NFC%20business%20info%20card.png',
   'table-menu': '/images/table/NFC%20-%20Menu.png',
   'table-review': '/images/table/NFC%20business%20review%20card.png',

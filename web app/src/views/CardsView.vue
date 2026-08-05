@@ -4,6 +4,31 @@ import { useRoute, useRouter, RouterLink } from 'vue-router'
 import PageBanner from '../components/PageBanner.vue'
 import BrandMark from '../components/BrandMark.vue'
 import { loadProfile } from '../lib/profileStore'
+import { PERSONAL_TYPES, personalCardImageSrc } from '../lib/teamRoles'
+
+const personalCardOptions = [
+  {
+    id: 'professional',
+    name: 'Professional',
+    subtitle: 'Cobalt blue · NFC + QR',
+    badge: 'Popular',
+    badgeClass: 'bg-blue-500/20 text-blue-300'
+  },
+  {
+    id: 'business',
+    name: 'Business',
+    subtitle: 'Charcoal gradient · NFC + QR',
+    badge: 'Standard',
+    badgeClass: 'bg-zinc-600/40 text-gray-300'
+  },
+  {
+    id: 'executive_exclusive',
+    name: 'Executive Exclusive',
+    subtitle: 'Matte black · NFC + QR',
+    badge: 'Premium',
+    badgeClass: 'bg-amber-500/20 text-amber-300'
+  }
+]
 
 const SIGNUP_KEY = 'tapna_signup_lead'
 const route = useRoute()
@@ -86,38 +111,31 @@ function orderCard(cardName, cardType) {
           <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-400">Personal tap cards</h2>
           <p class="text-xs text-gray-500 -mt-1">Digital business cards for individuals</p>
 
-          <article class="card-item-bg rounded-3xl overflow-hidden">
+          <article
+            v-for="card in personalCardOptions"
+            :key="card.id"
+            class="card-item-bg rounded-3xl overflow-hidden"
+          >
             <div class="bg-zinc-900 px-4 pt-5 pb-3 flex justify-center">
-              <img src="/images/blue-card.png" alt="Blue Connect NFC business card" class="w-full max-w-[280px] h-auto object-contain drop-shadow-xl" />
+              <img
+                :src="personalCardImageSrc(card.id)"
+                :alt="`${PERSONAL_TYPES[card.id].label} Connect NFC business card`"
+                class="w-full max-w-[280px] h-auto object-contain drop-shadow-xl"
+              >
             </div>
             <div class="p-5">
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
-                  <h3 class="text-lg font-semibold">Blue Edition</h3>
-                  <p class="text-gray-400 text-sm mt-0.5">Personal profile · NFC + QR</p>
+                  <h3 class="text-lg font-semibold">{{ PERSONAL_TYPES[card.id].label }}</h3>
+                  <p class="text-gray-400 text-sm mt-0.5">{{ card.subtitle }}</p>
                 </div>
-                <span class="shrink-0 text-xs font-medium px-2.5 py-1 rounded-full bg-blue-500/20 text-blue-300">Popular</span>
+                <span class="shrink-0 text-xs font-medium px-2.5 py-1 rounded-full" :class="card.badgeClass">{{ card.badge }}</span>
               </div>
-              <button type="button" class="mt-4 w-full py-3.5 rounded-full bg-white text-black font-bold text-sm hover:bg-gray-200 transition-colors flex items-center justify-center gap-2" @click="orderCard('Blue Edition', 'personal')">
-                <span class="material-symbols-outlined text-[18px]">shopping_bag</span>
-                Order Mine
-              </button>
-            </div>
-          </article>
-
-          <article class="card-item-bg rounded-3xl overflow-hidden">
-            <div class="bg-zinc-900 px-4 pt-5 pb-3 flex justify-center">
-              <img src="/images/black-card.png" alt="Black Connect NFC business card" class="w-full max-w-[280px] h-auto object-contain drop-shadow-xl" />
-            </div>
-            <div class="p-5">
-              <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0">
-                  <h3 class="text-lg font-semibold">Black Edition</h3>
-                  <p class="text-gray-400 text-sm mt-0.5">Personal profile · NFC + QR</p>
-                </div>
-                <span class="shrink-0 text-xs font-medium px-2.5 py-1 rounded-full bg-zinc-600/40 text-gray-300">Classic</span>
-              </div>
-              <button type="button" class="mt-4 w-full py-3.5 rounded-full bg-white text-black font-bold text-sm hover:bg-gray-200 transition-colors flex items-center justify-center gap-2" @click="orderCard('Black Edition', 'personal')">
+              <button
+                type="button"
+                class="mt-4 w-full py-3.5 rounded-full bg-white text-black font-bold text-sm hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
+                @click="orderCard(PERSONAL_TYPES[card.id].label, 'personal')"
+              >
                 <span class="material-symbols-outlined text-[18px]">shopping_bag</span>
                 Order Mine
               </button>

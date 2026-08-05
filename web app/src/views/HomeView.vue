@@ -179,8 +179,8 @@ onUnmounted(() => {
                   @click="scrollToShop"
                 >
                   <img
-                    src="/images/black-card.png"
-                    alt="Charcoal black Connect NFC card"
+                    src="/images/business_charcoal.png"
+                    alt="Business charcoal Connect NFC card"
                     class="w-full h-auto block"
                   >
                 </button>
