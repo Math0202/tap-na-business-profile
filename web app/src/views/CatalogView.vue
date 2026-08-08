@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter, RouterLink } from 'vue-router'
+import { useRoute, useRouter, RouterLink } from 'vue-router'
 import BrandMark from '../components/BrandMark.vue'
 import BookMeetingPopup from '../components/BookMeetingPopup.vue'
 import {
@@ -31,12 +31,14 @@ import {
   refreshCatalogCart
 } from '../lib/profileCatalogCart'
 
+const route = useRoute()
 const router = useRouter()
 const publicProfile = ref(loadPublicProfile())
 const items = ref([])
 const toast = ref('')
 const saving = ref(false)
 const editing = ref(null)
+const detailId = ref('')
 const loading = ref(true)
 const uploading = ref(false)
 const cartOpen = ref(false)
@@ -89,6 +91,13 @@ const visibleItems = computed(() =>
   items.value.filter((x) => x && x.active !== false && String(x.name || '').trim())
 )
 
+const detailItem = computed(() => {
+  const id = String(detailId.value || '').trim()
+  if (!id) return null
+  const pool = canEditCatalog.value ? items.value : visibleItems.value
+  return pool.find((x) => String(x.id) === id) || null
+})
+
 const cartCount = catalogCartCount
 const cartLines = computed(() => catalogCartLines(items.value))
 const showGuestCart = computed(() => !isOwner.value)
@@ -132,6 +141,44 @@ function isHttpUrl(value) {
   }
 }
 
+function normalizeHttpUrl(value) {
+  let s = String(value || '').trim()
+  if (!s) return ''
+  if (!/^https?:\/\//i.test(s)) s = 'https://' + s
+  return isHttpUrl(s) ? s : ''
+}
+
+function openDetail(item) {
+  if (!item?.id) return
+  detailId.value = String(item.id)
+  const nextQuery = { ...route.query, item: detailId.value }
+  router.replace({ path: '/catalog', query: nextQuery })
+}
+
+function closeDetail() {
+  detailId.value = ''
+  const nextQuery = { ...route.query }
+  delete nextQuery.item
+  router.replace({ path: '/catalog', query: nextQuery })
+}
+
+function editFromDetail() {
+  const item = detailItem.value
+  closeDetail()
+  if (item) openEdit(item)
+}
+
+function syncDetailFromRoute() {
+  const id = String(route.query.item || '').trim()
+  if (!id) {
+    detailId.value = ''
+    return
+  }
+  const pool = canEditCatalog.value ? items.value : visibleItems.value
+  if (pool.some((x) => String(x.id) === id)) detailId.value = id
+  else if (!loading.value) detailId.value = ''
+}
+
 async function refresh() {
   loading.value = true
   publicProfile.value = loadPublicProfile()
@@ -159,6 +206,7 @@ async function refresh() {
   }
   refreshCatalogCart()
   loading.value = false
+  syncDetailFromRoute()
 }
 
 function openNew() {
@@ -186,7 +234,27 @@ function closeForm() {
   editing.value = null
 }
 
+function flushLinkDraft() {
+  const raw = String(linkDraft.value.url || '').trim()
+  if (!raw) return true
+  const url = normalizeHttpUrl(raw)
+  if (!url) {
+    flash('Enter a valid http(s) link')
+    return false
+  }
+  const label = String(linkDraft.value.label || '').trim() || url
+  const existing = form.value.links || []
+  if (existing.some((l) => l.url === url)) {
+    linkDraft.value = { label: '', url: '' }
+    return true
+  }
+  form.value.links = [...existing, { label: label.slice(0, 120), url }].slice(0, 10)
+  linkDraft.value = { label: '', url: '' }
+  return true
+}
+
 function upsertLocal() {
+  if (!flushLinkDraft()) return false
   const name = form.value.name.trim()
   if (!name) {
     flash('Name is required')
@@ -207,11 +275,15 @@ function upsertLocal() {
       }))
       .slice(0, 5),
     links: (form.value.links || [])
-      .filter((l) => isHttpUrl(l.url))
-      .map((l) => ({
-        label: String(l.label || l.url).slice(0, 120),
-        url: l.url
-      }))
+      .map((l) => {
+        const url = normalizeHttpUrl(l.url)
+        if (!url) return null
+        return {
+          label: String(l.label || url).slice(0, 120),
+          url
+        }
+      })
+      .filter(Boolean)
       .slice(0, 10)
   }
   const idx = items.value.findIndex((x) => x.id === next.id)
@@ -321,14 +393,7 @@ function removePdf(url) {
 }
 
 function addLink() {
-  const url = linkDraft.value.url.trim()
-  const label = linkDraft.value.label.trim() || url
-  if (!isHttpUrl(url)) {
-    flash('Enter a valid http(s) link')
-    return
-  }
-  form.value.links = [...(form.value.links || []), { label: label.slice(0, 120), url }].slice(0, 10)
-  linkDraft.value = { label: '', url: '' }
+  if (!flushLinkDraft()) return
 }
 
 function removeLink(url) {
@@ -432,6 +497,13 @@ watch(profileId, (id) => {
   if (id) setCatalogCartProfile(id)
 })
 
+watch(
+  () => route.query.item,
+  () => {
+    if (!loading.value) syncDetailFromRoute()
+  }
+)
+
 onMounted(() => {
   document.title = 'Catalog - tap-na'
   if (isTableBusiness(loadProfile()) && isLoggedIn() && !loadPublicProfile()?.remoteProfileId) {
@@ -526,7 +598,11 @@ onUnmounted(() => {
           <li
             v-for="item in (canEditCatalog ? items : visibleItems)"
             :key="item.id"
-            class="card-item-bg rounded-2xl p-4"
+            class="card-item-bg rounded-2xl p-4 cursor-pointer hover:bg-zinc-800/80 transition-colors"
+            role="button"
+            tabindex="0"
+            @click="openDetail(item)"
+            @keydown.enter.prevent="openDetail(item)"
           >
             <div class="flex items-start gap-3">
               <div
@@ -566,6 +642,7 @@ onUnmounted(() => {
                     target="_blank"
                     rel="noopener noreferrer"
                     class="text-[11px] px-2 py-1 rounded-full bg-zinc-800 text-gray-300 no-underline"
+                    @click.stop
                   >
                     PDF · {{ pdf.name }}
                   </a>
@@ -576,13 +653,15 @@ onUnmounted(() => {
                     target="_blank"
                     rel="noopener noreferrer"
                     class="text-[11px] px-2 py-1 rounded-full bg-zinc-800 text-gray-300 no-underline"
+                    @click.stop
                   >
                     {{ link.label }}
                   </a>
                 </div>
               </div>
+              <span class="material-symbols-outlined text-gray-500 text-[20px] shrink-0 mt-1">chevron_right</span>
             </div>
-            <div v-if="canEditCatalog" class="flex gap-2 mt-3">
+            <div v-if="canEditCatalog" class="flex gap-2 mt-3" @click.stop>
               <button
                 type="button"
                 class="flex-1 py-2 rounded-xl bg-zinc-800 text-sm font-medium hover:bg-zinc-700"
@@ -598,7 +677,7 @@ onUnmounted(() => {
                 Remove
               </button>
             </div>
-            <div v-else class="mt-3">
+            <div v-else class="mt-3" @click.stop>
               <button
                 type="button"
                 class="w-full py-2.5 rounded-xl bg-white text-black text-sm font-semibold hover:bg-gray-200"
@@ -610,6 +689,108 @@ onUnmounted(() => {
           </li>
         </ul>
       </template>
+
+      <!-- Item detail -->
+      <Teleport to="body">
+        <div
+          v-if="detailItem"
+          class="app-dialog-overlay fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4"
+        >
+          <div class="absolute inset-0 bg-black/70" @click="closeDetail" />
+          <div class="relative w-full max-w-md card-item-bg rounded-3xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-lg font-bold pr-2">{{ detailItem.name }}</h2>
+              <button
+                type="button"
+                class="w-9 h-9 rounded-full bg-zinc-700 flex items-center justify-center shrink-0"
+                @click="closeDetail"
+              >
+                <span class="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            <div
+              v-if="detailItem.images?.length"
+              class="flex gap-2 overflow-x-auto pb-2 mb-3"
+            >
+              <img
+                v-for="url in detailItem.images"
+                :key="url"
+                :src="url"
+                :alt="detailItem.name"
+                class="w-28 h-28 rounded-2xl object-cover shrink-0 bg-zinc-900"
+              >
+            </div>
+            <div
+              v-else
+              class="w-full h-36 rounded-2xl bg-zinc-900 flex items-center justify-center mb-3"
+            >
+              <span class="material-symbols-outlined text-[40px] text-zinc-600">inventory_2</span>
+            </div>
+
+            <p class="text-sm text-gray-200 font-semibold mb-1">
+              {{ formatPrice(detailItem.price) || 'Ask for quote' }}
+            </p>
+            <p
+              v-if="detailItem.description"
+              class="text-sm text-gray-400 leading-relaxed whitespace-pre-wrap"
+            >
+              {{ detailItem.description }}
+            </p>
+            <p v-else class="text-sm text-gray-600">No description</p>
+
+            <div
+              v-if="detailItem.pdfs?.length || detailItem.links?.length"
+              class="mt-4 space-y-2"
+            >
+              <p class="text-[10px] uppercase tracking-wide text-gray-500">Attachments</p>
+              <a
+                v-for="pdf in (detailItem.pdfs || [])"
+                :key="pdf.url"
+                :href="pdf.url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-zinc-800 text-sm text-gray-200 no-underline"
+              >
+                <span class="material-symbols-outlined text-[18px]">picture_as_pdf</span>
+                <span class="truncate">{{ pdf.name }}</span>
+              </a>
+              <a
+                v-for="link in (detailItem.links || [])"
+                :key="link.url"
+                :href="link.url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-zinc-800 text-sm text-gray-200 no-underline"
+              >
+                <span class="material-symbols-outlined text-[18px]">link</span>
+                <span class="truncate">{{ link.label || link.url }}</span>
+              </a>
+            </div>
+
+            <div class="mt-5 space-y-2">
+              <template v-if="canEditCatalog">
+                <button
+                  type="button"
+                  class="w-full py-3 rounded-full bg-white text-black text-sm font-bold"
+                  @click="editFromDetail"
+                >
+                  Edit offering
+                </button>
+              </template>
+              <template v-else>
+                <button
+                  type="button"
+                  class="w-full py-3 rounded-full bg-white text-black text-sm font-bold"
+                  @click="addToCart(detailItem)"
+                >
+                  Add to cart
+                </button>
+              </template>
+            </div>
+          </div>
+        </div>
+      </Teleport>
 
       <!-- Owner edit modal -->
       <Teleport to="body">

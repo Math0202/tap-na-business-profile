@@ -52,6 +52,7 @@ const catalogItems = computed(() => {
       : []
   return list.filter((item) => item && item.active !== false && String(item.name || '').trim())
 })
+const offerPreviewItems = computed(() => catalogItems.value.slice(0, 2))
 function formatCatalogPrice(price) {
   if (price === null || price === undefined || price === '') return ''
   return 'N$ ' + Number(price).toLocaleString(undefined, {
@@ -546,7 +547,7 @@ watch(() => route.path, () => {
         </section>
 
         <section
-          v-if="catalogItems.length"
+          v-if="offerPreviewItems.length"
           class="px-6 mt-6 space-y-3"
           :class="{ 'opacity-40 pointer-events-none': disabled }"
         >
@@ -555,9 +556,9 @@ watch(() => route.path, () => {
             <RouterLink to="/catalog" class="text-[11px] text-emerald-400 no-underline">View catalog</RouterLink>
           </div>
           <RouterLink
-            v-for="item in catalogItems"
+            v-for="item in offerPreviewItems"
             :key="item.id"
-            to="/catalog"
+            :to="{ path: '/catalog', query: { item: item.id } }"
             class="card-item-bg rounded-2xl flex items-center p-4 no-underline text-inherit"
           >
             <div class="w-12 h-12 rounded-full bg-white overflow-hidden flex items-center justify-center text-black mr-4 shadow-lg shrink-0">
