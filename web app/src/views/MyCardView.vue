@@ -495,26 +495,6 @@ watch(() => route.path, () => {
             @track="onLinkTrack"
           />
           <LinkRow
-            v-if="filledHref(profile.youtube, 'youtube')"
-            icon="youtube"
-            label="YouTube"
-            track-key="youtube"
-            :detail="contactDetail('youtube', profile.youtube)"
-            :href="filledHref(profile.youtube, 'youtube')"
-            :external="true"
-            @track="onLinkTrack"
-          />
-          <LinkRow
-            v-if="filledHref(profile.x, 'x')"
-            icon="x"
-            label="X"
-            track-key="x"
-            :detail="contactDetail('x', profile.x)"
-            :href="filledHref(profile.x, 'x')"
-            :external="true"
-            @track="onLinkTrack"
-          />
-          <LinkRow
             v-if="filledHref(profile.instagram, 'instagram')"
             icon="instagram"
             label="Instagram"

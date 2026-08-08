@@ -1141,23 +1141,7 @@ onMounted(() => {
               <button type="button" class="social-test-btn" @click="testSocial('linkedin')">Visit</button>
             </div>
           </div>
-          <div class="field-group">
-            <label class="field-label">YouTube</label>
-            <div class="social-row">
-              <div class="social-icon"><span class="material-symbols-outlined text-[20px]">play_circle</span></div>
-              <input v-model="youtube" type="text" class="field-input" placeholder="@channel or profile link" />
-              <button type="button" class="social-test-btn" @click="testSocial('youtube')">Visit</button>
-            </div>
-          </div>
         </template>
-        <div class="field-group">
-          <label class="field-label">X</label>
-          <div class="social-row">
-            <div class="social-icon"><span class="material-symbols-outlined text-[20px]">alternate_email</span></div>
-            <input v-model="x" type="text" class="field-input" placeholder="@username or profile link" />
-            <button type="button" class="social-test-btn" @click="testSocial('x')">Visit</button>
-          </div>
-        </div>
         <div class="field-group">
           <label class="field-label">Instagram</label>
           <div class="social-row">
@@ -1446,13 +1430,6 @@ onMounted(() => {
           <div class="field-shell">
             <span class="material-symbols-outlined field-icon">alternate_email</span>
             <input id="field-login-email" v-model="loginEmail" type="email" class="field-input" placeholder="login@example.com" />
-          </div>
-        </div>
-        <div class="field-group">
-          <label class="field-label" for="field-login-phone">Login phone</label>
-          <div class="field-shell">
-            <span class="material-symbols-outlined field-icon">smartphone</span>
-            <input id="field-login-phone" v-model="loginPhone" type="tel" class="field-input" placeholder="+264 81 000 0000" />
           </div>
         </div>
       </section>

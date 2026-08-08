@@ -12,7 +12,6 @@ export const BUSINESS_LINK_DEFS = [
   { key: 'website', icon: 'website', label: 'Website', trackKey: 'website', external: true },
   { key: 'menu', icon: 'menu', label: 'Menu', trackKey: 'menu', external: true },
   { key: 'review', icon: 'review', label: 'Google review', trackKey: 'review', external: true },
-  { key: 'x', icon: 'x', label: 'X', trackKey: 'x', external: true },
   { key: 'instagram', icon: 'instagram', label: 'Instagram', trackKey: 'instagram', external: true },
   { key: 'tiktok', icon: 'tiktok', label: 'TikTok', trackKey: 'tiktok', external: true }
 ]
@@ -75,7 +74,6 @@ export function listConfiguredBusinessDestinations(profile) {
   if (filled(profile.website)) add('website', resolveSocialUrl('website', profile.website))
   if (hasMenuContent(profile)) add('menu', menuPageHref(profile))
   if (filled(profile.googleReview)) add('review', resolveSocialUrl('website', profile.googleReview))
-  if (filled(profile.x)) add('x', resolveSocialUrl('x', profile.x))
   if (filled(profile.instagram)) add('instagram', resolveSocialUrl('instagram', profile.instagram))
   if (filled(profile.tiktok)) add('tiktok', resolveSocialUrl('tiktok', profile.tiktok))
 
