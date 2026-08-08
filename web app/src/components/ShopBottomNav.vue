@@ -6,7 +6,13 @@ const route = useRoute()
 const count = cartCount
 
 function isActive(path) {
-  if (path === '/') return route.path === '/' || route.path.startsWith('/product/')
+  if (path === '/') {
+    return (
+      route.path === '/' ||
+      route.path.startsWith('/product/') ||
+      route.path.startsWith('/about/business-cards')
+    )
+  }
   return route.path === path
 }
 </script>

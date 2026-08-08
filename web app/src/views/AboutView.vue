@@ -57,8 +57,14 @@ onMounted(() => {
         </section>
 
         <RouterLink
-          to="/cards"
+          to="/about/business-cards"
           class="block w-full py-4 rounded-full bg-white text-black font-bold text-center text-base hover:bg-gray-200 transition-colors no-underline"
+        >
+          About Connect cards
+        </RouterLink>
+        <RouterLink
+          to="/cards"
+          class="block w-full py-4 rounded-full bg-zinc-800 text-white font-bold text-center text-base hover:bg-zinc-700 transition-colors no-underline"
         >
           Browse cards
         </RouterLink>

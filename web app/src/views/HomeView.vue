@@ -512,6 +512,9 @@ onUnmounted(() => {
           </div>
           <div class="flex flex-col gap-2">
             <span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Info</span>
+            <RouterLink to="/about/business-cards" class="text-on-surface no-underline hover:opacity-70">
+              About Connect cards
+            </RouterLink>
             <RouterLink to="/signup" class="text-on-surface no-underline hover:opacity-70">
               Support
             </RouterLink>

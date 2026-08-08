@@ -66,6 +66,11 @@ const routes = [
     component: () => import('../views/AboutView.vue')
   },
   {
+    path: '/about/business-cards',
+    name: 'about-business-cards',
+    component: () => import('../views/AboutBusinessCardsView.vue')
+  },
+  {
     path: '/business',
     name: 'business',
     component: () => import('../views/BusinessView.vue')

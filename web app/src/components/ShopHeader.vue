@@ -35,6 +35,12 @@ const count = cartCount
           Shop
         </button>
         <RouterLink
+          to="/about/business-cards"
+          class="font-label-caps text-[11px] uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors no-underline"
+        >
+          About cards
+        </RouterLink>
+        <RouterLink
           to="/cart"
           class="font-label-caps text-[11px] uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors no-underline"
         >
@@ -77,6 +83,13 @@ const count = cartCount
       >
         Shop
       </button>
+      <RouterLink
+        to="/about/business-cards"
+        class="font-label-caps text-[12px] uppercase tracking-widest py-2 no-underline text-inherit"
+        @click="emit('close-menu')"
+      >
+        About cards
+      </RouterLink>
       <RouterLink
         to="/cart"
         class="font-label-caps text-[12px] uppercase tracking-widest py-2 no-underline text-inherit"
