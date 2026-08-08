@@ -604,8 +604,8 @@ async function onSave(e) {
   const socials = normalizeSocialFields({
     whatsapp: (usePhoneAsWhatsapp.value ? phone.value : whatsapp.value).trim(),
     linkedin: linkedin.value.trim(),
-    youtube: youtube.value.trim(),
-    x: x.value.trim(),
+    youtube: '',
+    x: '',
     instagram: instagram.value.trim(),
     tiktok: tiktok.value.trim(),
     website: website.value.trim()
@@ -613,8 +613,8 @@ async function onSave(e) {
   whatsapp.value = socials.whatsapp || ''
   if (usePhoneAsWhatsapp.value) usePhoneAsWhatsapp.value = phonesMatch(phone.value, whatsapp.value)
   linkedin.value = socials.linkedin || ''
-  youtube.value = socials.youtube || ''
-  x.value = socials.x || ''
+  youtube.value = ''
+  x.value = ''
   instagram.value = socials.instagram || ''
   tiktok.value = socials.tiktok || ''
   website.value = socials.website || ''
