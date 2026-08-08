@@ -198,17 +198,6 @@ function openShare() {
   shareOpen.value = true
 }
 
-function downloadQr() {
-  if (actionsBlocked.value) {
-    router.push('/profile')
-    return
-  }
-  trackClick(LOCAL_ID, 'download_qr', 'Download QR')
-  logRemote('click:download_qr')
-  shareOpen.value = true
-  setTimeout(() => shareModal.value?.downloadQr(), 80)
-}
-
 async function saveContact() {
   if (deleted.value || disabled.value || !profile.value.name) {
     router.push('/profile')
@@ -374,16 +363,6 @@ watch(() => route.path, () => {
                 {{ company }}
               </p>
               <div class="mt-2 flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  aria-label="Download QR code"
-                  class="w-9 h-9 rounded-full bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center transition-colors border border-zinc-700"
-                  :class="{ 'opacity-40 pointer-events-none': actionsBlocked }"
-                  :disabled="actionsBlocked"
-                  @click="downloadQr"
-                >
-                  <span class="material-symbols-outlined text-[18px]">download</span>
-                </button>
                 <button
                   type="button"
                   aria-label="Share profile"
