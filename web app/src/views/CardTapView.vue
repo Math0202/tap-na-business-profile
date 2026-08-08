@@ -5,8 +5,8 @@ import {
   getCardTapAction,
   extractSerialFromScan,
   kindLabel,
-  kindIcon,
   cardPublicUrl,
+  cardImageSrc,
   linkCardToProfile
 } from '../lib/cardLinkStore'
 import {
@@ -21,6 +21,7 @@ import { apiResolveCard, apiLogCardOpen, apiSignup, setApiToken } from '../lib/a
 import { LOCAL_ID } from '../lib/adminStore'
 import { hideFloatingChrome } from '../lib/uiChrome'
 import { singleBusinessDestinationHref } from '../lib/businessLinks'
+import { personalTypeLabel, normalizePersonalType, DEFAULT_PERSONAL_TYPE } from '../lib/teamRoles'
 import BusinessView from './BusinessView.vue'
 import MyCardView from './MyCardView.vue'
 import JoinTeamPopup from '../components/JoinTeamPopup.vue'
@@ -31,6 +32,7 @@ const router = useRouter()
 // mode: '' (loading) | 'linked' | 'unlinked' | 'disabled' | 'missing'
 const mode = ref('')
 const cardKind = ref('table')
+const personalType = ref(DEFAULT_PERSONAL_TYPE)
 const linkedType = ref('table')
 const pendingTeamInvite = ref(null)
 const joinTeamOpen = ref(false)
@@ -49,6 +51,18 @@ const serial = computed(() => {
 })
 
 const isPersonalCard = computed(() => cardKind.value === 'personal')
+
+const claimCardImage = computed(() =>
+  cardImageSrc({
+    kind: cardKind.value,
+    personalType: isPersonalCard.value ? personalType.value : ''
+  })
+)
+
+const claimTypeLabel = computed(() => {
+  if (isPersonalCard.value) return personalTypeLabel(personalType.value)
+  return kindLabel('table')
+})
 
 const publicUrl = computed(() => cardPublicUrl(serial.value, undefined, { kind: cardKind.value }))
 
@@ -198,6 +212,10 @@ onMounted(async () => {
   if (remote?.ok && remote.card) {
     apiLogCardOpen(serial.value, via).catch?.(() => {})
     cardKind.value = remote.card.kind === 'personal' ? 'personal' : 'table'
+    personalType.value =
+      remote.card.kind === 'personal'
+        ? normalizePersonalType(remote.card.personalType || remote.card.personal_type || DEFAULT_PERSONAL_TYPE)
+        : ''
     if (remote.pendingTeamInvite) pendingTeamInvite.value = remote.pendingTeamInvite
 
     if (remote.card.status === 'linked' && remote.profile) {
@@ -239,6 +257,10 @@ onMounted(async () => {
 
   const action = getCardTapAction(serial.value)
   cardKind.value = action.card?.kind === 'personal' ? 'personal' : 'table'
+  personalType.value =
+    action.card?.kind === 'personal'
+      ? normalizePersonalType(action.card?.personalType || action.card?.personal_type || DEFAULT_PERSONAL_TYPE)
+      : ''
   if (action.ok && action.status === 'linked') {
     const mine = loadProfile()
     linkedType.value = mine.cardType === 'personal' ? 'personal' : 'table'
@@ -317,39 +339,38 @@ onUnmounted(() => setClaimChrome(false))
   <!-- Not found / disabled / claim -->
   <div v-else class="min-h-screen flex flex-col items-center justify-center px-5">
     <div class="w-full max-w-md card-item-bg rounded-3xl p-6 text-center space-y-4">
-      <div class="w-14 h-14 mx-auto rounded-full bg-white/10 flex items-center justify-center">
-        <span class="material-symbols-outlined text-[28px]">
-          {{ mode === 'disabled' ? 'lock' : mode === 'missing' ? 'search_off' : kindIcon(cardKind) }}
-        </span>
-      </div>
-
-      <div v-if="mode === 'missing'">
-        <h1 class="text-xl font-bold">Profile not found</h1>
-        <p class="text-sm text-gray-400 mt-2">
-          This card code doesn’t match any profile. Check the code and try again.
-        </p>
-      </div>
-
-      <div v-else-if="mode === 'disabled'">
-        <h1 class="text-xl font-bold">Disabled by owner</h1>
-        <p class="text-sm text-gray-400 mt-2">
-          This profile has been disabled by its owner and isn’t available right now.
-        </p>
-      </div>
+      <template v-if="mode === 'missing' || mode === 'disabled'">
+        <div class="w-14 h-14 mx-auto rounded-full bg-white/10 flex items-center justify-center">
+          <span class="material-symbols-outlined text-[28px]">
+            {{ mode === 'disabled' ? 'lock' : 'search_off' }}
+          </span>
+        </div>
+        <div v-if="mode === 'missing'">
+          <h1 class="text-xl font-bold">Profile not found</h1>
+          <p class="text-sm text-gray-400 mt-2">
+            This card code doesn’t match any profile. Check the code and try again.
+          </p>
+        </div>
+        <div v-else>
+          <h1 class="text-xl font-bold">Disabled by owner</h1>
+          <p class="text-sm text-gray-400 mt-2">
+            This profile has been disabled by its owner and isn’t available right now.
+          </p>
+        </div>
+      </template>
 
       <template v-else>
-        <div>
-          <h1 class="text-xl font-bold">Claim card</h1>
-          <p class="text-sm text-gray-400 mt-2">
-            <template v-if="isPersonalCard">
-              Enter your name, surname, email and password to claim this card. Each card gets its own profile.
-            </template>
-            <template v-else>
-              Create your profile with an email and password to activate this card. Each card gets its own profile.
-            </template>
-          </p>
-          <p class="text-xs text-gray-500 mt-1">{{ kindLabel(cardKind) }}</p>
+        <h1 class="text-2xl font-bold tracking-tight">Claim card</h1>
+
+        <div class="mx-auto w-full max-w-[220px] rounded-2xl bg-zinc-900/80 px-3 py-4 flex items-center justify-center">
+          <img
+            :src="claimCardImage"
+            :alt="claimTypeLabel + ' NFC card'"
+            class="w-full h-auto object-contain drop-shadow-xl"
+          >
         </div>
+
+        <p class="text-sm font-semibold text-gray-200">{{ claimTypeLabel }}</p>
 
         <form class="text-left space-y-3" @submit="createProfile">
           <template v-if="isPersonalCard">
@@ -459,7 +480,6 @@ onUnmounted(() => setClaimChrome(false))
             </RouterLink>
           </p>
         </form>
-
       </template>
 
       <p v-if="serial" class="text-xs font-mono text-gray-500 pt-1">{{ serial }}</p>
@@ -469,7 +489,7 @@ onUnmounted(() => setClaimChrome(false))
         class="text-xs text-emerald-400/90 text-center leading-relaxed"
       >
         After claiming, you'll be invited to join {{ pendingTeamInvite.teamName }} as
-        {{ pendingTeamInvite.role === 'executive_exclusive' ? 'Executive Exclusive' : pendingTeamInvite.role === 'business' ? 'Business' : 'Professional' }}.
+        {{ personalTypeLabel(pendingTeamInvite.role) }}.
       </p>
     </div>
   </div>
