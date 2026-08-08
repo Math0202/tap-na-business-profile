@@ -209,6 +209,10 @@ async function saveContact() {
   const first = parts[0] || ''
   const last = parts.slice(1).join(' ') || ''
   const photo = await vcardPhotoLine(profile.value.avatar)
+  const websiteRaw = String(profile.value.website || '').trim()
+  const contactUrl = websiteRaw
+    ? resolveSocialUrl('website', websiteRaw)
+    : shareUrl.value
   downloadVcard(profile.value.name.replace(/\s+/g, '_') + '.vcf', [
     'BEGIN:VCARD',
     'VERSION:3.0',
@@ -218,7 +222,7 @@ async function saveContact() {
     'ORG:' + (profile.value.company || ''),
     profile.value.phone ? 'TEL;TYPE=CELL:' + profile.value.phone : '',
     profile.value.email ? 'EMAIL:' + profile.value.email : '',
-    'URL:' + shareUrl.value,
+    contactUrl ? 'URL:' + contactUrl : '',
     photo,
     'NOTE:Digital business card',
     'END:VCARD'
