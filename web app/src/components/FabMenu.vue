@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute, useRouter, RouterLink } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   isLoggedIn,
   loadProfile,
@@ -118,14 +118,6 @@ onUnmounted(() => {
           <span class="material-symbols-outlined">ios_share</span>
           Share profile
         </button>
-        <RouterLink
-          to="/login"
-          role="menuitem"
-          @click="setOpen(false)"
-        >
-          <span class="material-symbols-outlined">login</span>
-          Login
-        </RouterLink>
       </div>
       <button
         type="button"

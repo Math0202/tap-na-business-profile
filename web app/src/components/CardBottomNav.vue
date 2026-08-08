@@ -186,14 +186,5 @@ onUnmounted(() => {
       <span class="material-symbols-outlined">logout</span>
       <span>Logout</span>
     </button>
-    <RouterLink
-      v-else
-      to="/login"
-      class="admin-nav-item"
-      :class="{ 'admin-nav-item--active': route.path === '/login' }"
-    >
-      <span class="material-symbols-outlined">login</span>
-      <span>Login</span>
-    </RouterLink>
   </nav>
 </template>
