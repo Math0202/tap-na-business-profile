@@ -190,6 +190,8 @@ function setClaimChrome(active) {
 }
 
 onMounted(async () => {
+  // Hide nav/FAB immediately while resolving — claim & loading must not show chrome
+  setClaimChrome(true)
   const via = String(route.query.via || '').toLowerCase()
 
   const remote = await apiResolveCard(serial.value)

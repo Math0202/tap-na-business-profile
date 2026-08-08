@@ -1,11 +1,12 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import BrandMark from '../components/BrandMark.vue'
 import { apiSignup, apiResolveCard } from '../lib/api'
 import { saveProfile, hashPassword, markLoggedIn } from '../lib/profileStore'
 import { linkCardToProfile, extractSerialFromScan, kindLabel } from '../lib/cardLinkStore'
 import { LOCAL_ID } from '../lib/adminStore'
+import { hideFloatingChrome } from '../lib/uiChrome'
 
 const route = useRoute()
 const router = useRouter()
@@ -35,6 +36,7 @@ function profileTypeFromKind(kind) {
 
 onMounted(async () => {
   document.title = 'Set up your card - tap-na'
+  hideFloatingChrome.value = true
   if (!slug.value) {
     cardState.value = 'missing'
     return
@@ -54,6 +56,10 @@ onMounted(async () => {
   cardKind.value = remote.card.kind === 'personal' ? 'personal' : 'table'
   cardType.value = profileTypeFromKind(cardKind.value)
   cardState.value = 'ok'
+})
+
+onUnmounted(() => {
+  hideFloatingChrome.value = false
 })
 
 async function onSubmit(e) {

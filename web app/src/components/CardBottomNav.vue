@@ -10,6 +10,7 @@ import {
 } from '../lib/profileStore'
 import { setApiToken } from '../lib/api'
 import { anyCatalogCartCount, catalogCartCount } from '../lib/profileCatalogCart'
+import { hideFloatingChrome } from '../lib/uiChrome'
 
 const route = useRoute()
 const router = useRouter()
@@ -25,8 +26,9 @@ function refreshAuth() {
   guestCartCount.value = anyCatalogCartCount()
 }
 
-/** Personal-card chrome — guests and owners. Never for business/table. */
+/** Personal-card chrome — guests and owners. Never for business/table or claim UI. */
 const visible = computed(() => {
+  if (hideFloatingChrome.value) return false
   if (loggedIn.value && isTableOwner.value) return false
 
   const p = route.path
