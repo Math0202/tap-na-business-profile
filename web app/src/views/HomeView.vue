@@ -266,35 +266,40 @@ onUnmounted(() => {
               :key="product.id"
               class="flex flex-col gap-4 group"
             >
-              <div class="aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4">
-                <img
-                  v-if="product.image"
-                  :alt="product.alt"
-                  class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
-                  :src="product.image"
-                >
-                <span
-                  v-else
-                  class="material-symbols-outlined text-on-surface-variant text-[48px] opacity-40"
-                  aria-hidden="true"
-                >image</span>
-                <div
-                  v-if="product.badge"
-                  class="absolute top-4 left-4 bg-primary text-on-primary px-3 py-1 font-label-caps text-[10px] uppercase tracking-widest"
-                >
-                  {{ product.badge }}
+              <RouterLink
+                :to="`/product/${product.id}`"
+                class="no-underline text-inherit flex flex-col gap-4"
+              >
+                <div class="aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4">
+                  <img
+                    v-if="product.image"
+                    :alt="product.alt"
+                    class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
+                    :src="product.image"
+                  >
+                  <span
+                    v-else
+                    class="material-symbols-outlined text-on-surface-variant text-[48px] opacity-40"
+                    aria-hidden="true"
+                  >image</span>
+                  <div
+                    v-if="product.badge"
+                    class="absolute top-4 left-4 bg-primary text-on-primary px-3 py-1 font-label-caps text-[10px] uppercase tracking-widest"
+                  >
+                    {{ product.badge }}
+                  </div>
                 </div>
-              </div>
-              <div class="flex flex-col gap-1">
-                <div class="flex justify-between items-start gap-3">
-                  <h3 class="font-headline-lg-mobile text-[20px] font-medium">{{ product.name }}</h3>
-                  <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(product.price) }}</span>
+                <div class="flex flex-col gap-1">
+                  <div class="flex justify-between items-start gap-3">
+                    <h3 class="font-headline-lg-mobile text-[20px] font-medium">{{ product.name }}</h3>
+                    <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(product.price) }}</span>
+                  </div>
+                  <p v-if="product.label" class="font-label-caps text-[11px] uppercase tracking-widest text-primary">
+                    {{ product.label }}
+                  </p>
+                  <p class="text-on-surface-variant text-sm line-clamp-1">{{ product.desc }}</p>
                 </div>
-                <p v-if="product.label" class="font-label-caps text-[11px] uppercase tracking-widest text-primary">
-                  {{ product.label }}
-                </p>
-                <p class="text-on-surface-variant text-sm line-clamp-1">{{ product.desc }}</p>
-              </div>
+              </RouterLink>
               <button
                 type="button"
                 class="w-full border border-primary text-primary py-4 font-button-text uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-colors"
@@ -331,35 +336,40 @@ onUnmounted(() => {
               :key="product.id"
               class="flex flex-col gap-4 group"
             >
-              <div class="aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4">
-                <img
-                  v-if="product.image"
-                  :alt="product.alt"
-                  class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
-                  :src="product.image"
-                >
-                <span
-                  v-else
-                  class="material-symbols-outlined text-on-surface-variant text-[48px] opacity-40"
-                  aria-hidden="true"
-                >image</span>
-                <div
-                  v-if="product.badge"
-                  class="absolute top-4 left-4 bg-primary text-on-primary px-3 py-1 font-label-caps text-[10px] uppercase tracking-widest"
-                >
-                  {{ product.badge }}
+              <RouterLink
+                :to="`/product/${product.id}`"
+                class="no-underline text-inherit flex flex-col gap-4"
+              >
+                <div class="aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4">
+                  <img
+                    v-if="product.image"
+                    :alt="product.alt"
+                    class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
+                    :src="product.image"
+                  >
+                  <span
+                    v-else
+                    class="material-symbols-outlined text-on-surface-variant text-[48px] opacity-40"
+                    aria-hidden="true"
+                  >image</span>
+                  <div
+                    v-if="product.badge"
+                    class="absolute top-4 left-4 bg-primary text-on-primary px-3 py-1 font-label-caps text-[10px] uppercase tracking-widest"
+                  >
+                    {{ product.badge }}
+                  </div>
                 </div>
-              </div>
-              <div class="flex flex-col gap-1">
-                <div class="flex justify-between items-start gap-3">
-                  <h3 class="font-headline-lg-mobile text-[20px] font-medium">{{ product.name }}</h3>
-                  <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(product.price) }}</span>
+                <div class="flex flex-col gap-1">
+                  <div class="flex justify-between items-start gap-3">
+                    <h3 class="font-headline-lg-mobile text-[20px] font-medium">{{ product.name }}</h3>
+                    <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(product.price) }}</span>
+                  </div>
+                  <p v-if="product.label" class="font-label-caps text-[11px] uppercase tracking-widest text-primary">
+                    {{ product.label }}
+                  </p>
+                  <p class="text-on-surface-variant text-sm line-clamp-1">{{ product.desc }}</p>
                 </div>
-                <p v-if="product.label" class="font-label-caps text-[11px] uppercase tracking-widest text-primary">
-                  {{ product.label }}
-                </p>
-                <p class="text-on-surface-variant text-sm line-clamp-1">{{ product.desc }}</p>
-              </div>
+              </RouterLink>
               <button
                 type="button"
                 class="w-full border border-primary text-primary py-4 font-button-text uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-colors"

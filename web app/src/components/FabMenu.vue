@@ -17,7 +17,9 @@ const isTable = ref(isTableBusiness(loadProfile()))
 const viewedIsTable = ref(isTableBusiness(loadViewedProfile()))
 
 const isHome = computed(() => route.path === '/' || route.path === '/me' || route.path === '/business')
-const isShopHome = computed(() => route.path === '/' || route.path === '/cart')
+const isShopHome = computed(
+  () => route.path === '/' || route.path === '/cart' || route.path.startsWith('/product/')
+)
 const isAdminArea = computed(() => route.path.startsWith('/admin'))
 const isLogin = computed(
   () => route.path === '/login' || route.path === '/shop/login' || route.path === '/admin/login'
