@@ -1,11 +1,10 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useRoute, useRouter, RouterLink } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   getCardTapAction,
   extractSerialFromScan,
   kindLabel,
-  cardPublicUrl,
   cardImageSrc,
   linkCardToProfile
 } from '../lib/cardLinkStore'
@@ -63,8 +62,6 @@ const claimTypeLabel = computed(() => {
   if (isPersonalCard.value) return personalTypeLabel(personalType.value)
   return kindLabel('table')
 })
-
-const publicUrl = computed(() => cardPublicUrl(serial.value, undefined, { kind: cardKind.value }))
 
 /** Claiming a card always starts a fresh account for that slug — kick any other session out. */
 function forceClaimLogout() {
@@ -373,7 +370,7 @@ onUnmounted(() => setClaimChrome(false))
         <p class="text-sm font-semibold text-gray-200">{{ claimTypeLabel }}</p>
 
         <form class="text-left space-y-3" @submit="createProfile">
-          <template v-if="isPersonalCard">
+          <div v-if="isPersonalCard" class="grid grid-cols-2 gap-3">
             <div>
               <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5" for="claim-first">
                 Name
@@ -408,7 +405,7 @@ onUnmounted(() => setClaimChrome(false))
                 >
               </div>
             </div>
-          </template>
+          </div>
 
           <div>
             <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5" for="claim-email">
@@ -470,20 +467,9 @@ onUnmounted(() => setClaimChrome(false))
           >
             {{ submitting ? 'Claiming card…' : 'Claim this card' }}
           </button>
-          <p class="text-center text-xs text-gray-500">
-            Already claimed this card?
-            <RouterLink
-              :to="{ path: '/login', query: { email: email || undefined, next: '/profile' } }"
-              class="font-semibold underline underline-offset-2 text-gray-300"
-            >
-              Login
-            </RouterLink>
-          </p>
         </form>
       </template>
 
-      <p v-if="serial" class="text-xs font-mono text-gray-500 pt-1">{{ serial }}</p>
-      <p v-if="mode === 'unlinked' && publicUrl" class="text-[10px] text-gray-600 break-all">{{ publicUrl }}</p>
       <p
         v-if="mode === 'unlinked' && pendingTeamInvite"
         class="text-xs text-emerald-400/90 text-center leading-relaxed"
