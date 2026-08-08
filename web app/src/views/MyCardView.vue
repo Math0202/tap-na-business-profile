@@ -387,6 +387,17 @@ watch(() => route.path, () => {
                 >
                   <span class="material-symbols-outlined text-[18px]">person_add</span>
                 </button>
+                <button
+                  v-if="showBooking"
+                  type="button"
+                  aria-label="Book a meeting"
+                  class="w-9 h-9 rounded-full bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center transition-colors border border-zinc-700"
+                  :class="{ 'opacity-40 pointer-events-none': actionsBlocked }"
+                  :disabled="actionsBlocked"
+                  @click="bookOpen = true"
+                >
+                  <span class="material-symbols-outlined text-[18px]">event</span>
+                </button>
                 <RouterLink
                   v-if="isLoggedIn()"
                   to="/profile"
@@ -570,22 +581,6 @@ watch(() => route.path, () => {
         </section>
 
         <div class="px-6 mt-8 mb-4 space-y-3">
-          <button
-            v-if="showBooking"
-            type="button"
-            class="card-item-bg rounded-2xl flex items-center p-4 w-full cursor-pointer hover:bg-zinc-800 transition-colors text-left"
-            :class="{ 'opacity-40 pointer-events-none': actionsBlocked }"
-            :disabled="actionsBlocked"
-            @click="bookOpen = true"
-          >
-            <div class="w-12 h-12 rounded-full bg-white flex items-center justify-center text-black mr-4 shadow-lg shrink-0">
-              <span class="material-symbols-outlined text-[24px]">event</span>
-            </div>
-            <div class="min-w-0 flex-1">
-              <span class="link-row-detail text-gray-300 font-medium text-sm">Book a meeting</span>
-            </div>
-            <span class="material-symbols-outlined text-gray-500 text-[22px] shrink-0 ml-2">chevron_right</span>
-          </button>
           <button
             type="button"
             class="w-full py-4 rounded-full bg-white text-black font-bold text-lg hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
