@@ -352,9 +352,9 @@ onUnmounted(() => {
                 </tr>
                 <tr>
                   <td class="py-3 pr-3">Suggested size</td>
-                  <td class="py-3 px-2 text-center text-xs">1+</td>
-                  <td class="py-3 px-2 text-center text-xs">5–10</td>
-                  <td class="py-3 pl-2 text-center text-xs">5–20+</td>
+                  <td class="py-3 px-2 text-center text-xs">Solo: 1</td>
+                  <td class="py-3 px-2 text-center text-xs">Min 5, Max 10</td>
+                  <td class="py-3 pl-2 text-center text-xs">Min 5, Max Unlimited(Can be combined with Business Class)</td>
                 </tr>
               </tbody>
             </table>
