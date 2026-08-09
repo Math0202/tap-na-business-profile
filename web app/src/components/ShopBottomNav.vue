@@ -10,7 +10,8 @@ function isActive(path) {
     return (
       route.path === '/' ||
       route.path.startsWith('/product/') ||
-      route.path.startsWith('/about/business-cards')
+      route.path.startsWith('/about/business-cards') ||
+      route.path === '/support'
     )
   }
   return route.path === path

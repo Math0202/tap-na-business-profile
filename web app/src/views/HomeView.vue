@@ -515,7 +515,7 @@ onUnmounted(() => {
             <RouterLink to="/about/business-cards" class="text-on-surface no-underline hover:opacity-70">
               About Connect cards
             </RouterLink>
-            <RouterLink to="/signup" class="text-on-surface no-underline hover:opacity-70">
+            <RouterLink to="/support" class="text-on-surface no-underline hover:opacity-70">
               Support
             </RouterLink>
           </div>

@@ -22,7 +22,8 @@ const isShopHome = computed(
     route.path === '/' ||
     route.path === '/cart' ||
     route.path.startsWith('/product/') ||
-    route.path.startsWith('/about/business-cards')
+    route.path.startsWith('/about/business-cards') ||
+    route.path === '/support'
 )
 const isAdminArea = computed(() => route.path.startsWith('/admin'))
 const isLogin = computed(

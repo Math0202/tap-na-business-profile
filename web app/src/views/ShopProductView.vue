@@ -6,6 +6,7 @@ import ShopBottomNav from '../components/ShopBottomNav.vue'
 import { formatPrice, getProduct, loadShopProducts } from '../lib/shopCatalog'
 import { addToCart } from '../lib/cartStore'
 import { youtubeEmbedUrl } from '../lib/shareHelpers'
+import { setPageSeo } from '../lib/seo'
 
 const route = useRoute()
 const router = useRouter()
@@ -49,10 +50,23 @@ async function refresh() {
   await loadShopProducts()
   loading.value = false
   if (!product.value) {
-    document.title = 'Product not found — tap-na'
+    setPageSeo({
+      title: 'Product not found — tap-na',
+      description: 'This Tap-Na shop product is unavailable.',
+      path: route.fullPath,
+      noindex: true
+    })
     return
   }
-  document.title = `${product.value.name} — tap-na`
+  const p = product.value
+  setPageSeo({
+    title: `${p.name} — tap-na`,
+    description:
+      String(p.desc || '').trim().slice(0, 160) ||
+      `${p.name} NFC Connect card on tap-na. Once-off purchase.`,
+    path: `/product/${p.id}`,
+    image: p.image || p.images?.[0] || ''
+  })
 }
 
 function shopAll() {

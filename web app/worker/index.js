@@ -5322,6 +5322,86 @@ async function handleApi(request, env, url) {
     }
   }
 
+  if (pathname === '/api/shop/support' && method === 'POST') {
+    const body = await readJson(request)
+    const name = String(body?.name || '').trim().slice(0, 120)
+    const email = String(body?.email || '').trim().toLowerCase().slice(0, 160)
+    const phone = String(body?.phone || '').trim().slice(0, 40)
+    const subjectIn = String(body?.subject || '').trim().slice(0, 160)
+    const message = String(body?.message || '').trim().slice(0, 4000)
+
+    if (!name) return bad('Name is required')
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return bad('Valid email is required')
+    if (message.length < 10) return bad('Message is required')
+
+    const companyTo = 'auckmund@gmail.com'
+    const from = defaultEmailFrom(env)
+    const subject = subjectIn
+      ? `Support: ${subjectIn} — ${name}`
+      : `Support message from ${name}`
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<body style="font-family:Arial,sans-serif;color:#111;line-height:1.5;max-width:560px;margin:0 auto;padding:24px;">
+  <h1 style="font-size:20px;margin:0 0 4px;">tap-na support</h1>
+  <p style="margin:0 0 20px;color:#555;font-size:13px;">Submitted from the online shop support form</p>
+  <p style="margin:0 0 4px;"><strong>From</strong></p>
+  <p style="margin:0 0 16px;">
+    ${escapeHtml(name)}<br>
+    ${escapeHtml(email)}
+    ${phone ? `<br>${escapeHtml(phone)}` : ''}
+  </p>
+  ${subjectIn ? `<p style="margin:0 0 8px;"><strong>Subject:</strong> ${escapeHtml(subjectIn)}</p>` : ''}
+  <p style="margin:0 0 4px;"><strong>Message</strong></p>
+  <p style="margin:0;white-space:pre-wrap;">${escapeHtml(message)}</p>
+</body>
+</html>`.trim()
+
+    const text = [
+      'tap-na support form',
+      '',
+      `Name: ${name}`,
+      `Email: ${email}`,
+      phone ? `Phone: ${phone}` : '',
+      subjectIn ? `Subject: ${subjectIn}` : '',
+      '',
+      message
+    ]
+      .filter(Boolean)
+      .join('\n')
+
+    try {
+      const sent = await sendCloudflareEmail(env, {
+        from,
+        to: [companyTo],
+        replyTo: email,
+        subject,
+        html,
+        text
+      })
+      return json({
+        ok: true,
+        id: sent.id || '',
+        provider: sent.provider
+      })
+    } catch (err) {
+      if (!err?._logged) {
+        await logAppError(env, {
+          source: 'email',
+          message: err?.message || 'Support email send failed',
+          stack: err?.stack || '',
+          path: pathname,
+          method,
+          status: err?.status || 502,
+          context: { kind: 'support_email' },
+          actor: null
+        })
+      }
+      return bad(err?.message || 'Email send failed', err?.status || 502)
+    }
+  }
+
   if (pathname === '/api/email/send' && method === 'POST') {
     const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
     if (gate.error) return gate.error

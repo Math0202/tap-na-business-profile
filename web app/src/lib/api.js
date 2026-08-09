@@ -607,6 +607,15 @@ export function apiShopOrderQuote(payload) {
   })
 }
 
+/** Public shop support form — emails auckmund@gmail.com */
+export function apiShopSupport(payload) {
+  return request('/api/shop/support', {
+    method: 'POST',
+    body: payload,
+    timeoutMs: 60000
+  })
+}
+
 /** Send transactional email via Worker → Cloudflare Email Sending (staff only) */
 export function apiSendEmail({ from, to, subject, html, text, attachments }) {
   return request('/api/email/send', {

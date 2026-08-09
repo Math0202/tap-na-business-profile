@@ -41,13 +41,31 @@ const count = cartCount
           About cards
         </RouterLink>
         <RouterLink
+          to="/support"
+          class="font-label-caps text-[11px] uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors no-underline"
+        >
+          Support
+        </RouterLink>
+        <RouterLink
           to="/cart"
           class="font-label-caps text-[11px] uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors no-underline"
         >
           Cart
         </RouterLink>
+        <RouterLink
+          to="/login"
+          class="font-label-caps text-[11px] uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors no-underline"
+        >
+          Login
+        </RouterLink>
       </nav>
       <div class="flex items-center gap-2">
+        <RouterLink
+          to="/login"
+          class="hidden sm:flex md:hidden font-label-caps text-[11px] uppercase tracking-widest text-on-surface-variant no-underline px-2"
+        >
+          Login
+        </RouterLink>
         <RouterLink
           to="/cart"
           class="relative w-11 h-11 flex items-center justify-center text-on-surface"
@@ -91,11 +109,25 @@ const count = cartCount
         About cards
       </RouterLink>
       <RouterLink
+        to="/support"
+        class="font-label-caps text-[12px] uppercase tracking-widest py-2 no-underline text-inherit"
+        @click="emit('close-menu')"
+      >
+        Support
+      </RouterLink>
+      <RouterLink
         to="/cart"
         class="font-label-caps text-[12px] uppercase tracking-widest py-2 no-underline text-inherit"
         @click="emit('close-menu')"
       >
         Cart{{ count > 0 ? ` (${count})` : '' }}
+      </RouterLink>
+      <RouterLink
+        to="/login"
+        class="font-label-caps text-[12px] uppercase tracking-widest py-2 no-underline text-inherit"
+        @click="emit('close-menu')"
+      >
+        Login
       </RouterLink>
       <RouterLink
         to="/signup"

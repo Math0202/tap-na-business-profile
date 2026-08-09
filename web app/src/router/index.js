@@ -12,22 +12,26 @@ import {
   isStaffSalesTeam,
   staffCanAccessAdminPath
 } from '../lib/staffAuth'
+import { ROUTE_SEO, setPageSeo } from '../lib/seo'
 
 const routes = [
   {
     path: '/',
     name: 'home',
-    component: () => import('../views/HomeView.vue')
+    component: () => import('../views/HomeView.vue'),
+    meta: { seoKey: 'home' }
   },
   {
     path: '/cart',
     name: 'cart',
-    component: () => import('../views/CartView.vue')
+    component: () => import('../views/CartView.vue'),
+    meta: { seoKey: 'cart' }
   },
   {
     path: '/product/:id',
     name: 'shop-product',
-    component: () => import('../views/ShopProductView.vue')
+    component: () => import('../views/ShopProductView.vue'),
+    meta: { seoKey: 'shop-product' }
   },
   {
     path: '/me',
@@ -43,17 +47,20 @@ const routes = [
   {
     path: '/login',
     name: 'login',
-    component: () => import('../views/LoginView.vue')
+    component: () => import('../views/LoginView.vue'),
+    meta: { seoKey: 'login' }
   },
   {
     path: '/shop/login',
     name: 'shop-login',
-    component: () => import('../views/LoginView.vue')
+    component: () => import('../views/LoginView.vue'),
+    meta: { seoKey: 'login' }
   },
   {
     path: '/signup',
     name: 'signup',
-    component: () => import('../views/SignupView.vue')
+    component: () => import('../views/SignupView.vue'),
+    meta: { seoKey: 'signup' }
   },
   {
     path: '/cards',
@@ -63,12 +70,20 @@ const routes = [
   {
     path: '/about',
     name: 'about',
-    component: () => import('../views/AboutView.vue')
+    component: () => import('../views/AboutView.vue'),
+    meta: { seoKey: 'about' }
   },
   {
     path: '/about/business-cards',
     name: 'about-business-cards',
-    component: () => import('../views/AboutBusinessCardsView.vue')
+    component: () => import('../views/AboutBusinessCardsView.vue'),
+    meta: { seoKey: 'about-business-cards' }
+  },
+  {
+    path: '/support',
+    name: 'support',
+    component: () => import('../views/SupportView.vue'),
+    meta: { seoKey: 'support' }
   },
   {
     path: '/business',
@@ -222,6 +237,19 @@ router.beforeEach((to) => {
   }
 
   return true
+})
+
+router.afterEach((to) => {
+  const key = to.meta?.seoKey
+  const preset = key ? ROUTE_SEO[key] : null
+  if (!preset) return
+  // Product pages set richer SEO after load; apply a sensible default first.
+  setPageSeo({
+    title: preset.title,
+    description: preset.description,
+    path: to.path,
+    noindex: !!preset.noindex
+  })
 })
 
 export default router
