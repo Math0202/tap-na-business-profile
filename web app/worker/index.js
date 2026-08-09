@@ -1982,11 +1982,22 @@ async function sendSalesAgentCredentialsEmail(env, { email, name, password }) {
   })
 }
 
-function ogHtml({ title, description, url, image, site = 'tap-na' }) {
+function ogHtml({
+  title,
+  description,
+  url,
+  image,
+  site = 'tap-na',
+  type = 'website',
+  imageAlt = '',
+  imageWidth = '1200',
+  imageHeight = '1200'
+}) {
   const t = escapeHtml(title)
   const d = escapeHtml(description)
   const u = escapeHtml(url)
   const img = escapeHtml(image)
+  const alt = escapeHtml(imageAlt || title)
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -1994,16 +2005,16 @@ function ogHtml({ title, description, url, image, site = 'tap-na' }) {
   <title>${t}</title>
   <meta name="description" content="${d}">
   <link rel="canonical" href="${u}">
-  <meta property="og:type" content="profile">
+  <meta property="og:type" content="${escapeHtml(type)}">
   <meta property="og:site_name" content="${escapeHtml(site)}">
   <meta property="og:title" content="${t}">
   <meta property="og:description" content="${d}">
   <meta property="og:url" content="${u}">
   <meta property="og:image" content="${img}">
   <meta property="og:image:secure_url" content="${img}">
-  <meta property="og:image:width" content="400">
-  <meta property="og:image:height" content="400">
-  <meta property="og:image:alt" content="${t} profile picture">
+  <meta property="og:image:width" content="${escapeHtml(String(imageWidth))}">
+  <meta property="og:image:height" content="${escapeHtml(String(imageHeight))}">
+  <meta property="og:image:alt" content="${alt}">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="${t}">
   <meta name="twitter:description" content="${d}">
@@ -2012,8 +2023,40 @@ function ogHtml({ title, description, url, image, site = 'tap-na' }) {
 </head>
 <body>
   <p><a href="${u}">${t}</a></p>
+  <img src="${img}" alt="${alt}" width="600" style="max-width:100%;height:auto;">
 </body>
 </html>`
+}
+
+function absolutePublicUrl(origin, src) {
+  const raw = String(src || '').trim()
+  if (!raw) return ''
+  if (/^https?:\/\//i.test(raw)) return raw
+  if (raw.startsWith('//')) return `https:${raw}`
+  const base = String(origin || 'https://tapnam.com').replace(/\/$/, '')
+  return raw.startsWith('/') ? `${base}${raw}` : `${base}/${raw}`
+}
+
+function shopProductFallbackImage(productId, origin) {
+  const id = String(productId || '').trim()
+  const map = {
+    'black-card': '/images/business_charcoal.png',
+    'blue-card': '/images/professional_cobalt_blue.png',
+    'black-card-front': '/images/executive_black.png'
+  }
+  return absolutePublicUrl(origin, map[id] || '/images/tap-na_logo.png')
+}
+
+async function loadShopProductOg(env, productId) {
+  const id = String(productId || '').trim()
+  if (!id) return null
+  const rows = await sb(
+    env,
+    `sales_products?id=eq.${encodeURIComponent(id)}&deleted=eq.false&select=id,name,default_price,category,active,description,images,shop_label,shop_badge&limit=1`
+  )
+  const row = rows?.[0]
+  if (!row || row.active === false) return null
+  return mapSalesProductPublic(row)
 }
 
 async function serveOgImage(env, origin, slug) {
@@ -5575,6 +5618,76 @@ export default {
       }
     }
 
+    const productTap = url.pathname.match(/^\/product\/([^/]+)\/?$/)
+    if (
+      productTap &&
+      request.method === 'GET' &&
+      isCrawler(request.headers.get('User-Agent') || '') &&
+      env.SUPABASE_URL &&
+      env.SUPABASE_SERVICE_ROLE_KEY
+    ) {
+      const productId = decodeURIComponent(productTap[1])
+      try {
+        const product = await loadShopProductOg(env, productId)
+        const shareUrl = `${url.origin}/product/${encodeURIComponent(productId)}`
+        const title = product?.name
+          ? `${product.name} — tap-na`
+          : 'tap-na Connect card'
+        const price =
+          product && Number(product.price) > 0
+            ? `N$ ${Number(product.price).toLocaleString(undefined, {
+                maximumFractionDigits: 2
+              })}`
+            : ''
+        const descBits = [
+          product?.label || '',
+          price,
+          String(product?.desc || '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 140)
+        ].filter(Boolean)
+        const description =
+          descBits.join(' · ') ||
+          'NFC Connect business card on tap-na. Once-off purchase. Free delivery in Windhoek.'
+        const image =
+          absolutePublicUrl(url.origin, product?.image || product?.images?.[0] || '') ||
+          shopProductFallbackImage(productId, url.origin)
+
+        return new Response(
+          ogHtml({
+            title,
+            description,
+            url: shareUrl,
+            image,
+            type: 'product',
+            imageAlt: product?.name || 'tap-na Connect card',
+            imageWidth: '1200',
+            imageHeight: '1600'
+          }),
+          {
+            status: 200,
+            headers: {
+              'Content-Type': 'text/html; charset=utf-8',
+              'Cache-Control': 'public, max-age=300'
+            }
+          }
+        )
+      } catch (err) {
+        if (!err?._logged) {
+          await logAppError(env, {
+            source: 'og',
+            message: err?.message || String(err),
+            stack: err?.stack || '',
+            path: url.pathname,
+            method: 'GET',
+            context: { kind: 'product_crawler_og', productId }
+          })
+        }
+        /* fall through to SPA */
+      }
+    }
+
     const tap = url.pathname.match(/^\/c\/([^/]+)\/?$/)
     if (tap && request.method === 'GET' && env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
       const slug = decodeURIComponent(tap[1])
@@ -5609,7 +5722,16 @@ export default {
             : ''
           const image = `${url.origin}/api/og/${encodeURIComponent(slug)}.jpg${imageVersion}`
           return new Response(
-            ogHtml({ title, description, url: shareUrl, image }),
+            ogHtml({
+              title,
+              description,
+              url: shareUrl,
+              image,
+              type: 'profile',
+              imageAlt: `${title} profile picture`,
+              imageWidth: '400',
+              imageHeight: '400'
+            }),
             {
               status: 200,
               headers: {
