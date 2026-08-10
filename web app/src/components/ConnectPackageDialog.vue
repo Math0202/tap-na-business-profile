@@ -19,7 +19,8 @@ const props = defineProps({
   soloProductId: { type: String, default: 'blue-card' },
   initialBusinessQty: { type: Number, default: null },
   initialExecutiveQty: { type: Number, default: null },
-  initialSoloQty: { type: Number, default: null }
+  initialSubdomain: { type: String, default: '' },
+  initialSoloQty: { type: Number, default: 1 }
 })
 
 const emit = defineEmits(['close', 'ordered'])
@@ -28,13 +29,13 @@ const soloQty = ref(1)
 const businessQty = ref(2)
 const executiveQty = ref(3)
 const subdomain = ref('')
+const error = ref('')
+const submitting = ref(false)
 const customerName = ref('')
 const customerCompany = ref('')
 const customerEmail = ref('')
 const customerPhone = ref('')
 const customerTown = ref('Windhoek')
-const error = ref('')
-const submitting = ref(false)
 
 const isTeam = computed(() => props.mode === 'team')
 const soloProduct = computed(() => getProduct(props.soloProductId || props.focusId || 'blue-card'))
@@ -50,41 +51,30 @@ const teamSubtotal = computed(
 )
 const subtotal = computed(() => (isTeam.value ? teamSubtotal.value : soloSubtotal.value))
 const title = computed(() => (isTeam.value ? 'Connect Team package' : 'Connect Solo'))
-
-function resetCustomer() {
-  const profile = loadProfile()
-  customerName.value = profile?.name || ''
-  customerCompany.value = profile?.company || ''
-  customerEmail.value = profile?.email || profile?.loginEmail || ''
-  customerPhone.value = profile?.phone || ''
-  customerTown.value = 'Windhoek'
-}
+const itemCount = computed(() => (isTeam.value ? teamTotal.value : soloQty.value))
 
 watch(
-  () => [props.open, props.mode, props.focusId, props.initialBusinessQty, props.initialExecutiveQty, props.initialSoloQty],
+  () => [props.open, props.mode, props.focusId],
   ([open]) => {
     if (!open) return
     error.value = ''
-    submitting.value = false
     subdomain.value = ''
-    resetCustomer()
+    submitting.value = false
     if (props.mode === 'team') {
-      if (props.initialBusinessQty != null || props.initialExecutiveQty != null) {
-        businessQty.value = Math.max(0, Math.floor(Number(props.initialBusinessQty) || 0))
-        executiveQty.value = Math.max(0, Math.floor(Number(props.initialExecutiveQty) || 0))
-        if (businessQty.value + executiveQty.value < TEAM_PACKAGE_MIN) {
-          const mix = initialTeamMix(props.focusId)
-          businessQty.value = mix.businessQty
-          executiveQty.value = mix.executiveQty
-        }
-      } else {
-        const mix = initialTeamMix(props.focusId)
-        businessQty.value = mix.businessQty
-        executiveQty.value = mix.executiveQty
-      }
+      const mix = initialTeamMix(props.focusId)
+      businessQty.value =
+        props.initialBusinessQty != null ? Math.max(0, Math.floor(props.initialBusinessQty)) : mix.businessQty
+      executiveQty.value =
+        props.initialExecutiveQty != null ? Math.max(0, Math.floor(props.initialExecutiveQty)) : mix.executiveQty
+      subdomain.value = String(props.initialSubdomain || '').trim()
     } else {
       soloQty.value = Math.max(1, Math.floor(Number(props.initialSoloQty) || 1))
     }
+    const profile = loadProfile()
+    if (profile?.name && !customerName.value) customerName.value = profile.name
+    if (profile?.company && !customerCompany.value) customerCompany.value = profile.company
+    if (profile?.email && !customerEmail.value) customerEmail.value = profile.email
+    if (profile?.phone && !customerPhone.value) customerPhone.value = profile.phone
   }
 )
 
@@ -99,7 +89,6 @@ function bumpExecutive(delta) {
   executiveQty.value = Math.min(99, Math.max(0, executiveQty.value + delta))
   error.value = ''
 }
-
 function close() {
   emit('close')
 }
@@ -109,28 +98,28 @@ function buildItems() {
     const items = []
     if (businessQty.value > 0 && businessProduct.value) {
       items.push({
-        id: BUSINESS_CARD_ID,
+        id: businessProduct.value.id,
         name: businessProduct.value.name,
         qty: businessQty.value,
-        price: businessProduct.value.price || 0
+        price: businessProduct.value.price
       })
     }
     if (executiveQty.value > 0 && executiveProduct.value) {
       items.push({
-        id: EXECUTIVE_CARD_ID,
+        id: executiveProduct.value.id,
         name: executiveProduct.value.name,
         qty: executiveQty.value,
-        price: executiveProduct.value.price || 0
+        price: executiveProduct.value.price
       })
     }
     return items
   }
   const p = soloProduct.value
   if (!p) return []
-  return [{ id: p.id, name: p.name, qty: soloQty.value, price: p.price || 0 }]
+  return [{ id: p.id, name: p.name, qty: soloQty.value, price: p.price }]
 }
 
-async function placeOrder() {
+async function requestQuote() {
   error.value = ''
   if (isTeam.value && teamTotal.value < TEAM_PACKAGE_MIN) {
     error.value = `Team packages need at least ${TEAM_PACKAGE_MIN} cards total (any mix).`
@@ -163,16 +152,20 @@ async function placeOrder() {
   }
   const items = buildItems()
   if (!items.length) {
-    error.value = 'Add at least one card to the package.'
+    error.value = 'Add at least one card to continue.'
     return
   }
 
   const noteParts = [
     `Company: ${company}`,
-    isTeam.value ? `Team mix ${businessQty.value}:${executiveQty.value} (min ${TEAM_PACKAGE_MIN} combined)` : 'Connect Solo package',
+    isTeam.value
+      ? `Team mix ${businessQty.value}:${executiveQty.value} (${teamTotal.value} cards)`
+      : `Solo package × ${soloQty.value}`,
     subdomainEligible.value && subdomain.value.trim()
       ? `Custom subdomain request: ${subdomain.value.trim()}`
-      : ''
+      : isTeam.value && teamTotal.value >= TEAM_SUBDOMAIN_THRESHOLD
+        ? 'Team pack 10+ (subdomain optional — not specified)'
+        : ''
   ].filter(Boolean)
 
   submitting.value = true
@@ -192,7 +185,7 @@ async function placeOrder() {
     }
     emit('ordered', {
       mode: isTeam.value ? 'team' : 'solo',
-      total: isTeam.value ? teamTotal.value : soloQty.value,
+      total: itemCount.value,
       quoteRef: res.quoteRef || ''
     })
     close()
@@ -222,7 +215,7 @@ async function placeOrder() {
           <div class="min-w-0">
             <h2 class="font-headline-lg-mobile text-[22px] font-medium uppercase tracking-tight">{{ title }}</h2>
             <p class="text-on-surface-variant text-sm mt-1">
-              Review your package and request a quote — no separate cart needed.
+              {{ isTeam ? `Mix Business & Executive · min ${TEAM_PACKAGE_MIN} cards` : 'Professional Class · from 1 card' }}
             </p>
           </div>
           <button
@@ -235,123 +228,175 @@ async function placeOrder() {
           </button>
         </div>
 
-        <form class="px-5 py-5 flex flex-col gap-5" @submit.prevent="placeOrder">
+        <form class="px-5 py-5 flex flex-col gap-5" @submit.prevent="requestQuote">
           <!-- Solo line -->
-          <div v-if="!isTeam && soloProduct" class="flex gap-4 py-1">
-            <div class="w-20 h-20 shrink-0 bg-surface-container rounded-lg overflow-hidden flex items-center justify-center p-2">
-              <img v-if="soloProduct.image" :src="soloProduct.image" :alt="soloProduct.name" class="w-full h-full object-contain">
-            </div>
-            <div class="flex-1 min-w-0 flex flex-col gap-2">
-              <div class="flex justify-between gap-3 items-start">
-                <h3 class="font-headline-lg-mobile text-[17px] font-medium truncate">{{ soloProduct.name }}</h3>
-                <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(soloSubtotal) }}</span>
+          <template v-if="!isTeam && soloProduct">
+            <div class="flex gap-4 py-1">
+              <div class="w-20 h-20 shrink-0 bg-surface-container rounded-lg overflow-hidden flex items-center justify-center p-2">
+                <img v-if="soloProduct.image" :src="soloProduct.image" :alt="soloProduct.name" class="w-full h-full object-contain">
               </div>
-              <div class="inline-flex items-center border border-border-subtle rounded-full overflow-hidden self-start">
-                <button type="button" class="w-10 h-10 flex items-center justify-center" aria-label="Decrease" @click="bumpSolo(-1)">
-                  <span class="material-symbols-outlined text-[18px]">remove</span>
-                </button>
-                <span class="w-10 text-center font-label-caps text-[12px]">{{ soloQty }}</span>
-                <button type="button" class="w-10 h-10 flex items-center justify-center" aria-label="Increase" @click="bumpSolo(1)">
-                  <span class="material-symbols-outlined text-[18px]">add</span>
-                </button>
+              <div class="flex-1 min-w-0 flex flex-col gap-2">
+                <div class="flex justify-between gap-3 items-start">
+                  <h3 class="font-headline-lg-mobile text-[17px] font-medium truncate">{{ soloProduct.name }}</h3>
+                  <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(soloSubtotal) }}</span>
+                </div>
+                <div class="inline-flex items-center border border-border-subtle rounded-full overflow-hidden self-start">
+                  <button type="button" class="w-10 h-10 flex items-center justify-center" aria-label="Decrease" @click="bumpSolo(-1)">
+                    <span class="material-symbols-outlined text-[18px]">remove</span>
+                  </button>
+                  <span class="w-10 text-center font-label-caps text-[12px]">{{ soloQty }}</span>
+                  <button type="button" class="w-10 h-10 flex items-center justify-center" aria-label="Increase" @click="bumpSolo(1)">
+                    <span class="material-symbols-outlined text-[18px]">add</span>
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          </template>
 
           <!-- Team lines -->
-          <ul v-else-if="isTeam" class="flex flex-col divide-y divide-border-subtle border-y border-border-subtle list-none p-0 m-0">
-            <li v-if="businessProduct" class="flex gap-3 py-4">
-              <div class="w-16 h-16 shrink-0 bg-surface-container rounded-lg overflow-hidden flex items-center justify-center p-1.5">
-                <img :src="businessProduct.image" :alt="businessProduct.name" class="w-full h-full object-contain">
-              </div>
-              <div class="flex-1 min-w-0 flex flex-col gap-2">
-                <div class="flex justify-between gap-2 items-start">
-                  <div class="min-w-0">
+          <template v-else-if="isTeam">
+            <ul class="flex flex-col divide-y divide-border-subtle border-y border-border-subtle list-none p-0 m-0">
+              <li v-if="businessProduct" class="flex gap-3 py-4">
+                <div class="w-16 h-16 shrink-0 bg-surface-container rounded-lg overflow-hidden flex items-center justify-center p-1.5">
+                  <img :src="businessProduct.image" :alt="businessProduct.name" class="w-full h-full object-contain">
+                </div>
+                <div class="flex-1 min-w-0 flex flex-col gap-2">
+                  <div class="flex justify-between gap-2">
                     <h3 class="text-[15px] font-medium truncate">{{ businessProduct.name }}</h3>
+                    <span class="font-label-caps text-[11px] shrink-0">{{ formatPrice((businessProduct.price || 0) * businessQty) }}</span>
                   </div>
-                  <span class="font-label-caps text-[11px] shrink-0">{{ formatPrice((businessProduct.price || 0) * businessQty) }}</span>
+                  <div class="inline-flex items-center border border-border-subtle rounded-full overflow-hidden self-start">
+                    <button type="button" class="w-9 h-9 flex items-center justify-center" @click="bumpBusiness(-1)">
+                      <span class="material-symbols-outlined text-[16px]">remove</span>
+                    </button>
+                    <span class="w-8 text-center font-label-caps text-[11px]">{{ businessQty }}</span>
+                    <button type="button" class="w-9 h-9 flex items-center justify-center" @click="bumpBusiness(1)">
+                      <span class="material-symbols-outlined text-[16px]">add</span>
+                    </button>
+                  </div>
                 </div>
-                <div class="inline-flex items-center border border-border-subtle rounded-full overflow-hidden self-start">
-                  <button type="button" class="w-9 h-9 flex items-center justify-center" @click="bumpBusiness(-1)"><span class="material-symbols-outlined text-[16px]">remove</span></button>
-                  <span class="w-8 text-center font-label-caps text-[11px]">{{ businessQty }}</span>
-                  <button type="button" class="w-9 h-9 flex items-center justify-center" @click="bumpBusiness(1)"><span class="material-symbols-outlined text-[16px]">add</span></button>
+              </li>
+              <li v-if="executiveProduct" class="flex gap-3 py-4">
+                <div class="w-16 h-16 shrink-0 bg-surface-container rounded-lg overflow-hidden flex items-center justify-center p-1.5">
+                  <img :src="executiveProduct.image" :alt="executiveProduct.name" class="w-full h-full object-contain">
                 </div>
-              </div>
-            </li>
-            <li v-if="executiveProduct" class="flex gap-3 py-4">
-              <div class="w-16 h-16 shrink-0 bg-surface-container rounded-lg overflow-hidden flex items-center justify-center p-1.5">
-                <img :src="executiveProduct.image" :alt="executiveProduct.name" class="w-full h-full object-contain">
-              </div>
-              <div class="flex-1 min-w-0 flex flex-col gap-2">
-                <div class="flex justify-between gap-2 items-start">
-                  <div class="min-w-0">
+                <div class="flex-1 min-w-0 flex flex-col gap-2">
+                  <div class="flex justify-between gap-2">
                     <h3 class="text-[15px] font-medium truncate">{{ executiveProduct.name }}</h3>
+                    <span class="font-label-caps text-[11px] shrink-0">{{ formatPrice((executiveProduct.price || 0) * executiveQty) }}</span>
                   </div>
-                  <span class="font-label-caps text-[11px] shrink-0">{{ formatPrice((executiveProduct.price || 0) * executiveQty) }}</span>
+                  <div class="inline-flex items-center border border-border-subtle rounded-full overflow-hidden self-start">
+                    <button type="button" class="w-9 h-9 flex items-center justify-center" @click="bumpExecutive(-1)">
+                      <span class="material-symbols-outlined text-[16px]">remove</span>
+                    </button>
+                    <span class="w-8 text-center font-label-caps text-[11px]">{{ executiveQty }}</span>
+                    <button type="button" class="w-9 h-9 flex items-center justify-center" @click="bumpExecutive(1)">
+                      <span class="material-symbols-outlined text-[16px]">add</span>
+                    </button>
+                  </div>
                 </div>
-                <div class="inline-flex items-center border border-border-subtle rounded-full overflow-hidden self-start">
-                  <button type="button" class="w-9 h-9 flex items-center justify-center" @click="bumpExecutive(-1)"><span class="material-symbols-outlined text-[16px]">remove</span></button>
-                  <span class="w-8 text-center font-label-caps text-[11px]">{{ executiveQty }}</span>
-                  <button type="button" class="w-9 h-9 flex items-center justify-center" @click="bumpExecutive(1)"><span class="material-symbols-outlined text-[16px]">add</span></button>
-                </div>
+              </li>
+            </ul>
+            <div class="bg-surface-container rounded-xl p-4 flex flex-col gap-2 text-sm">
+              <div class="flex justify-between">
+                <span class="text-on-surface-variant">Package total</span>
+                <span class="font-label-caps text-label-caps">{{ teamTotal }} cards · {{ businessQty }}:{{ executiveQty }}</span>
               </div>
-            </li>
-          </ul>
+              <label v-if="subdomainEligible" class="flex flex-col gap-2 mt-1">
+                <span class="font-label-caps text-[10px] uppercase tracking-widest text-primary">Optional custom subdomain</span>
+                <input
+                  v-model="subdomain"
+                  type="text"
+                  class="bg-surface border border-border-subtle rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary"
+                  placeholder="cards.yourcompany.com"
+                >
+              </label>
+              <p v-else class="font-label-caps text-[10px] uppercase tracking-widest text-ink-muted">
+                Optional subdomain from {{ TEAM_SUBDOMAIN_THRESHOLD }}+ cards
+              </p>
+            </div>
+          </template>
 
-          <div v-if="isTeam" class="bg-surface-container rounded-xl p-4 flex flex-col gap-2 text-sm">
-            <div class="flex justify-between"><span class="text-on-surface-variant">Mix</span><span class="font-label-caps text-[11px] uppercase tracking-widest">{{ businessQty }} : {{ executiveQty }}</span></div>
-            <div class="flex justify-between"><span class="text-on-surface-variant">Total cards</span><span class="font-label-caps text-label-caps">{{ teamTotal }} <span class="text-ink-muted">(min {{ TEAM_PACKAGE_MIN }})</span></span></div>
-            <label v-if="subdomainEligible" class="flex flex-col gap-2 mt-1">
-              <span class="font-label-caps text-[10px] uppercase tracking-widest text-primary">Optional custom subdomain</span>
-              <input v-model="subdomain" type="text" class="bg-surface border border-border-subtle rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary" placeholder="cards.yourcompany.com">
-            </label>
-            <p v-else class="font-label-caps text-[10px] uppercase tracking-widest text-ink-muted">Optional subdomain from {{ TEAM_SUBDOMAIN_THRESHOLD }}+ cards</p>
-          </div>
-
-          <div class="h-px bg-border-subtle" />
-
-          <div class="flex flex-col gap-1">
+          <!-- Contact details (always shown) -->
+          <div class="flex flex-col gap-3 border-t border-border-subtle pt-5">
             <h3 class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">Your details</h3>
-            <p class="text-on-surface-variant text-xs">We’ll email your quote to you and auckmund@gmail.com.</p>
+            <label class="flex flex-col gap-1.5">
+              <span class="font-label-caps text-[10px] uppercase tracking-[0.2em] text-ink-muted">Full name</span>
+              <input
+                v-model="customerName"
+                type="text"
+                autocomplete="name"
+                required
+                class="w-full bg-surface-container-lowest border border-border-subtle rounded-lg px-3 py-3 text-sm focus:outline-none focus:border-primary"
+                placeholder="Full name"
+              >
+            </label>
+            <label class="flex flex-col gap-1.5">
+              <span class="font-label-caps text-[10px] uppercase tracking-[0.2em] text-ink-muted">Company name</span>
+              <input
+                v-model="customerCompany"
+                type="text"
+                autocomplete="organization"
+                required
+                class="w-full bg-surface-container-lowest border border-border-subtle rounded-lg px-3 py-3 text-sm focus:outline-none focus:border-primary"
+                placeholder="Company name"
+              >
+            </label>
+            <label class="flex flex-col gap-1.5">
+              <span class="font-label-caps text-[10px] uppercase tracking-[0.2em] text-ink-muted">Email</span>
+              <input
+                v-model="customerEmail"
+                type="email"
+                autocomplete="email"
+                required
+                class="w-full bg-surface-container-lowest border border-border-subtle rounded-lg px-3 py-3 text-sm focus:outline-none focus:border-primary"
+                placeholder="you@example.com"
+              >
+            </label>
+            <label class="flex flex-col gap-1.5">
+              <span class="font-label-caps text-[10px] uppercase tracking-[0.2em] text-ink-muted">Cellphone number</span>
+              <input
+                v-model="customerPhone"
+                type="tel"
+                autocomplete="tel"
+                required
+                class="w-full bg-surface-container-lowest border border-border-subtle rounded-lg px-3 py-3 text-sm focus:outline-none focus:border-primary"
+                placeholder="+264 81 000 0000"
+              >
+            </label>
+            <label class="flex flex-col gap-1.5">
+              <span class="font-label-caps text-[10px] uppercase tracking-[0.2em] text-ink-muted">Town</span>
+              <input
+                v-model="customerTown"
+                type="text"
+                autocomplete="address-level2"
+                required
+                class="w-full bg-surface-container-lowest border border-border-subtle rounded-lg px-3 py-3 text-sm focus:outline-none focus:border-primary"
+                placeholder="Windhoek"
+              >
+            </label>
           </div>
-
-          <label class="flex flex-col gap-1.5">
-            <span class="font-label-caps text-[10px] uppercase tracking-[0.2em] text-ink-muted">Full name</span>
-            <input v-model="customerName" type="text" autocomplete="name" required class="w-full bg-surface-container-lowest border border-border-subtle rounded-lg px-3 py-3 text-sm focus:outline-none focus:border-primary" placeholder="Full name">
-          </label>
-          <label class="flex flex-col gap-1.5">
-            <span class="font-label-caps text-[10px] uppercase tracking-[0.2em] text-ink-muted">Company name</span>
-            <input v-model="customerCompany" type="text" autocomplete="organization" required class="w-full bg-surface-container-lowest border border-border-subtle rounded-lg px-3 py-3 text-sm focus:outline-none focus:border-primary" placeholder="Company name">
-          </label>
-          <label class="flex flex-col gap-1.5">
-            <span class="font-label-caps text-[10px] uppercase tracking-[0.2em] text-ink-muted">Email</span>
-            <input v-model="customerEmail" type="email" autocomplete="email" required class="w-full bg-surface-container-lowest border border-border-subtle rounded-lg px-3 py-3 text-sm focus:outline-none focus:border-primary" placeholder="you@example.com">
-          </label>
-          <label class="flex flex-col gap-1.5">
-            <span class="font-label-caps text-[10px] uppercase tracking-[0.2em] text-ink-muted">Cellphone number</span>
-            <input v-model="customerPhone" type="tel" autocomplete="tel" required class="w-full bg-surface-container-lowest border border-border-subtle rounded-lg px-3 py-3 text-sm focus:outline-none focus:border-primary" placeholder="+264 81 000 0000">
-          </label>
-          <label class="flex flex-col gap-1.5">
-            <span class="font-label-caps text-[10px] uppercase tracking-[0.2em] text-ink-muted">Town</span>
-            <input v-model="customerTown" type="text" autocomplete="address-level2" required class="w-full bg-surface-container-lowest border border-border-subtle rounded-lg px-3 py-3 text-sm focus:outline-none focus:border-primary" placeholder="Windhoek">
-          </label>
 
           <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
-
-          <div class="sticky bottom-0 -mx-5 px-5 py-4 bg-surface border-t border-border-subtle flex flex-col gap-3">
-            <div class="flex justify-between items-baseline">
-              <span class="font-button-text text-button-text uppercase tracking-widest text-sm">Total</span>
-              <span class="font-display-lg text-[24px] font-semibold leading-none">{{ formatPrice(subtotal) }}</span>
-            </div>
-            <button
-              type="submit"
-              class="w-full bg-primary text-on-primary py-4 font-button-text uppercase tracking-widest hover:opacity-90 disabled:opacity-60"
-              :disabled="submitting"
-            >
-              {{ submitting ? 'Sending quote…' : 'Email quote' }}
-            </button>
-          </div>
         </form>
+
+        <div class="sticky bottom-0 bg-surface border-t border-border-subtle px-5 py-4 flex flex-col gap-3">
+          <div class="flex justify-between items-baseline">
+            <span class="font-button-text text-button-text uppercase tracking-widest text-sm">Total</span>
+            <span class="font-display-lg text-[24px] font-semibold leading-none">{{ formatPrice(subtotal) }}</span>
+          </div>
+          <button
+            type="button"
+            class="w-full bg-primary text-on-primary py-4 font-button-text uppercase tracking-widest hover:opacity-90 disabled:opacity-60"
+            :disabled="submitting"
+            @click="requestQuote"
+          >
+            {{ submitting ? 'Sending quote…' : 'Request quote' }}
+          </button>
+          <p class="text-[11px] text-on-surface-variant text-center">
+            We’ll email your quote to you and auckmund@gmail.com.
+          </p>
+        </div>
       </div>
     </div>
   </Teleport>

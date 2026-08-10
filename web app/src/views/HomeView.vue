@@ -5,13 +5,9 @@ import ShopHeader from '../components/ShopHeader.vue'
 import ShopBottomNav from '../components/ShopBottomNav.vue'
 import ConnectPackageDialog from '../components/ConnectPackageDialog.vue'
 import {
-  BUSINESS_CARD_ID,
-  EXECUTIVE_CARD_ID,
-  TEAM_PACKAGE_MIN,
   connectSoloCards,
   connectTeamCards,
   formatPrice,
-  getProduct,
   isTeamCard,
   loadShopProducts,
 } from '../lib/shopCatalog'
@@ -64,20 +60,9 @@ const soloCards = computed(() => {
   return connectSoloCards()
 })
 
-const teamPackage = computed(() => {
+const teamCards = computed(() => {
   catalogTick.value
-  const cards = connectTeamCards()
-  const business = getProduct(BUSINESS_CARD_ID) || cards.find((p) => p.id === BUSINESS_CARD_ID)
-  const executive = getProduct(EXECUTIVE_CARD_ID) || cards.find((p) => p.id === EXECUTIVE_CARD_ID)
-  if (!business && !executive) return null
-  const prices = [business?.price, executive?.price].filter((n) => Number(n) > 0).map(Number)
-  const fromPrice = prices.length ? Math.min(...prices) : 0
-  return {
-    business,
-    executive,
-    fromPrice,
-    blurb: `One mixable package — Business & Executive, minimum ${TEAM_PACKAGE_MIN} cards total. Logos print white. Optional custom subdomain from 10+.`
-  }
+  return connectTeamCards()
 })
 
 async function refreshCatalog() {
@@ -109,7 +94,11 @@ function showToast(msg) {
 }
 
 function openPackage(mode, focusId = '') {
-  packageMode.value = mode
+  if (mode === 'team') {
+    router.push({ path: '/package/team', query: focusId ? { focus: focusId } : {} })
+    return
+  }
+  packageMode.value = 'solo'
   packageFocusId.value = focusId
   packageOpen.value = true
 }
@@ -221,27 +210,21 @@ onUnmounted(() => {
               aria-hidden="true"
             />
 
-            <!-- Product visuals — phone frame + smaller Connect cards -->
+            <!-- Product visuals — all 3 Connect card types -->
             <div
-              class="relative z-[1] order-1 md:order-2 flex-1 min-h-[340px] md:min-h-full md:absolute md:inset-y-0 md:right-0 md:w-[58%] flex items-center justify-center px-3 pt-6 md:pt-0 md:pr-4"
+              class="relative z-[1] order-1 md:order-2 flex-1 min-h-[300px] md:min-h-full md:absolute md:inset-y-0 md:right-0 md:w-[58%] flex items-center justify-center px-4 pt-8 md:pt-0 md:pr-6"
             >
-              <div class="hero-stage relative w-full max-w-[380px] h-[300px] md:max-w-none md:h-[90%] md:w-[98%]">
-                <img
-                  src="/images/iphone-frame-profile.png"
-                  alt="Connect digital profile on phone"
-                  class="hero-phone absolute pointer-events-none select-none drop-shadow-[0_28px_60px_rgba(0,0,0,0.55)]"
-                  decoding="async"
-                >
+              <div class="hero-fan relative w-full max-w-[420px] aspect-[5/4] md:max-w-none md:h-[86%] md:aspect-auto md:w-[96%]">
                 <button
                   v-for="(card, index) in HERO_CARDS"
                   :key="card.id"
                   type="button"
-                  class="hero-product absolute p-0 border-0 bg-transparent cursor-pointer drop-shadow-[0_14px_28px_rgba(0,0,0,0.45)]"
+                  class="hero-product absolute p-0 border-0 bg-transparent cursor-pointer drop-shadow-[0_22px_50px_rgba(0,0,0,0.55)]"
                   :class="[
                     `hero-product--${card.slot}`,
                     { 'hero-product--in': heroCardsIn > index }
                   ]"
-                  :style="{ '--hero-rot': `${card.rot}deg`, zIndex: card.slot === 'center' ? 4 : card.slot === 'right' ? 3 : 2 }"
+                  :style="{ '--hero-rot': `${card.rot}deg`, zIndex: card.slot === 'center' ? 3 : card.slot === 'right' ? 2 : 1 }"
                   :aria-label="card.label"
                   @click="openHeroCard(card.id)"
                 >
@@ -342,10 +325,10 @@ onUnmounted(() => {
             >
               <button
                 type="button"
-                class="text-left no-underline text-inherit flex flex-col gap-3 md:gap-4 bg-transparent border-0 p-0 cursor-pointer w-full"
+                class="text-left no-underline text-inherit flex flex-row gap-4 md:flex-col bg-transparent border-0 p-0 cursor-pointer w-full"
                 @click="openPackage('solo', product.id)"
               >
-                <div class="w-full aspect-[3/4] max-h-72 md:max-h-none bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4 md:p-4">
+                <div class="w-28 h-36 shrink-0 md:w-full md:h-auto md:aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-3 md:p-4">
                   <img
                     v-if="product.image"
                     :alt="product.alt"
@@ -358,7 +341,7 @@ onUnmounted(() => {
                     aria-hidden="true"
                   >image</span>
                 </div>
-                <div class="flex min-w-0 flex-col gap-1">
+                <div class="flex flex-1 min-w-0 flex-col gap-1 justify-center md:justify-start">
                   <div class="flex justify-between items-start gap-3">
                     <h3 class="font-headline-lg-mobile text-[18px] md:text-[20px] font-medium">{{ product.name }}</h3>
                     <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(product.price) }}</span>
@@ -369,7 +352,7 @@ onUnmounted(() => {
                   >
                     {{ product.label }}
                   </p>
-                  <p class="text-on-surface-variant text-sm line-clamp-3 md:line-clamp-2">
+                  <p class="text-on-surface-variant text-sm line-clamp-2 md:line-clamp-2">
                     {{ product.desc }}
                   </p>
                 </div>
@@ -398,70 +381,67 @@ onUnmounted(() => {
               </h2>
               <div class="h-1 w-12 bg-primary" />
               <p class="text-on-surface-variant text-sm mt-1">
-                Business &amp; Executive in one package — mix freely (min {{ TEAM_PACKAGE_MIN }}). Logos print white. 10+ cards unlock an optional custom subdomain.
+                Business &amp; Executive in one package — mix freely (min 5). Logos print white. 10+ cards unlock an optional custom subdomain.
               </p>
             </div>
-            <span class="font-label-caps text-label-caps text-ink-muted shrink-0">1 PACKAGE</span>
+            <span class="font-label-caps text-label-caps text-ink-muted shrink-0">{{ teamCards.length }} ITEMS</span>
           </div>
 
-          <article v-if="teamPackage" class="flex flex-col gap-4 group max-w-3xl">
-            <button
-              type="button"
-              class="text-left no-underline text-inherit flex flex-col gap-4 bg-transparent border-0 p-0 cursor-pointer w-full"
-              @click="openPackage('team', BUSINESS_CARD_ID)"
+          <div class="flex flex-col gap-0 divide-y divide-border-subtle border-y border-border-subtle md:border-0 md:divide-y-0 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-x-8 md:gap-y-12">
+            <article
+              v-for="product in teamCards"
+              :key="product.id"
+              class="flex flex-col gap-3 py-5 md:py-0 md:gap-4 group"
             >
-              <div class="grid grid-cols-2 gap-2 md:gap-4">
-                <div class="aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-3 md:p-5">
+              <button
+                type="button"
+                class="text-left no-underline text-inherit flex flex-row gap-4 md:flex-col bg-transparent border-0 p-0 cursor-pointer w-full"
+                @click="openPackage('team', product.id)"
+              >
+                <div class="w-28 h-36 shrink-0 md:w-full md:h-auto md:aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-3 md:p-4">
                   <img
-                    v-if="teamPackage.business?.image"
-                    :alt="teamPackage.business.alt || teamPackage.business.name"
+                    v-if="product.image"
+                    :alt="product.alt"
                     class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
-                    :src="teamPackage.business.image"
+                    :src="product.image"
                   >
                   <span
                     v-else
                     class="material-symbols-outlined text-on-surface-variant text-[48px] opacity-40"
                     aria-hidden="true"
                   >image</span>
-                  <span class="absolute bottom-2 left-2 right-2 text-center font-label-caps text-[9px] md:text-[10px] uppercase tracking-widest text-ink-muted">
-                    {{ teamPackage.business?.name || 'Business' }}
-                  </span>
-                </div>
-                <div class="aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-3 md:p-5">
-                  <img
-                    v-if="teamPackage.executive?.image"
-                    :alt="teamPackage.executive.alt || teamPackage.executive.name"
-                    class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
-                    :src="teamPackage.executive.image"
+                  <div
+                    v-if="product.badge"
+                    class="absolute top-2 left-2 md:top-4 md:left-4 bg-primary text-on-primary px-2 py-0.5 md:px-3 md:py-1 font-label-caps text-[9px] md:text-[10px] uppercase tracking-widest"
                   >
-                  <span
-                    v-else
-                    class="material-symbols-outlined text-on-surface-variant text-[48px] opacity-40"
-                    aria-hidden="true"
-                  >image</span>
-                  <span class="absolute bottom-2 left-2 right-2 text-center font-label-caps text-[9px] md:text-[10px] uppercase tracking-widest text-ink-muted">
-                    {{ teamPackage.executive?.name || 'Executive' }}
-                  </span>
+                    {{ product.badge }}
+                  </div>
                 </div>
-              </div>
-              <div class="flex flex-col gap-1">
-                <div class="flex justify-between items-start gap-3">
-                  <h3 class="font-headline-lg-mobile text-[18px] md:text-[20px] font-medium">Connect Team package</h3>
-                  <span class="font-label-caps text-label-caps shrink-0">from {{ formatPrice(teamPackage.fromPrice) }}</span>
+                <div class="flex flex-1 min-w-0 flex-col gap-1 justify-center md:justify-start">
+                  <div class="flex justify-between items-start gap-3">
+                    <h3 class="font-headline-lg-mobile text-[18px] md:text-[20px] font-medium">{{ product.name }}</h3>
+                    <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(product.price) }}</span>
+                  </div>
+                  <p
+                    v-if="product.label"
+                    class="font-label-caps text-[11px] uppercase tracking-widest text-primary"
+                  >
+                    {{ product.label }}
+                  </p>
+                  <p class="text-on-surface-variant text-sm line-clamp-2">
+                    {{ product.desc }}
+                  </p>
                 </div>
-                <p class="text-on-surface-variant text-sm line-clamp-3">
-                  {{ teamPackage.blurb }}
-                </p>
-              </div>
-            </button>
-            <button
-              type="button"
-              class="w-full border border-primary text-primary py-3 md:py-4 font-button-text uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-colors"
-              @click="openPackage('team', BUSINESS_CARD_ID)"
-            >
-              View package
-            </button>
-          </article>
+              </button>
+              <button
+                type="button"
+                class="w-full border border-primary text-primary py-3 md:py-4 font-button-text uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-colors"
+                @click="openPackage('team', product.id)"
+              >
+                View package
+              </button>
+            </article>
+          </div>
         </section>
 
         <!-- Testimonial -->
@@ -639,13 +619,10 @@ onUnmounted(() => {
 
     <div
       v-if="toast"
-      class="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-[60] bg-primary text-on-primary px-5 py-3 font-label-caps text-[11px] uppercase tracking-widest shadow-lg flex items-center gap-3"
+      class="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-[60] bg-primary text-on-primary px-5 py-3 font-label-caps text-[11px] uppercase tracking-widest shadow-lg"
       role="status"
     >
       <span>{{ toast }}</span>
-      <RouterLink to="/cart" class="underline text-on-primary no-underline decoration-white underline-offset-2">
-        View
-      </RouterLink>
     </div>
   </div>
 </template>
@@ -668,22 +645,11 @@ html.shop-home body {
   }
 }
 
-.hero-phone {
-  right: 4%;
-  top: 50%;
-  height: 92%;
-  width: auto;
-  max-width: 46%;
-  object-fit: contain;
-  z-index: 1;
-  transform: translateY(-50%);
-}
-
 .hero-product {
   --hero-rot: 0deg;
-  width: 26%;
+  width: 42%;
   opacity: 0;
-  transform: translateY(28px) scale(0.9) rotate(var(--hero-rot));
+  transform: translateY(40px) scale(0.92) rotate(var(--hero-rot));
   transition:
     opacity 0.75s cubic-bezier(0.22, 1, 0.36, 1),
     transform 0.75s cubic-bezier(0.22, 1, 0.36, 1);
@@ -692,19 +658,19 @@ html.shop-home body {
 
 .hero-product--left {
   left: 2%;
-  top: 18%;
+  top: 14%;
 }
 
 .hero-product--center {
-  left: 18%;
-  top: 6%;
-  width: 28%;
+  left: 29%;
+  top: 4%;
+  width: 46%;
 }
 
 .hero-product--right {
-  left: 34%;
-  top: 22%;
-  width: 26%;
+  right: 2%;
+  left: auto;
+  top: 18%;
 }
 
 .hero-product--in {
@@ -713,36 +679,28 @@ html.shop-home body {
 }
 
 .hero-product--in:hover {
-  transform: translateY(-4px) scale(1.06) rotate(var(--hero-rot));
-  z-index: 5 !important;
+  transform: translateY(-4px) scale(1.04) rotate(var(--hero-rot));
 }
 
 @media (min-width: 768px) {
-  .hero-phone {
-    right: 2%;
-    max-width: 42%;
-    height: 94%;
-  }
-
   .hero-product {
-    width: 22%;
+    width: 40%;
   }
 
   .hero-product--left {
-    left: 4%;
-    top: 16%;
+    left: 0;
+    top: 12%;
   }
 
   .hero-product--center {
-    left: 18%;
-    top: 4%;
-    width: 24%;
+    left: 28%;
+    top: 2%;
+    width: 44%;
   }
 
   .hero-product--right {
-    left: 34%;
-    top: 20%;
-    width: 22%;
+    right: 0;
+    top: 16%;
   }
 }
 

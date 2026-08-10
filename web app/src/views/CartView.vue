@@ -50,7 +50,6 @@ onMounted(async () => {
   if (profile?.company) customerCompany.value = profile.company
   if (profile?.email) customerEmail.value = profile.email
   if (profile?.phone) customerPhone.value = profile.phone
-  customerTown.value = customerTown.value || 'Windhoek'
 })
 
 onUnmounted(() => {

@@ -77,35 +77,8 @@ function parseCopy(desc) {
   return { about: about.trim(), features: bullets, footer: footer.trim() }
 }
 
-/** One package story — shared features; drop old size-range marketing lines. */
-const packageCopy = computed(() => {
-  const skip = /teams of\s*5|5\s*[–-]\s*10|5\s*[–-]\s*20|ideal for teams|built for larger teams/i
-  const parts = [businessProduct.value, executiveProduct.value].map((p) => parseCopy(p?.desc))
-  const about = `Business Class and Executive Class are one Connect Team package — mix any ratio, minimum ${TEAM_PACKAGE_MIN} cards total. Everyday charcoal for the floor team, matte black for leaders; shared catalogue, meeting booking, and linked profiles under one company. Logos print white on Business; Executive can carry colour. Optional custom subdomain from ${TEAM_SUBDOMAIN_THRESHOLD}+ cards.`
-
-  const seen = new Set()
-  const features = []
-  for (const part of parts) {
-    for (const line of part.features) {
-      const key = line.toLowerCase()
-      if (skip.test(line) || seen.has(key)) continue
-      seen.add(key)
-      features.push(line)
-    }
-  }
-  if (!features.length) {
-    features.push(
-      `Mix Business & Executive freely (min ${TEAM_PACKAGE_MIN} total)`,
-      'Shared products & services catalogue',
-      'Meeting booking on every profile',
-      'Team profiles linked under one company',
-      `Optional custom subdomain from ${TEAM_SUBDOMAIN_THRESHOLD}+ cards`,
-      'Once-off NFC cards that last like a bank card'
-    )
-  }
-  const footer = parts.map((p) => p.footer).find(Boolean) || ''
-  return { about, features, footer }
-})
+const businessCopy = computed(() => parseCopy(businessProduct.value?.desc))
+const executiveCopy = computed(() => parseCopy(executiveProduct.value?.desc))
 
 function applyFocus(focusId) {
   const mix = initialTeamMix(focusId)
@@ -167,8 +140,10 @@ async function refresh() {
     path: '/package/team'
   })
   await nextTick()
-  if (focus === EXECUTIVE_CARD_ID || focus === BUSINESS_CARD_ID) {
-    document.getElementById('package-hero')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  if (focus === EXECUTIVE_CARD_ID) {
+    document.getElementById('exec-block')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  } else if (focus === BUSINESS_CARD_ID) {
+    document.getElementById('business-block')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 }
 
@@ -223,73 +198,44 @@ onUnmounted(() => {
         <p v-if="loading" class="text-on-surface-variant py-10 text-center">Loading…</p>
 
         <template v-else>
-          <section id="package-hero" class="flex flex-col gap-8 scroll-mt-24 max-w-4xl">
-            <div class="grid grid-cols-2 gap-3 md:gap-6">
-              <div
-                class="aspect-[3/4] bg-surface-container rounded-xl overflow-hidden flex flex-col items-center justify-center p-4 md:p-6 transition-shadow"
-                :class="{ 'ring-2 ring-primary': highlighted === BUSINESS_CARD_ID }"
-              >
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14">
+            <!-- Business -->
+            <section
+              id="business-block"
+              class="flex flex-col gap-5 scroll-mt-24"
+              :class="{ 'ring-2 ring-primary rounded-xl p-4 -m-4': highlighted === BUSINESS_CARD_ID }"
+            >
+              <div class="aspect-[3/4] max-h-[420px] bg-surface-container rounded-xl overflow-hidden flex items-center justify-center p-6">
                 <img
                   v-if="businessProduct?.image"
                   :src="businessProduct.image"
                   :alt="businessProduct.alt || businessProduct.name"
                   class="w-full h-full object-contain"
                 >
-                <p class="mt-2 font-label-caps text-[10px] md:text-[11px] uppercase tracking-widest text-ink-muted text-center">
-                  {{ businessProduct?.name || 'Business' }}
-                </p>
               </div>
-              <div
-                class="aspect-[3/4] bg-surface-container rounded-xl overflow-hidden flex flex-col items-center justify-center p-4 md:p-6 transition-shadow"
-                :class="{ 'ring-2 ring-primary': highlighted === EXECUTIVE_CARD_ID }"
-              >
-                <img
-                  v-if="executiveProduct?.image"
-                  :src="executiveProduct.image"
-                  :alt="executiveProduct.alt || executiveProduct.name"
-                  class="w-full h-full object-contain"
-                >
-                <p class="mt-2 font-label-caps text-[10px] md:text-[11px] uppercase tracking-widest text-ink-muted text-center">
-                  {{ executiveProduct?.name || 'Executive' }}
+              <div class="flex flex-col gap-2">
+                <p v-if="businessProduct?.label" class="font-label-caps text-[11px] uppercase tracking-widest text-primary">
+                  {{ businessProduct.label }}
                 </p>
-              </div>
-            </div>
-
-            <div class="flex flex-col gap-4">
-              <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-                <div class="min-w-0">
-                  <h2 class="font-headline-lg-mobile text-[28px] font-semibold">Connect Team package</h2>
-                  <p class="text-on-surface-variant text-sm mt-1">
-                    {{ businessProduct?.name || 'Business' }} + {{ executiveProduct?.name || 'Executive' }} · mix freely · min
-                    {{ TEAM_PACKAGE_MIN }}
-                  </p>
-                </div>
-                <div class="flex flex-col sm:items-end gap-0.5 shrink-0">
-                  <span class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">From</span>
-                  <span class="font-label-caps text-label-caps">
-                    {{
-                      formatPrice(
-                        Math.min(businessProduct?.price || 0, executiveProduct?.price || 0) ||
-                          businessProduct?.price ||
-                          executiveProduct?.price ||
-                          0
-                      )
-                    }}
-                    / card
+                <div class="flex justify-between items-start gap-3">
+                  <h2 class="font-headline-lg-mobile text-[28px] font-semibold">
+                    {{ businessProduct?.name || 'Business Class' }}
+                  </h2>
+                  <span class="font-label-caps text-label-caps shrink-0">
+                    {{ formatPrice(businessProduct?.price || 0) }}
                   </span>
                 </div>
               </div>
-
-              <div class="flex flex-col gap-2">
+              <div v-if="businessCopy.about" class="flex flex-col gap-2">
                 <h3 class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">About</h3>
-                <p class="text-on-surface-variant text-sm leading-relaxed whitespace-pre-wrap">{{ packageCopy.about }}</p>
+                <p class="text-on-surface-variant text-sm leading-relaxed whitespace-pre-wrap">{{ businessCopy.about }}</p>
               </div>
-              <div v-if="packageCopy.features.length" class="flex flex-col gap-2">
+              <div v-if="businessCopy.features.length" class="flex flex-col gap-2">
                 <h3 class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">Features</h3>
                 <ul class="list-none p-0 m-0 flex flex-col gap-2">
                   <li
-                    v-for="(item, i) in packageCopy.features"
-                    :key="'f-' + i"
+                    v-for="(item, i) in businessCopy.features"
+                    :key="'b-' + i"
                     class="text-sm text-on-surface-variant flex gap-2"
                   >
                     <span class="text-primary shrink-0">•</span>
@@ -297,9 +243,62 @@ onUnmounted(() => {
                   </li>
                 </ul>
               </div>
-              <p v-if="packageCopy.footer" class="text-sm text-on-surface italic">{{ packageCopy.footer }}</p>
-            </div>
-          </section>
+              <p v-if="businessCopy.footer" class="text-sm text-on-surface italic">{{ businessCopy.footer }}</p>
+              <div v-if="!businessCopy.about && businessProduct?.desc" class="text-on-surface-variant text-sm whitespace-pre-wrap">
+                {{ businessProduct.desc }}
+              </div>
+            </section>
+
+            <!-- Executive -->
+            <section
+              id="exec-block"
+              class="flex flex-col gap-5 scroll-mt-24"
+              :class="{ 'ring-2 ring-primary rounded-xl p-4 -m-4': highlighted === EXECUTIVE_CARD_ID }"
+            >
+              <div class="aspect-[3/4] max-h-[420px] bg-surface-container rounded-xl overflow-hidden flex items-center justify-center p-6">
+                <img
+                  v-if="executiveProduct?.image"
+                  :src="executiveProduct.image"
+                  :alt="executiveProduct.alt || executiveProduct.name"
+                  class="w-full h-full object-contain"
+                >
+              </div>
+              <div class="flex flex-col gap-2">
+                <p v-if="executiveProduct?.label" class="font-label-caps text-[11px] uppercase tracking-widest text-primary">
+                  {{ executiveProduct.label }}
+                </p>
+                <div class="flex justify-between items-start gap-3">
+                  <h2 class="font-headline-lg-mobile text-[28px] font-semibold">
+                    {{ executiveProduct?.name || 'Executive Class' }}
+                  </h2>
+                  <span class="font-label-caps text-label-caps shrink-0">
+                    {{ formatPrice(executiveProduct?.price || 0) }}
+                  </span>
+                </div>
+              </div>
+              <div v-if="executiveCopy.about" class="flex flex-col gap-2">
+                <h3 class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">About</h3>
+                <p class="text-on-surface-variant text-sm leading-relaxed whitespace-pre-wrap">{{ executiveCopy.about }}</p>
+              </div>
+              <div v-if="executiveCopy.features.length" class="flex flex-col gap-2">
+                <h3 class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">Features</h3>
+                <ul class="list-none p-0 m-0 flex flex-col gap-2">
+                  <li
+                    v-for="(item, i) in executiveCopy.features"
+                    :key="'e-' + i"
+                    class="text-sm text-on-surface-variant flex gap-2"
+                  >
+                    <span class="text-primary shrink-0">•</span>
+                    <span>{{ item }}</span>
+                  </li>
+                </ul>
+              </div>
+              <p v-if="executiveCopy.footer" class="text-sm text-on-surface italic">{{ executiveCopy.footer }}</p>
+              <div v-if="!executiveCopy.about && executiveProduct?.desc" class="text-on-surface-variant text-sm whitespace-pre-wrap">
+                {{ executiveProduct.desc }}
+              </div>
+            </section>
+          </div>
 
           <!-- Mix builder -->
           <section class="bg-surface-container rounded-xl p-6 md:p-8 flex flex-col gap-6 max-w-3xl">
@@ -378,14 +377,20 @@ onUnmounted(() => {
 
             <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
 
-            <div class="flex flex-col gap-3">
+            <div class="flex flex-col sm:flex-row gap-3">
               <button
                 type="button"
-                class="w-full bg-primary text-on-primary py-4 font-button-text uppercase tracking-widest hover:opacity-90"
+                class="flex-1 bg-primary text-on-primary py-4 font-button-text uppercase tracking-widest hover:opacity-90"
                 @click="openCheckout"
               >
                 Request quote
               </button>
+              <RouterLink
+                to="/cart"
+                class="flex-1 text-center border border-primary text-primary py-4 font-button-text uppercase tracking-widest no-underline hover:bg-primary hover:text-on-primary transition-colors"
+              >
+                View cart
+              </RouterLink>
             </div>
           </section>
         </template>
@@ -400,6 +405,7 @@ onUnmounted(() => {
       :focus-id="highlighted"
       :initial-business-qty="businessQty"
       :initial-executive-qty="executiveQty"
+      :initial-subdomain="subdomain"
       @close="checkoutOpen = false"
       @ordered="onPackageOrdered"
     />
