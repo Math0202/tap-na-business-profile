@@ -321,18 +321,18 @@ onUnmounted(() => {
             <span class="font-label-caps text-label-caps text-ink-muted shrink-0">{{ soloCards.length }} ITEMS</span>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-12 md:gap-8">
+          <div class="flex flex-col gap-0 divide-y divide-border-subtle border-y border-border-subtle md:border-0 md:divide-y-0 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-x-8 md:gap-y-12">
             <article
               v-for="product in soloCards"
               :key="product.id"
-              class="flex flex-col gap-4 group"
+              class="flex flex-col gap-3 py-5 md:py-0 md:gap-4 group"
             >
               <button
                 type="button"
-                class="text-left no-underline text-inherit flex flex-col gap-4 bg-transparent border-0 p-0 cursor-pointer"
+                class="text-left no-underline text-inherit flex flex-row gap-4 md:flex-col bg-transparent border-0 p-0 cursor-pointer w-full"
                 @click="openPackage('solo', product.id)"
               >
-                <div class="aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4">
+                <div class="w-28 h-36 shrink-0 md:w-full md:h-auto md:aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-3 md:p-4">
                   <img
                     v-if="product.image"
                     :alt="product.alt"
@@ -345,9 +345,9 @@ onUnmounted(() => {
                     aria-hidden="true"
                   >image</span>
                 </div>
-                <div class="flex flex-col gap-1">
+                <div class="flex flex-1 min-w-0 flex-col gap-1 justify-center md:justify-start">
                   <div class="flex justify-between items-start gap-3">
-                    <h3 class="font-headline-lg-mobile text-[20px] font-medium">{{ product.name }}</h3>
+                    <h3 class="font-headline-lg-mobile text-[18px] md:text-[20px] font-medium">{{ product.name }}</h3>
                     <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(product.price) }}</span>
                   </div>
                   <p
@@ -356,14 +356,14 @@ onUnmounted(() => {
                   >
                     {{ product.label }}
                   </p>
-                  <p class="text-on-surface-variant text-sm line-clamp-2">
+                  <p class="text-on-surface-variant text-sm line-clamp-2 md:line-clamp-2">
                     {{ product.desc }}
                   </p>
                 </div>
               </button>
               <button
                 type="button"
-                class="w-full border border-primary text-primary py-4 font-button-text uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-colors"
+                class="w-full border border-primary text-primary py-3 md:py-4 font-button-text uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-colors"
                 @click="openPackage('solo', product.id)"
               >
                 View package
@@ -391,18 +391,18 @@ onUnmounted(() => {
             <span class="font-label-caps text-label-caps text-ink-muted shrink-0">{{ teamCards.length }} ITEMS</span>
           </div>
 
-          <div class="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-12 md:gap-8">
+          <div class="flex flex-col gap-0 divide-y divide-border-subtle border-y border-border-subtle md:border-0 md:divide-y-0 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-x-8 md:gap-y-12">
             <article
               v-for="product in teamCards"
               :key="product.id"
-              class="flex flex-col gap-4 group"
+              class="flex flex-col gap-3 py-5 md:py-0 md:gap-4 group"
             >
               <button
                 type="button"
-                class="text-left no-underline text-inherit flex flex-col gap-4 bg-transparent border-0 p-0 cursor-pointer"
+                class="text-left no-underline text-inherit flex flex-row gap-4 md:flex-col bg-transparent border-0 p-0 cursor-pointer w-full"
                 @click="openPackage('team', product.id)"
               >
-                <div class="aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4">
+                <div class="w-28 h-36 shrink-0 md:w-full md:h-auto md:aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-3 md:p-4">
                   <img
                     v-if="product.image"
                     :alt="product.alt"
@@ -416,14 +416,14 @@ onUnmounted(() => {
                   >image</span>
                   <div
                     v-if="product.badge"
-                    class="absolute top-4 left-4 bg-primary text-on-primary px-3 py-1 font-label-caps text-[10px] uppercase tracking-widest"
+                    class="absolute top-2 left-2 md:top-4 md:left-4 bg-primary text-on-primary px-2 py-0.5 md:px-3 md:py-1 font-label-caps text-[9px] md:text-[10px] uppercase tracking-widest"
                   >
                     {{ product.badge }}
                   </div>
                 </div>
-                <div class="flex flex-col gap-1">
+                <div class="flex flex-1 min-w-0 flex-col gap-1 justify-center md:justify-start">
                   <div class="flex justify-between items-start gap-3">
-                    <h3 class="font-headline-lg-mobile text-[20px] font-medium">{{ product.name }}</h3>
+                    <h3 class="font-headline-lg-mobile text-[18px] md:text-[20px] font-medium">{{ product.name }}</h3>
                     <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(product.price) }}</span>
                   </div>
                   <p
@@ -439,7 +439,7 @@ onUnmounted(() => {
               </button>
               <button
                 type="button"
-                class="w-full border border-primary text-primary py-4 font-button-text uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-colors"
+                class="w-full border border-primary text-primary py-3 md:py-4 font-button-text uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-colors"
                 @click="openPackage('team', product.id)"
               >
                 View package
