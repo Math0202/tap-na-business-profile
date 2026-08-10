@@ -193,7 +193,7 @@ onUnmounted(() => {
     />
 
     <main class="pt-16 min-h-screen bg-surface pb-24 md:pb-0">
-      <div class="flex flex-col w-full overflow-x-hidden max-w-6xl mx-auto">
+      <div class="flex flex-col w-full overflow-x-clip max-w-6xl mx-auto">
         <!-- Hero -->
         <section
           :ref="setSectionRef"
@@ -539,7 +539,7 @@ onUnmounted(() => {
                 class="bg-primary text-on-primary py-4 font-button-text uppercase tracking-widest text-sm hover:opacity-90 transition-opacity"
                 @click="handleSubscribe"
               >
-                Join the Lab
+                Lets Connect
               </button>
             </div>
             <div v-else class="flex flex-col items-center gap-2 py-4">

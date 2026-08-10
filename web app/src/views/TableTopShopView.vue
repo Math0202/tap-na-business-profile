@@ -116,7 +116,7 @@ onUnmounted(() => {
     />
 
     <main class="pt-16 min-h-screen bg-surface pb-24 md:pb-0">
-      <div class="flex flex-col w-full overflow-x-hidden max-w-6xl mx-auto">
+      <div class="flex flex-col w-full overflow-x-clip max-w-6xl mx-auto">
         <section
           :ref="setSectionRef"
           class="px-margin-mobile md:px-margin-desktop pt-stack-md md:pt-10 flex flex-col gap-6"

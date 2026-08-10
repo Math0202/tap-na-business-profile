@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import {
   BUSINESS_CARD_ID,
   EXECUTIVE_CARD_ID,
@@ -52,6 +52,37 @@ const teamSubtotal = computed(
 const subtotal = computed(() => (isTeam.value ? teamSubtotal.value : soloSubtotal.value))
 const title = computed(() => (isTeam.value ? 'Connect Team package' : 'Connect Solo'))
 const itemCount = computed(() => (isTeam.value ? teamTotal.value : soloQty.value))
+
+
+let previousHtmlOverflow = ''
+let previousBodyOverflow = ''
+
+function lockPageScroll(lock) {
+  if (typeof document === 'undefined') return
+  const html = document.documentElement
+  const body = document.body
+  if (lock) {
+    previousHtmlOverflow = html.style.overflow
+    previousBodyOverflow = body.style.overflow
+    html.style.overflow = 'hidden'
+    body.style.overflow = 'hidden'
+  } else {
+    html.style.overflow = previousHtmlOverflow
+    body.style.overflow = previousBodyOverflow
+  }
+}
+
+watch(
+  () => props.open,
+  (open) => {
+    lockPageScroll(!!open)
+  },
+  { immediate: true }
+)
+
+onUnmounted(() => {
+  lockPageScroll(false)
+})
 
 watch(
   () => [props.open, props.mode, props.focusId],
