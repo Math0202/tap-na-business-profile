@@ -73,7 +73,7 @@ async function refresh() {
 
 function shopAll() {
   menuOpen.value = false
-  router.push({ path: '/', hash: '#business-cards' })
+  router.push({ path: '/', hash: '#connect-solo' })
 }
 
 function showToast(msg) {
