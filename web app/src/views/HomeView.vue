@@ -94,14 +94,21 @@ function showToast(msg) {
 }
 
 function openPackage(mode, focusId = '') {
-  packageMode.value = mode
+  if (mode === 'team') {
+    router.push({ path: '/package/team', query: focusId ? { focus: focusId } : {} })
+    return
+  }
+  packageMode.value = 'solo'
   packageFocusId.value = focusId
   packageOpen.value = true
 }
 
 function openHeroCard(cardId) {
-  if (isTeamCard(cardId)) openPackage('team', cardId)
-  else openPackage('solo', cardId)
+  if (isTeamCard(cardId)) {
+    router.push({ path: '/package/team', query: { focus: cardId } })
+    return
+  }
+  openPackage('solo', cardId)
 }
 
 function onPackageAdded(payload) {

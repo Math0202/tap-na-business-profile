@@ -84,6 +84,11 @@ export const ROUTE_SEO = {
     description:
       'NFC Table Top Tap cards for restaurants and businesses. Menus, reviews, Wi-Fi, and guest check-in — tap once at the table.'
   },
+  'team-package': {
+    title: 'Connect Team package — tap-na',
+    description:
+      'Combine Business and Executive Connect cards. Mix freely with a minimum of 5 cards total. Optional custom subdomain from 10+.'
+  },
   cart: {
     title: 'Cart — tap-na',
     description: 'Review your Tap-Na Connect card order and request a quote.'

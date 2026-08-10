@@ -40,6 +40,12 @@ const routes = [
     meta: { seoKey: 'shop-product' }
   },
   {
+    path: '/package/team',
+    name: 'team-package',
+    component: () => import('../views/TeamPackageView.vue'),
+    meta: { seoKey: 'team-package' }
+  },
+  {
     path: '/me',
     name: 'my-card',
     component: () => import('../views/MyCardView.vue')

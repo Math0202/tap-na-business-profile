@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import ShopHeader from '../components/ShopHeader.vue'
 import ShopBottomNav from '../components/ShopBottomNav.vue'
-import { formatPrice, getMinQty, getProduct, isTeamCard, loadShopProducts } from '../lib/shopCatalog'
+import { formatPrice, getMinQty, getProduct, isTeamCard, loadShopProducts, TEAM_PACKAGE_MIN } from '../lib/shopCatalog'
 import { addToCart } from '../lib/cartStore'
 import { youtubeEmbedUrl } from '../lib/shareHelpers'
 import { setPageSeo } from '../lib/seo'
@@ -51,6 +51,10 @@ async function refresh() {
   loading.value = true
   await loadShopProducts()
   loading.value = false
+  if (isTeamCard(productId.value)) {
+    router.replace({ path: '/package/team', query: { focus: productId.value } })
+    return
+  }
   if (!product.value) {
     setPageSeo({
       title: 'Product not found — tap-na',
@@ -224,7 +228,7 @@ onUnmounted(() => {
             />
 
             <p v-if="teamPack" class="font-label-caps text-[11px] uppercase tracking-widest text-primary">
-                  Team pack · Min {{ minQty }} cards
+                  Team pack · Min {{ TEAM_PACKAGE_MIN }} combined
                 </p>
               <div class="flex flex-col sm:flex-row gap-3 mt-2">
               <button
