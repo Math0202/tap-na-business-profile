@@ -141,29 +141,45 @@ export function getProduct(id) {
   return listShopProducts({ includeInactive: true }).find((p) => p.id === id) || null
 }
 
-/** Business + Executive are team packs — minimum order quantity. */
-export const TEAM_CARD_IDS = new Set(['black-card', 'black-card-front'])
+/** Business + Executive form one Connect Team package (mix allowed). */
+export const BUSINESS_CARD_ID = 'black-card'
+export const EXECUTIVE_CARD_ID = 'black-card-front'
+export const TEAM_CARD_IDS = new Set([BUSINESS_CARD_ID, EXECUTIVE_CARD_ID])
+export const TEAM_PACKAGE_MIN = 5
+export const TEAM_SUBDOMAIN_THRESHOLD = 10
 
 export function isTeamCard(productId) {
   return TEAM_CARD_IDS.has(String(productId || ''))
 }
 
+/** Per-line min. Team lines may be 0 inside a mix; package total is enforced separately. */
 export function getMinQty(productId) {
-  return isTeamCard(productId) ? 5 : 1
+  return isTeamCard(productId) ? 0 : 1
+}
+
+export function initialTeamMix(focusId) {
+  const focus = String(focusId || '')
+  if (focus === EXECUTIVE_CARD_ID) {
+    return { businessQty: 3, executiveQty: 2 }
+  }
+  // Default / Business focus → 2 Business : 3 Executive
+  return { businessQty: 2, executiveQty: 3 }
 }
 
 export function businessCards() {
   return loadShopCatalog().filter((p) => p.section === 'business-cards')
 }
 
-/** Professional / individual Connect cards (min 1). */
+/** Professional / individual Connect cards (min 1, unlimited). */
 export function connectSoloCards() {
   return businessCards().filter((p) => !isTeamCard(p.id))
 }
 
-/** Business + Executive team packs (min 5). */
+/** Business + Executive team cards (combined package, min 5 total). */
 export function connectTeamCards() {
-  return businessCards().filter((p) => isTeamCard(p.id))
+  const list = businessCards().filter((p) => isTeamCard(p.id))
+  const order = [BUSINESS_CARD_ID, EXECUTIVE_CARD_ID]
+  return [...list].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
 }
 
 export function tableBrochures() {

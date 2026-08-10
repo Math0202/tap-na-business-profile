@@ -4,11 +4,13 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import ShopHeader from '../components/ShopHeader.vue'
 import ShopBottomNav from '../components/ShopBottomNav.vue'
-import { formatPrice, loadShopProducts } from '../lib/shopCatalog'
+import { formatPrice, loadShopProducts, TEAM_PACKAGE_MIN } from '../lib/shopCatalog'
 import {
   cartLines,
   cartCount,
   cartSubtotal,
+  cartTeamCount,
+  cartTeamSubdomain,
   setCartQty,
   removeFromCart,
   clearCart,
@@ -33,6 +35,8 @@ let toastTimer = null
 const lines = cartLines
 const count = cartCount
 const subtotal = cartSubtotal
+const teamCount = cartTeamCount
+const teamSubdomain = cartTeamSubdomain
 const isEmpty = computed(() => lines.value.length === 0)
 
 onMounted(async () => {
@@ -68,7 +72,15 @@ function bump(id, delta) {
   const line = lines.value.find((l) => l.id === id)
   if (!line) return
   const next = line.qty + delta
-  if (delta < 0 && next < (line.minQty || 1)) {
+  if (line.isTeam) {
+    if (next < 0) return
+    const ok = setCartQty(id, next)
+    if (ok === false) {
+      showToast(`Team mix must total at least ${TEAM_PACKAGE_MIN} cards`)
+    }
+    return
+  }
+  if (delta < 0 && next < 1) {
     removeFromCart(id)
     return
   }
@@ -114,12 +126,18 @@ async function placeOrder() {
   checkoutError.value = ''
   submitting.value = true
   try {
+    const subdomainNote = teamSubdomain.value
+      ? `Custom subdomain request: ${teamSubdomain.value}`
+      : teamCount.value >= 10
+        ? 'Team pack 10+ (subdomain optional — not specified)'
+        : ''
+    const combinedNote = [checkoutNote.value.trim(), subdomainNote].filter(Boolean).join('\n')
     const res = await apiShopOrderQuote({
       name,
       email,
       phone,
       town,
-      note: checkoutNote.value.trim(),
+      note: combinedNote,
       items: lines.value.map((l) => ({
         id: l.id,
         name: l.name,
@@ -211,13 +229,13 @@ async function placeOrder() {
                     </h3>
                     <p class="text-on-surface-variant text-sm line-clamp-1">{{ line.desc }}</p>
                     <p
-                      v-if="line.minQty > 1"
+                      v-if="line.isTeam"
                       class="font-label-caps text-[11px] text-primary uppercase mt-1"
                     >
-                      Team pack · Min {{ line.minQty }}
+                      Team mix · white logo
                     </p>
                     <p v-else class="font-label-caps text-[11px] text-ink-muted uppercase mt-1">
-                      {{ line.category }}
+                      Solo
                     </p>
                   </div>
                   <span class="font-label-caps text-label-caps shrink-0">
@@ -263,6 +281,16 @@ async function placeOrder() {
               <div class="flex justify-between">
                 <span class="text-on-surface-variant">Subtotal</span>
                 <span class="font-label-caps text-label-caps">{{ formatPrice(subtotal) }}</span>
+              </div>
+              <div v-if="teamCount > 0" class="flex justify-between">
+                <span class="text-on-surface-variant">Team cards</span>
+                <span class="font-label-caps text-[11px] uppercase tracking-widest">{{ teamCount }}</span>
+              </div>
+              <div v-if="teamSubdomain" class="flex flex-col gap-1">
+                <span class="text-on-surface-variant">Custom subdomain</span>
+                <span class="font-label-caps text-[11px] uppercase tracking-widest break-all">
+                  {{ teamSubdomain }}
+                </span>
               </div>
               <div class="flex justify-between">
                 <span class="text-on-surface-variant">Shipping</span>

@@ -3,14 +3,14 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import ShopHeader from '../components/ShopHeader.vue'
 import ShopBottomNav from '../components/ShopBottomNav.vue'
+import ConnectPackageDialog from '../components/ConnectPackageDialog.vue'
 import {
   connectSoloCards,
   connectTeamCards,
   formatPrice,
-  getMinQty,
+  isTeamCard,
   loadShopProducts,
 } from '../lib/shopCatalog'
-import { addToCart } from '../lib/cartStore'
 
 const route = useRoute()
 const router = useRouter()
@@ -21,6 +21,9 @@ const toast = ref('')
 const sections = ref([])
 const catalogTick = ref(0)
 const heroCardsIn = ref(0)
+const packageOpen = ref(false)
+const packageMode = ref('solo')
+const packageFocusId = ref('')
 let observer = null
 let toastTimer = null
 let heroStaggerTimers = []
@@ -30,7 +33,7 @@ const HERO_CARDS = [
     id: 'blue-card',
     image: '/images/professional_cobalt_blue.png',
     alt: 'Professional cobalt blue Connect card',
-    label: 'Shop Professional card',
+    label: 'View Professional package',
     rot: -16,
     slot: 'left'
   },
@@ -38,7 +41,7 @@ const HERO_CARDS = [
     id: 'black-card',
     image: '/images/business_charcoal.png',
     alt: 'Business charcoal Connect card',
-    label: 'Shop Business card',
+    label: 'View Business team package',
     rot: 0,
     slot: 'center'
   },
@@ -46,7 +49,7 @@ const HERO_CARDS = [
     id: 'black-card-front',
     image: '/images/executive_black.png',
     alt: 'Executive black Connect card',
-    label: 'Shop Executive card',
+    label: 'View Executive team package',
     rot: 14,
     slot: 'right'
   }
@@ -90,10 +93,27 @@ function showToast(msg) {
   }, 2200)
 }
 
-function addProduct(id, name) {
-  const min = getMinQty(id)
-  if (!addToCart(id, min)) return
-  showToast(min > 1 ? `${min} × ${name} added to cart` : `${name} added to cart`)
+function openPackage(mode, focusId = '') {
+  packageMode.value = mode
+  packageFocusId.value = focusId
+  packageOpen.value = true
+}
+
+function openHeroCard(cardId) {
+  if (isTeamCard(cardId)) openPackage('team', cardId)
+  else openPackage('solo', cardId)
+}
+
+function onPackageAdded(payload) {
+  if (payload?.mode === 'team') {
+    showToast(`Team package (${payload.total} cards) added to cart`)
+    return
+  }
+  showToast(
+    payload?.qty > 1
+      ? `${payload.qty} × ${payload.name} added to cart`
+      : `${payload?.name || 'Card'} added to cart`
+  )
 }
 
 function setSectionRef(el) {
@@ -192,17 +212,18 @@ onUnmounted(() => {
               class="relative z-[1] order-1 md:order-2 flex-1 min-h-[300px] md:min-h-full md:absolute md:inset-y-0 md:right-0 md:w-[58%] flex items-center justify-center px-4 pt-8 md:pt-0 md:pr-6"
             >
               <div class="hero-fan relative w-full max-w-[420px] aspect-[5/4] md:max-w-none md:h-[86%] md:aspect-auto md:w-[96%]">
-                <RouterLink
+                <button
                   v-for="(card, index) in HERO_CARDS"
                   :key="card.id"
-                  :to="`/product/${card.id}`"
-                  class="hero-product absolute p-0 border-0 bg-transparent cursor-pointer no-underline drop-shadow-[0_22px_50px_rgba(0,0,0,0.55)]"
+                  type="button"
+                  class="hero-product absolute p-0 border-0 bg-transparent cursor-pointer drop-shadow-[0_22px_50px_rgba(0,0,0,0.55)]"
                   :class="[
                     `hero-product--${card.slot}`,
                     { 'hero-product--in': heroCardsIn > index }
                   ]"
                   :style="{ '--hero-rot': `${card.rot}deg`, zIndex: card.slot === 'center' ? 3 : card.slot === 'right' ? 2 : 1 }"
                   :aria-label="card.label"
+                  @click="openHeroCard(card.id)"
                 >
                   <img
                     :src="card.image"
@@ -210,7 +231,7 @@ onUnmounted(() => {
                     class="w-full h-auto block pointer-events-none"
                     decoding="async"
                   >
-                </RouterLink>
+                </button>
               </div>
             </div>
 
@@ -287,21 +308,22 @@ onUnmounted(() => {
               </h2>
               <div class="h-1 w-12 bg-primary" />
               <p class="text-on-surface-variant text-sm mt-1">
-                Professional Class — one card for individuals. Min 1.
+                Professional Class — one card type. Buy from 1 to unlimited.
               </p>
             </div>
             <span class="font-label-caps text-label-caps text-ink-muted shrink-0">{{ soloCards.length }} ITEMS</span>
           </div>
 
-          <div class="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-12 md:gap-8">
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-12 md:gap-8">
             <article
               v-for="product in soloCards"
               :key="product.id"
               class="flex flex-col gap-4 group"
             >
-              <RouterLink
-                :to="`/product/${product.id}`"
-                class="no-underline text-inherit flex flex-col gap-4"
+              <button
+                type="button"
+                class="text-left no-underline text-inherit flex flex-col gap-4 bg-transparent border-0 p-0 cursor-pointer"
+                @click="openPackage('solo', product.id)"
               >
                 <div class="aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4">
                   <img
@@ -315,30 +337,26 @@ onUnmounted(() => {
                     class="material-symbols-outlined text-on-surface-variant text-[48px] opacity-40"
                     aria-hidden="true"
                   >image</span>
-                  <div
-                    v-if="product.badge"
-                    class="absolute top-4 left-4 bg-primary text-on-primary px-3 py-1 font-label-caps text-[10px] uppercase tracking-widest"
-                  >
-                    {{ product.badge }}
-                  </div>
                 </div>
                 <div class="flex flex-col gap-1">
                   <div class="flex justify-between items-start gap-3">
                     <h3 class="font-headline-lg-mobile text-[20px] font-medium">{{ product.name }}</h3>
                     <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(product.price) }}</span>
                   </div>
-                  <p v-if="product.label" class="font-label-caps text-[11px] uppercase tracking-widest text-primary">
-                    {{ product.label }}
+                  <p class="font-label-caps text-[11px] uppercase tracking-widest text-primary">
+                    Solo · from 1 card
                   </p>
-                  <p class="text-on-surface-variant text-sm line-clamp-1">{{ product.desc }}</p>
+                  <p class="text-on-surface-variant text-sm line-clamp-2">
+                    {{ product.desc || 'Individual Professional Connect card.' }}
+                  </p>
                 </div>
-              </RouterLink>
+              </button>
               <button
                 type="button"
                 class="w-full border border-primary text-primary py-4 font-button-text uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-colors"
-                @click="addProduct(product.id, product.name)"
+                @click="openPackage('solo', product.id)"
               >
-                Add to Cart
+                View package
               </button>
             </article>
           </div>
@@ -357,7 +375,7 @@ onUnmounted(() => {
               </h2>
               <div class="h-1 w-12 bg-primary" />
               <p class="text-on-surface-variant text-sm mt-1">
-                Business &amp; Executive — one team package. Minimum 5 cards per order.
+                Business &amp; Executive in one package — mix freely (min 5). Logos print white. 10+ cards unlock an optional custom subdomain.
               </p>
             </div>
             <span class="font-label-caps text-label-caps text-ink-muted shrink-0">{{ teamCards.length }} ITEMS</span>
@@ -369,9 +387,10 @@ onUnmounted(() => {
               :key="product.id"
               class="flex flex-col gap-4 group"
             >
-              <RouterLink
-                :to="`/product/${product.id}`"
-                class="no-underline text-inherit flex flex-col gap-4"
+              <button
+                type="button"
+                class="text-left no-underline text-inherit flex flex-col gap-4 bg-transparent border-0 p-0 cursor-pointer"
+                @click="openPackage('team', product.id)"
               >
                 <div class="aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4">
                   <img
@@ -388,7 +407,7 @@ onUnmounted(() => {
                   <div
                     class="absolute top-4 left-4 bg-primary text-on-primary px-3 py-1 font-label-caps text-[10px] uppercase tracking-widest"
                   >
-                    {{ product.badge || 'Min 5' }}
+                    Mix · Min 5
                   </div>
                 </div>
                 <div class="flex flex-col gap-1">
@@ -397,19 +416,19 @@ onUnmounted(() => {
                     <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(product.price) }}</span>
                   </div>
                   <p class="font-label-caps text-[11px] uppercase tracking-widest text-primary">
-                    {{ product.label || 'Team pack · Min 5' }}
+                    Team pack · white logo
                   </p>
                   <p class="text-on-surface-variant text-sm line-clamp-2">
-                    {{ product.desc || 'Sold as a team package — order at least 5 cards.' }}
+                    {{ product.desc || 'Combine with the other team card — e.g. 2:3, 1:4, or 0:12.' }}
                   </p>
                 </div>
-              </RouterLink>
+              </button>
               <button
                 type="button"
                 class="w-full border border-primary text-primary py-4 font-button-text uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-colors"
-                @click="addProduct(product.id, product.name)"
+                @click="openPackage('team', product.id)"
               >
-                Add 5 to Cart
+                View package
               </button>
             </article>
           </div>
@@ -578,6 +597,15 @@ onUnmounted(() => {
     </main>
 
     <ShopBottomNav />
+
+    <ConnectPackageDialog
+      :open="packageOpen"
+      :mode="packageMode"
+      :focus-id="packageFocusId"
+      :solo-product-id="packageFocusId || 'blue-card'"
+      @close="packageOpen = false"
+      @added="onPackageAdded"
+    />
 
     <div
       v-if="toast"
