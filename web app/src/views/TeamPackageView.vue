@@ -377,20 +377,14 @@ onUnmounted(() => {
 
             <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
 
-            <div class="flex flex-col sm:flex-row gap-3">
+            <div class="flex flex-col gap-3">
               <button
                 type="button"
-                class="flex-1 bg-primary text-on-primary py-4 font-button-text uppercase tracking-widest hover:opacity-90"
+                class="w-full bg-primary text-on-primary py-4 font-button-text uppercase tracking-widest hover:opacity-90"
                 @click="openCheckout"
               >
                 Request quote
               </button>
-              <RouterLink
-                to="/cart"
-                class="flex-1 text-center border border-primary text-primary py-4 font-button-text uppercase tracking-widest no-underline hover:bg-primary hover:text-on-primary transition-colors"
-              >
-                View cart
-              </RouterLink>
             </div>
           </section>
         </template>
