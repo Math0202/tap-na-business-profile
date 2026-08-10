@@ -223,8 +223,11 @@ function addPackage() {
                       <h3 class="font-headline-lg-mobile text-[17px] font-medium truncate">
                         {{ businessProduct.name }}
                       </h3>
-                      <p class="font-label-caps text-[10px] uppercase tracking-widest text-primary mt-1">
-                        Business · white logo
+                      <p
+                        v-if="businessProduct.label"
+                        class="font-label-caps text-[10px] uppercase tracking-widest text-primary mt-1"
+                      >
+                        {{ businessProduct.label }}
                       </p>
                     </div>
                     <span class="font-label-caps text-label-caps shrink-0">
@@ -266,8 +269,11 @@ function addPackage() {
                       <h3 class="font-headline-lg-mobile text-[17px] font-medium truncate">
                         {{ executiveProduct.name }}
                       </h3>
-                      <p class="font-label-caps text-[10px] uppercase tracking-widest text-primary mt-1">
-                        Executive · white logo
+                      <p
+                        v-if="executiveProduct.label"
+                        class="font-label-caps text-[10px] uppercase tracking-widest text-primary mt-1"
+                      >
+                        {{ executiveProduct.label }}
                       </p>
                     </div>
                     <span class="font-label-caps text-label-caps shrink-0">

@@ -343,11 +343,14 @@ onUnmounted(() => {
                     <h3 class="font-headline-lg-mobile text-[20px] font-medium">{{ product.name }}</h3>
                     <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(product.price) }}</span>
                   </div>
-                  <p class="font-label-caps text-[11px] uppercase tracking-widest text-primary">
-                    Solo · from 1 card
+                  <p
+                    v-if="product.label"
+                    class="font-label-caps text-[11px] uppercase tracking-widest text-primary"
+                  >
+                    {{ product.label }}
                   </p>
                   <p class="text-on-surface-variant text-sm line-clamp-2">
-                    {{ product.desc || 'Individual Professional Connect card.' }}
+                    {{ product.desc }}
                   </p>
                 </div>
               </button>
@@ -405,9 +408,10 @@ onUnmounted(() => {
                     aria-hidden="true"
                   >image</span>
                   <div
+                    v-if="product.badge"
                     class="absolute top-4 left-4 bg-primary text-on-primary px-3 py-1 font-label-caps text-[10px] uppercase tracking-widest"
                   >
-                    Mix · Min 5
+                    {{ product.badge }}
                   </div>
                 </div>
                 <div class="flex flex-col gap-1">
@@ -415,11 +419,14 @@ onUnmounted(() => {
                     <h3 class="font-headline-lg-mobile text-[20px] font-medium">{{ product.name }}</h3>
                     <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(product.price) }}</span>
                   </div>
-                  <p class="font-label-caps text-[11px] uppercase tracking-widest text-primary">
-                    Team pack · white logo
+                  <p
+                    v-if="product.label"
+                    class="font-label-caps text-[11px] uppercase tracking-widest text-primary"
+                  >
+                    {{ product.label }}
                   </p>
                   <p class="text-on-surface-variant text-sm line-clamp-2">
-                    {{ product.desc || 'Combine with the other team card — e.g. 2:3, 1:4, or 0:12.' }}
+                    {{ product.desc }}
                   </p>
                 </div>
               </button>

@@ -229,10 +229,16 @@ async function placeOrder() {
                     </h3>
                     <p class="text-on-surface-variant text-sm line-clamp-1">{{ line.desc }}</p>
                     <p
-                      v-if="line.isTeam"
+                      v-if="line.label"
                       class="font-label-caps text-[11px] text-primary uppercase mt-1"
                     >
-                      Team mix · white logo
+                      {{ line.label }}
+                    </p>
+                    <p
+                      v-else-if="line.isTeam"
+                      class="font-label-caps text-[11px] text-ink-muted uppercase mt-1"
+                    >
+                      Team
                     </p>
                     <p v-else class="font-label-caps text-[11px] text-ink-muted uppercase mt-1">
                       Solo
