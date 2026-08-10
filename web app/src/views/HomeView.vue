@@ -221,21 +221,27 @@ onUnmounted(() => {
               aria-hidden="true"
             />
 
-            <!-- Product visuals — all 3 Connect card types -->
+            <!-- Product visuals — phone frame + smaller Connect cards -->
             <div
-              class="relative z-[1] order-1 md:order-2 flex-1 min-h-[300px] md:min-h-full md:absolute md:inset-y-0 md:right-0 md:w-[58%] flex items-center justify-center px-4 pt-8 md:pt-0 md:pr-6"
+              class="relative z-[1] order-1 md:order-2 flex-1 min-h-[340px] md:min-h-full md:absolute md:inset-y-0 md:right-0 md:w-[58%] flex items-center justify-center px-3 pt-6 md:pt-0 md:pr-4"
             >
-              <div class="hero-fan relative w-full max-w-[420px] aspect-[5/4] md:max-w-none md:h-[86%] md:aspect-auto md:w-[96%]">
+              <div class="hero-stage relative w-full max-w-[380px] h-[300px] md:max-w-none md:h-[90%] md:w-[98%]">
+                <img
+                  src="/images/iphone-frame-profile.png"
+                  alt="Connect digital profile on phone"
+                  class="hero-phone absolute pointer-events-none select-none drop-shadow-[0_28px_60px_rgba(0,0,0,0.55)]"
+                  decoding="async"
+                >
                 <button
                   v-for="(card, index) in HERO_CARDS"
                   :key="card.id"
                   type="button"
-                  class="hero-product absolute p-0 border-0 bg-transparent cursor-pointer drop-shadow-[0_22px_50px_rgba(0,0,0,0.55)]"
+                  class="hero-product absolute p-0 border-0 bg-transparent cursor-pointer drop-shadow-[0_14px_28px_rgba(0,0,0,0.45)]"
                   :class="[
                     `hero-product--${card.slot}`,
                     { 'hero-product--in': heroCardsIn > index }
                   ]"
-                  :style="{ '--hero-rot': `${card.rot}deg`, zIndex: card.slot === 'center' ? 3 : card.slot === 'right' ? 2 : 1 }"
+                  :style="{ '--hero-rot': `${card.rot}deg`, zIndex: card.slot === 'center' ? 4 : card.slot === 'right' ? 3 : 2 }"
                   :aria-label="card.label"
                   @click="openHeroCard(card.id)"
                 >
@@ -336,10 +342,10 @@ onUnmounted(() => {
             >
               <button
                 type="button"
-                class="text-left no-underline text-inherit flex flex-row gap-4 md:flex-col bg-transparent border-0 p-0 cursor-pointer w-full"
+                class="text-left no-underline text-inherit flex flex-col gap-3 md:gap-4 bg-transparent border-0 p-0 cursor-pointer w-full"
                 @click="openPackage('solo', product.id)"
               >
-                <div class="w-28 h-36 shrink-0 md:w-full md:h-auto md:aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-3 md:p-4">
+                <div class="w-full aspect-[3/4] max-h-72 md:max-h-none bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4 md:p-4">
                   <img
                     v-if="product.image"
                     :alt="product.alt"
@@ -352,7 +358,7 @@ onUnmounted(() => {
                     aria-hidden="true"
                   >image</span>
                 </div>
-                <div class="flex flex-1 min-w-0 flex-col gap-1 justify-center md:justify-start">
+                <div class="flex min-w-0 flex-col gap-1">
                   <div class="flex justify-between items-start gap-3">
                     <h3 class="font-headline-lg-mobile text-[18px] md:text-[20px] font-medium">{{ product.name }}</h3>
                     <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(product.price) }}</span>
@@ -363,7 +369,7 @@ onUnmounted(() => {
                   >
                     {{ product.label }}
                   </p>
-                  <p class="text-on-surface-variant text-sm line-clamp-2 md:line-clamp-2">
+                  <p class="text-on-surface-variant text-sm line-clamp-3 md:line-clamp-2">
                     {{ product.desc }}
                   </p>
                 </div>
@@ -662,11 +668,22 @@ html.shop-home body {
   }
 }
 
+.hero-phone {
+  right: 4%;
+  top: 50%;
+  height: 92%;
+  width: auto;
+  max-width: 46%;
+  object-fit: contain;
+  z-index: 1;
+  transform: translateY(-50%);
+}
+
 .hero-product {
   --hero-rot: 0deg;
-  width: 42%;
+  width: 26%;
   opacity: 0;
-  transform: translateY(40px) scale(0.92) rotate(var(--hero-rot));
+  transform: translateY(28px) scale(0.9) rotate(var(--hero-rot));
   transition:
     opacity 0.75s cubic-bezier(0.22, 1, 0.36, 1),
     transform 0.75s cubic-bezier(0.22, 1, 0.36, 1);
@@ -675,19 +692,19 @@ html.shop-home body {
 
 .hero-product--left {
   left: 2%;
-  top: 14%;
+  top: 18%;
 }
 
 .hero-product--center {
-  left: 29%;
-  top: 4%;
-  width: 46%;
+  left: 18%;
+  top: 6%;
+  width: 28%;
 }
 
 .hero-product--right {
-  right: 2%;
-  left: auto;
-  top: 18%;
+  left: 34%;
+  top: 22%;
+  width: 26%;
 }
 
 .hero-product--in {
@@ -696,28 +713,36 @@ html.shop-home body {
 }
 
 .hero-product--in:hover {
-  transform: translateY(-4px) scale(1.04) rotate(var(--hero-rot));
+  transform: translateY(-4px) scale(1.06) rotate(var(--hero-rot));
+  z-index: 5 !important;
 }
 
 @media (min-width: 768px) {
+  .hero-phone {
+    right: 2%;
+    max-width: 42%;
+    height: 94%;
+  }
+
   .hero-product {
-    width: 40%;
+    width: 22%;
   }
 
   .hero-product--left {
-    left: 0;
-    top: 12%;
+    left: 4%;
+    top: 16%;
   }
 
   .hero-product--center {
-    left: 28%;
-    top: 2%;
-    width: 44%;
+    left: 18%;
+    top: 4%;
+    width: 24%;
   }
 
   .hero-product--right {
-    right: 0;
-    top: 16%;
+    left: 34%;
+    top: 20%;
+    width: 22%;
   }
 }
 
