@@ -94,21 +94,22 @@ function showToast(msg) {
 }
 
 function openPackage(mode, focusId = '') {
-  if (mode === 'team') {
-    router.push({ path: '/package/team', query: focusId ? { focus: focusId } : {} })
-    return
-  }
-  packageMode.value = 'solo'
+  packageMode.value = mode
   packageFocusId.value = focusId
   packageOpen.value = true
 }
 
-function openHeroCard(cardId) {
-  if (isTeamCard(cardId)) {
-    router.push({ path: '/package/team', query: { focus: cardId } })
+/** Image / name → product or team package info page */
+function openProductInfo(productId) {
+  if (isTeamCard(productId)) {
+    router.push({ path: '/package/team', query: { focus: productId } })
     return
   }
-  openPackage('solo', cardId)
+  router.push(`/product/${productId}`)
+}
+
+function openHeroCard(cardId) {
+  openProductInfo(cardId)
 }
 
 function onPackageOrdered(payload) {
@@ -326,7 +327,7 @@ onUnmounted(() => {
               <button
                 type="button"
                 class="text-left no-underline text-inherit flex flex-row gap-4 md:flex-col bg-transparent border-0 p-0 cursor-pointer w-full"
-                @click="openPackage('solo', product.id)"
+                @click="openProductInfo(product.id)"
               >
                 <div class="w-28 h-36 shrink-0 md:w-full md:h-auto md:aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-3 md:p-4">
                   <img
@@ -396,7 +397,7 @@ onUnmounted(() => {
               <button
                 type="button"
                 class="text-left no-underline text-inherit flex flex-row gap-4 md:flex-col bg-transparent border-0 p-0 cursor-pointer w-full"
-                @click="openPackage('team', product.id)"
+                @click="openProductInfo(product.id)"
               >
                 <div class="w-28 h-36 shrink-0 md:w-full md:h-auto md:aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-3 md:p-4">
                   <img
