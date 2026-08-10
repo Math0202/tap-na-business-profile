@@ -9,6 +9,7 @@ function isActive(path) {
   if (path === '/') {
     return (
       route.path === '/' ||
+      route.path === '/table-top' ||
       route.path.startsWith('/product/') ||
       route.path.startsWith('/about/business-cards') ||
       route.path === '/support'

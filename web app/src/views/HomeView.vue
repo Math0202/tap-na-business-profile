@@ -1,17 +1,17 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import ShopHeader from '../components/ShopHeader.vue'
 import ShopBottomNav from '../components/ShopBottomNav.vue'
 import {
   businessCardsList,
-  tableBrochuresList,
   formatPrice,
   loadShopProducts,
 } from '../lib/shopCatalog'
 import { addToCart } from '../lib/cartStore'
 
 const route = useRoute()
+const router = useRouter()
 const menuOpen = ref(false)
 const subscribed = ref(false)
 const email = ref('')
@@ -28,10 +28,6 @@ const cards = computed(() => {
   catalogTick.value
   return businessCardsList()
 })
-const brochures = computed(() => {
-  catalogTick.value
-  return tableBrochuresList()
-})
 
 async function refreshCatalog() {
   await loadShopProducts()
@@ -41,11 +37,6 @@ async function refreshCatalog() {
 function scrollToShop() {
   menuOpen.value = false
   document.getElementById('business-cards')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
-function scrollToBrochures() {
-  menuOpen.value = false
-  document.getElementById('table-brochures')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 function handleSubscribe() {
@@ -79,23 +70,26 @@ watch(
   () => route.hash,
   (hash) => {
     if (hash === '#business-cards') nextTick(() => scrollToShop())
-    if (hash === '#table-brochures') nextTick(() => scrollToBrochures())
+    if (hash === '#table-brochures') router.replace('/table-top')
   }
 )
 
 onMounted(async () => {
-  document.title = 'tap-na — Shop'
+  document.title = 'tap-na — Connect business cards'
   document.documentElement.classList.add('shop-home')
+  if (route.hash === '#table-brochures') {
+    router.replace('/table-top')
+    return
+  }
   await refreshCatalog()
   await nextTick()
   requestAnimationFrame(() => {
     heroMenuIn.value = true
-  })
-  heroCardTimer = setTimeout(() => {
     heroCardIn.value = true
-  }, 2000)
+  })
+  clearTimeout(heroCardTimer)
+  heroCardTimer = null
   if (route.hash === '#business-cards') scrollToShop()
-  if (route.hash === '#table-brochures') scrollToBrochures()
   observer = new IntersectionObserver(
     (entries) => {
       entries.forEach((entry) => {
@@ -155,26 +149,12 @@ onUnmounted(() => {
             <div
               class="relative z-[1] order-1 md:order-2 flex-1 min-h-[280px] md:min-h-full md:absolute md:inset-y-0 md:right-0 md:w-[58%] flex items-center justify-center px-6 pt-8 md:pt-0 md:pr-10"
             >
-              <div class="relative w-full max-w-[420px] aspect-[4/5] md:max-w-none md:h-[86%] md:aspect-auto md:w-[92%]">
+              <div class="relative w-full max-w-[360px] aspect-[3/4] md:max-w-none md:h-[82%] md:aspect-auto md:w-[72%] flex items-center justify-center">
                 <button
                   type="button"
-                  class="hero-product absolute left-[-4%] top-[8%] w-[58%] rounded-lg shadow-[0_24px_60px_rgba(0,0,0,0.55)] overflow-hidden aspect-[3/4] p-0 border-0 bg-transparent cursor-pointer"
-                  :class="{ 'hero-product--in': heroMenuIn }"
-                  style="--hero-rot: -8deg"
-                  aria-label="Shop custom menu cards"
-                  @click="scrollToBrochures"
-                >
-                  <img
-                    src="/images/table/NFC%20custom%20menu%20card.png"
-                    alt="Custom menu NFC table card"
-                    class="w-full h-full object-cover"
-                  >
-                </button>
-                <button
-                  type="button"
-                  class="hero-product absolute right-[6%] bottom-[8%] w-[43%] md:w-[47%] p-0 border-0 bg-transparent cursor-pointer drop-shadow-[0_28px_70px_rgba(0,0,0,0.65)]"
-                  :class="{ 'hero-product--in': heroCardIn }"
-                  style="--hero-rot: 5deg"
+                  class="hero-product w-full max-w-[280px] md:max-w-none p-0 border-0 bg-transparent cursor-pointer drop-shadow-[0_28px_70px_rgba(0,0,0,0.65)]"
+                  :class="{ 'hero-product--in': heroCardIn || heroMenuIn }"
+                  style="--hero-rot: 4deg"
                   aria-label="Shop Connect business cards"
                   @click="scrollToShop"
                 >
@@ -191,15 +171,15 @@ onUnmounted(() => {
               <span
                 class="font-label-caps text-label-caps text-secondary-fixed-dim uppercase tracking-[0.2em]"
               >
-                Next-Gen Networking
+                Connect business cards
               </span>
               <h1
                 class="font-display-lg text-[42px] md:text-[64px] leading-[1.1] md:leading-[1.05] text-on-primary tracking-[-0.02em] font-semibold"
               >
-                Anything NFC <br> You Want.
+                Tap. Connect. <br> Share.
               </h1>
               <p class="text-on-tertiary-container max-w-[90%] md:max-w-md text-body-md">
-                From personal Connect cards to table menu taps — professional NFC, ready to order.
+                Premium NFC Connect cards that open your digital profile with one tap — for professionals, founders, and teams.
               </p>
               <div class="mt-4 flex flex-wrap gap-3">
                 <button
@@ -209,18 +189,12 @@ onUnmounted(() => {
                 >
                   Shop cards
                 </button>
-                <button
-                  type="button"
-                  class="border border-on-primary/40 text-on-primary font-button-text text-button-text px-8 py-4 rounded-full uppercase tracking-widest hover:bg-on-primary/10 transition-all"
-                  @click="scrollToBrochures"
+                <RouterLink
+                  to="/about/business-cards"
+                  class="border border-on-primary/40 text-on-primary font-button-text text-button-text px-8 py-4 rounded-full uppercase tracking-widest hover:bg-on-primary/10 transition-all no-underline inline-flex items-center"
                 >
-                  Table top tap
-                </button>
-              </div>
-              <div class="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[11px] uppercase tracking-[0.16em] text-on-primary/55">
-                <span>Connect card</span>
-                <span aria-hidden="true">·</span>
-                <span>Custom menu</span>
+                  How it works
+                </RouterLink>
               </div>
             </div>
           </div>
@@ -253,7 +227,7 @@ onUnmounted(() => {
           <div class="flex justify-between items-end">
             <div class="flex flex-col gap-1">
               <h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg uppercase">
-                Business Cards
+                Connect Cards
               </h2>
               <div class="h-1 w-12 bg-primary" />
             </div>
@@ -263,76 +237,6 @@ onUnmounted(() => {
           <div class="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-12 md:gap-8">
             <article
               v-for="product in cards"
-              :key="product.id"
-              class="flex flex-col gap-4 group"
-            >
-              <RouterLink
-                :to="`/product/${product.id}`"
-                class="no-underline text-inherit flex flex-col gap-4"
-              >
-                <div class="aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4">
-                  <img
-                    v-if="product.image"
-                    :alt="product.alt"
-                    class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
-                    :src="product.image"
-                  >
-                  <span
-                    v-else
-                    class="material-symbols-outlined text-on-surface-variant text-[48px] opacity-40"
-                    aria-hidden="true"
-                  >image</span>
-                  <div
-                    v-if="product.badge"
-                    class="absolute top-4 left-4 bg-primary text-on-primary px-3 py-1 font-label-caps text-[10px] uppercase tracking-widest"
-                  >
-                    {{ product.badge }}
-                  </div>
-                </div>
-                <div class="flex flex-col gap-1">
-                  <div class="flex justify-between items-start gap-3">
-                    <h3 class="font-headline-lg-mobile text-[20px] font-medium">{{ product.name }}</h3>
-                    <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(product.price) }}</span>
-                  </div>
-                  <p v-if="product.label" class="font-label-caps text-[11px] uppercase tracking-widest text-primary">
-                    {{ product.label }}
-                  </p>
-                  <p class="text-on-surface-variant text-sm line-clamp-1">{{ product.desc }}</p>
-                </div>
-              </RouterLink>
-              <button
-                type="button"
-                class="w-full border border-primary text-primary py-4 font-button-text uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-colors"
-                @click="addProduct(product.id, product.name)"
-              >
-                Add to Cart
-              </button>
-            </article>
-          </div>
-        </section>
-
-        <!-- Table top tap  -->
-        <section
-          id="table-brochures"
-          :ref="setSectionRef"
-          class="px-margin-mobile md:px-margin-desktop pt-stack-lg flex flex-col gap-8 scroll-mt-20"
-        >
-          <div class="flex justify-between items-end gap-4">
-            <div class="flex flex-col gap-1 min-w-0">
-              <h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg uppercase">
-                Table Top Tap
-              </h2>
-              <div class="h-1 w-12 bg-primary" />
-              <p class="text-on-surface-variant text-sm mt-1">
-                 — Business &amp; Restaurant
-              </p>
-            </div>
-            <span class="font-label-caps text-label-caps text-ink-muted shrink-0">{{ brochures.length }} ITEMS</span>
-          </div>
-
-          <div class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-12 md:gap-8">
-            <article
-              v-for="product in brochures"
               :key="product.id"
               class="flex flex-col gap-4 group"
             >
@@ -497,15 +401,11 @@ onUnmounted(() => {
               class="text-left text-on-surface hover:opacity-70"
               @click="scrollToShop"
             >
-              Business Cards
+              Connect Cards
             </button>
-            <button
-              type="button"
-              class="text-left text-on-surface hover:opacity-70"
-              @click="scrollToBrochures"
-            >
-              Table Brochures
-            </button>
+            <RouterLink to="/table-top" class="text-on-surface no-underline hover:opacity-70">
+              Table Top Tap
+            </RouterLink>
             <RouterLink to="/cart" class="text-on-surface no-underline hover:opacity-70">
               Cart
             </RouterLink>
@@ -556,10 +456,21 @@ onUnmounted(() => {
 </template>
 
 <style>
+html.shop-home {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5.5rem;
+}
+
 html.shop-home,
 html.shop-home body {
   background-color: #f9f9f9 !important;
   color: #1a1c1c;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.shop-home {
+    scroll-behavior: auto;
+  }
 }
 
 .hero-product {

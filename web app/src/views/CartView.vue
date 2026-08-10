@@ -418,6 +418,11 @@ async function placeOrder() {
 </template>
 
 <style>
+html.shop-home {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5.5rem;
+}
+
 html.shop-home,
 html.shop-home body {
   background-color: #f9f9f9 !important;

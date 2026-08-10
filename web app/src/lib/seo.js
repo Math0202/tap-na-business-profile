@@ -75,9 +75,14 @@ export function setPageSeo(opts = {}) {
 
 export const ROUTE_SEO = {
   home: {
-    title: 'tap-na Shop — NFC Connect business cards',
+    title: 'tap-na — NFC Connect business cards',
     description:
       'Shop NFC Connect business cards for professionals and teams. Professional, Business, and Executive classes. Once-off purchase. Free delivery in Windhoek in 1-3 working days.'
+  },
+  'table-top': {
+    title: 'Table Top Tap — tap-na',
+    description:
+      'NFC Table Top Tap cards for restaurants and businesses. Menus, reviews, Wi-Fi, and guest check-in — tap once at the table.'
   },
   cart: {
     title: 'Cart — tap-na',

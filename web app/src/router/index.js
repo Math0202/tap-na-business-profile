@@ -28,6 +28,12 @@ const routes = [
     meta: { seoKey: 'cart' }
   },
   {
+    path: '/table-top',
+    name: 'table-top-shop',
+    component: () => import('../views/TableTopShopView.vue'),
+    meta: { seoKey: 'table-top' }
+  },
+  {
     path: '/product/:id',
     name: 'shop-product',
     component: () => import('../views/ShopProductView.vue'),
