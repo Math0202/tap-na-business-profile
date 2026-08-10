@@ -18,11 +18,37 @@ const email = ref('')
 const toast = ref('')
 const sections = ref([])
 const catalogTick = ref(0)
-const heroMenuIn = ref(false)
-const heroCardIn = ref(false)
+const heroCardsIn = ref(0)
 let observer = null
 let toastTimer = null
-let heroCardTimer = null
+let heroStaggerTimers = []
+
+const HERO_CARDS = [
+  {
+    id: 'blue-card',
+    image: '/images/professional_cobalt_blue.png',
+    alt: 'Professional cobalt blue Connect card',
+    label: 'Shop Professional card',
+    rot: -16,
+    slot: 'left'
+  },
+  {
+    id: 'black-card',
+    image: '/images/business_charcoal.png',
+    alt: 'Business charcoal Connect card',
+    label: 'Shop Business card',
+    rot: 0,
+    slot: 'center'
+  },
+  {
+    id: 'black-card-front',
+    image: '/images/executive_black.png',
+    alt: 'Executive black Connect card',
+    label: 'Shop Executive card',
+    rot: 14,
+    slot: 'right'
+  }
+]
 
 const cards = computed(() => {
   catalogTick.value
@@ -83,12 +109,12 @@ onMounted(async () => {
   }
   await refreshCatalog()
   await nextTick()
-  requestAnimationFrame(() => {
-    heroMenuIn.value = true
-    heroCardIn.value = true
+  HERO_CARDS.forEach((_, index) => {
+    const timer = setTimeout(() => {
+      heroCardsIn.value = index + 1
+    }, 120 + index * 180)
+    heroStaggerTimers.push(timer)
   })
-  clearTimeout(heroCardTimer)
-  heroCardTimer = null
   if (route.hash === '#business-cards') scrollToShop()
   observer = new IntersectionObserver(
     (entries) => {
@@ -113,7 +139,8 @@ onUnmounted(() => {
   document.documentElement.classList.remove('shop-home')
   observer?.disconnect()
   clearTimeout(toastTimer)
-  clearTimeout(heroCardTimer)
+  heroStaggerTimers.forEach((timer) => clearTimeout(timer))
+  heroStaggerTimers = []
 })
 </script>
 
@@ -145,25 +172,30 @@ onUnmounted(() => {
               aria-hidden="true"
             />
 
-            <!-- Product visuals -->
+            <!-- Product visuals — all 3 Connect card types -->
             <div
-              class="relative z-[1] order-1 md:order-2 flex-1 min-h-[280px] md:min-h-full md:absolute md:inset-y-0 md:right-0 md:w-[58%] flex items-center justify-center px-6 pt-8 md:pt-0 md:pr-10"
+              class="relative z-[1] order-1 md:order-2 flex-1 min-h-[300px] md:min-h-full md:absolute md:inset-y-0 md:right-0 md:w-[58%] flex items-center justify-center px-4 pt-8 md:pt-0 md:pr-6"
             >
-              <div class="relative w-full max-w-[360px] aspect-[3/4] md:max-w-none md:h-[82%] md:aspect-auto md:w-[72%] flex items-center justify-center">
-                <button
-                  type="button"
-                  class="hero-product w-full max-w-[280px] md:max-w-none p-0 border-0 bg-transparent cursor-pointer drop-shadow-[0_28px_70px_rgba(0,0,0,0.65)]"
-                  :class="{ 'hero-product--in': heroCardIn || heroMenuIn }"
-                  style="--hero-rot: 4deg"
-                  aria-label="Shop Connect business cards"
-                  @click="scrollToShop"
+              <div class="hero-fan relative w-full max-w-[420px] aspect-[5/4] md:max-w-none md:h-[86%] md:aspect-auto md:w-[96%]">
+                <RouterLink
+                  v-for="(card, index) in HERO_CARDS"
+                  :key="card.id"
+                  :to="`/product/${card.id}`"
+                  class="hero-product absolute p-0 border-0 bg-transparent cursor-pointer no-underline drop-shadow-[0_22px_50px_rgba(0,0,0,0.55)]"
+                  :class="[
+                    `hero-product--${card.slot}`,
+                    { 'hero-product--in': heroCardsIn > index }
+                  ]"
+                  :style="{ '--hero-rot': `${card.rot}deg`, zIndex: card.slot === 'center' ? 3 : card.slot === 'right' ? 2 : 1 }"
+                  :aria-label="card.label"
                 >
                   <img
-                    src="/images/business_charcoal.png"
-                    alt="Business charcoal Connect NFC card"
-                    class="w-full h-auto block"
+                    :src="card.image"
+                    :alt="card.alt"
+                    class="w-full h-auto block pointer-events-none"
+                    decoding="async"
                   >
-                </button>
+                </RouterLink>
               </div>
             </div>
 
@@ -195,6 +227,13 @@ onUnmounted(() => {
                 >
                   How it works
                 </RouterLink>
+              </div>
+              <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] uppercase tracking-[0.16em] text-on-primary/55">
+                <span>Professional</span>
+                <span aria-hidden="true">·</span>
+                <span>Business</span>
+                <span aria-hidden="true">·</span>
+                <span>Executive</span>
               </div>
             </div>
           </div>
@@ -475,6 +514,7 @@ html.shop-home body {
 
 .hero-product {
   --hero-rot: 0deg;
+  width: 42%;
   opacity: 0;
   transform: translateY(40px) scale(0.92) rotate(var(--hero-rot));
   transition:
@@ -483,13 +523,52 @@ html.shop-home body {
   will-change: opacity, transform;
 }
 
+.hero-product--left {
+  left: 2%;
+  top: 14%;
+}
+
+.hero-product--center {
+  left: 29%;
+  top: 4%;
+  width: 46%;
+}
+
+.hero-product--right {
+  right: 2%;
+  left: auto;
+  top: 18%;
+}
+
 .hero-product--in {
   opacity: 1;
   transform: translateY(0) scale(1) rotate(var(--hero-rot));
 }
 
 .hero-product--in:hover {
-  transform: translateY(0) scale(1.03) rotate(var(--hero-rot));
+  transform: translateY(-4px) scale(1.04) rotate(var(--hero-rot));
+}
+
+@media (min-width: 768px) {
+  .hero-product {
+    width: 40%;
+  }
+
+  .hero-product--left {
+    left: 0;
+    top: 12%;
+  }
+
+  .hero-product--center {
+    left: 28%;
+    top: 2%;
+    width: 44%;
+  }
+
+  .hero-product--right {
+    right: 0;
+    top: 16%;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
