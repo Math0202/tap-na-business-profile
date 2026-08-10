@@ -25,6 +25,7 @@ const checkoutNote = ref('')
 const toast = ref('')
 const checkoutOpen = ref(false)
 const customerName = ref('')
+const customerCompany = ref('')
 const customerEmail = ref('')
 const customerPhone = ref('')
 const customerTown = ref('')
@@ -46,8 +47,10 @@ onMounted(async () => {
   refreshCart()
   const profile = loadProfile()
   if (profile?.name) customerName.value = profile.name
+  if (profile?.company) customerCompany.value = profile.company
   if (profile?.email) customerEmail.value = profile.email
   if (profile?.phone) customerPhone.value = profile.phone
+  customerTown.value = customerTown.value || 'Windhoek'
 })
 
 onUnmounted(() => {
@@ -102,12 +105,17 @@ async function placeOrder() {
   if (isEmpty.value || submitting.value) return
 
   const name = customerName.value.trim()
+  const company = customerCompany.value.trim()
   const email = customerEmail.value.trim()
   const phone = customerPhone.value.trim()
   const town = customerTown.value.trim()
 
   if (!name) {
     checkoutError.value = 'Please enter your full name.'
+    return
+  }
+  if (!company) {
+    checkoutError.value = 'Please enter your company name.'
     return
   }
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -131,9 +139,12 @@ async function placeOrder() {
       : teamCount.value >= 10
         ? 'Team pack 10+ (subdomain optional — not specified)'
         : ''
-    const combinedNote = [checkoutNote.value.trim(), subdomainNote].filter(Boolean).join('\n')
+    const combinedNote = [`Company: ${company}`, checkoutNote.value.trim(), subdomainNote]
+      .filter(Boolean)
+      .join('\n')
     const res = await apiShopOrderQuote({
       name,
+      company,
       email,
       phone,
       town,
@@ -396,7 +407,20 @@ async function placeOrder() {
               autocomplete="name"
               required
               class="w-full bg-surface-container-lowest border border-border-subtle rounded-lg px-3 py-3 text-sm text-on-surface focus:outline-none focus:border-primary"
-              placeholder="Jane Doe"
+              placeholder="Full name"
+            >
+          </label>
+          <label class="flex flex-col gap-1.5">
+            <span class="font-label-caps text-[10px] uppercase tracking-[0.2em] text-ink-muted">
+              Company name
+            </span>
+            <input
+              v-model="customerCompany"
+              type="text"
+              autocomplete="organization"
+              required
+              class="w-full bg-surface-container-lowest border border-border-subtle rounded-lg px-3 py-3 text-sm text-on-surface focus:outline-none focus:border-primary"
+              placeholder="Company name"
             >
           </label>
           <label class="flex flex-col gap-1.5">

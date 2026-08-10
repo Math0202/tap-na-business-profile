@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import ShopHeader from '../components/ShopHeader.vue'
 import ShopBottomNav from '../components/ShopBottomNav.vue'
+import ConnectPackageDialog from '../components/ConnectPackageDialog.vue'
 import {
   BUSINESS_CARD_ID,
   EXECUTIVE_CARD_ID,
@@ -13,7 +14,6 @@ import {
   initialTeamMix,
   loadShopProducts
 } from '../lib/shopCatalog'
-import { setTeamPackage } from '../lib/cartStore'
 import { setPageSeo } from '../lib/seo'
 
 const route = useRoute()
@@ -21,6 +21,7 @@ const router = useRouter()
 const menuOpen = ref(false)
 const loading = ref(true)
 const toast = ref('')
+const checkoutOpen = ref(false)
 const error = ref('')
 const businessQty = ref(2)
 const executiveQty = ref(3)
@@ -109,22 +110,21 @@ function bumpExecutive(delta) {
   error.value = ''
 }
 
-function addPackage() {
+function openCheckout() {
   error.value = ''
   if (teamTotal.value < TEAM_PACKAGE_MIN) {
     error.value = `Team packages need at least ${TEAM_PACKAGE_MIN} cards total (any mix).`
     return
   }
-  const ok = setTeamPackage({
-    businessQty: businessQty.value,
-    executiveQty: executiveQty.value,
-    subdomain: subdomainEligible.value ? subdomain.value.trim() : ''
-  })
-  if (!ok) {
-    error.value = 'Could not add team package.'
-    return
-  }
-  showToast(`Team package (${teamTotal.value} cards) added to cart`)
+  checkoutOpen.value = true
+}
+
+function onPackageOrdered(payload) {
+  showToast(
+    payload?.quoteRef
+      ? `Quote ${payload.quoteRef} emailed`
+      : 'Quote emailed to you and auckmund@gmail.com'
+  )
 }
 
 async function refresh() {
@@ -381,9 +381,9 @@ onUnmounted(() => {
               <button
                 type="button"
                 class="flex-1 bg-primary text-on-primary py-4 font-button-text uppercase tracking-widest hover:opacity-90"
-                @click="addPackage"
+                @click="openCheckout"
               >
-                Add package to cart
+                Request quote
               </button>
               <RouterLink
                 to="/cart"
@@ -398,6 +398,16 @@ onUnmounted(() => {
     </main>
 
     <ShopBottomNav />
+
+    <ConnectPackageDialog
+      :open="checkoutOpen"
+      mode="team"
+      :focus-id="highlighted"
+      :initial-business-qty="businessQty"
+      :initial-executive-qty="executiveQty"
+      @close="checkoutOpen = false"
+      @ordered="onPackageOrdered"
+    />
 
     <div
       v-if="toast"

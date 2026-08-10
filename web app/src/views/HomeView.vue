@@ -94,11 +94,7 @@ function showToast(msg) {
 }
 
 function openPackage(mode, focusId = '') {
-  if (mode === 'team') {
-    router.push({ path: '/package/team', query: focusId ? { focus: focusId } : {} })
-    return
-  }
-  packageMode.value = 'solo'
+  packageMode.value = mode
   packageFocusId.value = focusId
   packageOpen.value = true
 }
@@ -111,15 +107,11 @@ function openHeroCard(cardId) {
   openPackage('solo', cardId)
 }
 
-function onPackageAdded(payload) {
-  if (payload?.mode === 'team') {
-    showToast(`Team package (${payload.total} cards) added to cart`)
-    return
-  }
+function onPackageOrdered(payload) {
   showToast(
-    payload?.qty > 1
-      ? `${payload.qty} × ${payload.name} added to cart`
-      : `${payload?.name || 'Card'} added to cart`
+    payload?.quoteRef
+      ? `Quote ${payload.quoteRef} emailed`
+      : 'Quote emailed to you and auckmund@gmail.com'
   )
 }
 
@@ -618,7 +610,7 @@ onUnmounted(() => {
       :focus-id="packageFocusId"
       :solo-product-id="packageFocusId || 'blue-card'"
       @close="packageOpen = false"
-      @added="onPackageAdded"
+      @ordered="onPackageOrdered"
     />
 
     <div

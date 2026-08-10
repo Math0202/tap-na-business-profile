@@ -5234,6 +5234,7 @@ async function handleApi(request, env, url) {
   if (pathname === '/api/shop/order-quote' && method === 'POST') {
     const body = await readJson(request)
     const name = String(body?.name || '').trim()
+    const company = String(body?.company || '').trim().slice(0, 160)
     const email = String(body?.email || '').trim().toLowerCase()
     const phone = String(body?.phone || '').trim()
     const town = String(body?.town || '').trim().slice(0, 120)
@@ -5291,6 +5292,7 @@ async function handleApi(request, env, url) {
   <p style="margin:0 0 4px;"><strong>Customer</strong></p>
   <p style="margin:0 0 16px;">
     ${escapeHtml(name)}<br>
+    ${company ? `${escapeHtml(company)}<br>` : ''}
     ${escapeHtml(email)}<br>
     ${escapeHtml(phone)}<br>
     ${escapeHtml(town)}
@@ -5317,6 +5319,7 @@ async function handleApi(request, env, url) {
       'Auckmund Investment CC',
       '',
       `Customer: ${name}`,
+      company ? `Company: ${company}` : '',
       `Email: ${email}`,
       `Phone: ${phone}`,
       `Town: ${town}`,
