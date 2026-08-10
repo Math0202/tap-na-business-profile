@@ -391,10 +391,8 @@ async function requestQuote() {
             :disabled="submitting"
             @click="requestQuote"
           >
-            {{ submitting ? 'Sending quote…' : 'Request quote' }}
+            {{ submitting ? 'Sending quote…' : 'Place order' }}
           </button>
-          ’ll email your quote to you and auckmund@gmail.com.
-          </p>
         </div>
       </div>
     </div>
