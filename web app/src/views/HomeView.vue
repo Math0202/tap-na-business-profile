@@ -5,9 +5,13 @@ import ShopHeader from '../components/ShopHeader.vue'
 import ShopBottomNav from '../components/ShopBottomNav.vue'
 import ConnectPackageDialog from '../components/ConnectPackageDialog.vue'
 import {
+  BUSINESS_CARD_ID,
+  EXECUTIVE_CARD_ID,
+  TEAM_PACKAGE_MIN,
   connectSoloCards,
   connectTeamCards,
   formatPrice,
+  getProduct,
   isTeamCard,
   loadShopProducts,
 } from '../lib/shopCatalog'
@@ -60,9 +64,20 @@ const soloCards = computed(() => {
   return connectSoloCards()
 })
 
-const teamCards = computed(() => {
+const teamPackage = computed(() => {
   catalogTick.value
-  return connectTeamCards()
+  const cards = connectTeamCards()
+  const business = getProduct(BUSINESS_CARD_ID) || cards.find((p) => p.id === BUSINESS_CARD_ID)
+  const executive = getProduct(EXECUTIVE_CARD_ID) || cards.find((p) => p.id === EXECUTIVE_CARD_ID)
+  if (!business && !executive) return null
+  const prices = [business?.price, executive?.price].filter((n) => Number(n) > 0).map(Number)
+  const fromPrice = prices.length ? Math.min(...prices) : 0
+  return {
+    business,
+    executive,
+    fromPrice,
+    blurb: `One mixable package — Business & Executive, minimum ${TEAM_PACKAGE_MIN} cards total. Logos print white. Optional custom subdomain from 10+.`
+  }
 })
 
 async function refreshCatalog() {
@@ -377,67 +392,70 @@ onUnmounted(() => {
               </h2>
               <div class="h-1 w-12 bg-primary" />
               <p class="text-on-surface-variant text-sm mt-1">
-                Business &amp; Executive in one package — mix freely (min 5). Logos print white. 10+ cards unlock an optional custom subdomain.
+                Business &amp; Executive in one package — mix freely (min {{ TEAM_PACKAGE_MIN }}). Logos print white. 10+ cards unlock an optional custom subdomain.
               </p>
             </div>
-            <span class="font-label-caps text-label-caps text-ink-muted shrink-0">{{ teamCards.length }} ITEMS</span>
+            <span class="font-label-caps text-label-caps text-ink-muted shrink-0">1 PACKAGE</span>
           </div>
 
-          <div class="flex flex-col gap-0 divide-y divide-border-subtle border-y border-border-subtle md:border-0 md:divide-y-0 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-x-8 md:gap-y-12">
-            <article
-              v-for="product in teamCards"
-              :key="product.id"
-              class="flex flex-col gap-3 py-5 md:py-0 md:gap-4 group"
+          <article v-if="teamPackage" class="flex flex-col gap-4 group max-w-3xl">
+            <button
+              type="button"
+              class="text-left no-underline text-inherit flex flex-col gap-4 bg-transparent border-0 p-0 cursor-pointer w-full"
+              @click="openPackage('team', BUSINESS_CARD_ID)"
             >
-              <button
-                type="button"
-                class="text-left no-underline text-inherit flex flex-row gap-4 md:flex-col bg-transparent border-0 p-0 cursor-pointer w-full"
-                @click="openPackage('team', product.id)"
-              >
-                <div class="w-28 h-36 shrink-0 md:w-full md:h-auto md:aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-3 md:p-4">
+              <div class="grid grid-cols-2 gap-2 md:gap-4">
+                <div class="aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-3 md:p-5">
                   <img
-                    v-if="product.image"
-                    :alt="product.alt"
+                    v-if="teamPackage.business?.image"
+                    :alt="teamPackage.business.alt || teamPackage.business.name"
                     class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
-                    :src="product.image"
+                    :src="teamPackage.business.image"
                   >
                   <span
                     v-else
                     class="material-symbols-outlined text-on-surface-variant text-[48px] opacity-40"
                     aria-hidden="true"
                   >image</span>
-                  <div
-                    v-if="product.badge"
-                    class="absolute top-2 left-2 md:top-4 md:left-4 bg-primary text-on-primary px-2 py-0.5 md:px-3 md:py-1 font-label-caps text-[9px] md:text-[10px] uppercase tracking-widest"
-                  >
-                    {{ product.badge }}
-                  </div>
+                  <span class="absolute bottom-2 left-2 right-2 text-center font-label-caps text-[9px] md:text-[10px] uppercase tracking-widest text-ink-muted">
+                    {{ teamPackage.business?.name || 'Business' }}
+                  </span>
                 </div>
-                <div class="flex flex-1 min-w-0 flex-col gap-1 justify-center md:justify-start">
-                  <div class="flex justify-between items-start gap-3">
-                    <h3 class="font-headline-lg-mobile text-[18px] md:text-[20px] font-medium">{{ product.name }}</h3>
-                    <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(product.price) }}</span>
-                  </div>
-                  <p
-                    v-if="product.label"
-                    class="font-label-caps text-[11px] uppercase tracking-widest text-primary"
+                <div class="aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-3 md:p-5">
+                  <img
+                    v-if="teamPackage.executive?.image"
+                    :alt="teamPackage.executive.alt || teamPackage.executive.name"
+                    class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
+                    :src="teamPackage.executive.image"
                   >
-                    {{ product.label }}
-                  </p>
-                  <p class="text-on-surface-variant text-sm line-clamp-2">
-                    {{ product.desc }}
-                  </p>
+                  <span
+                    v-else
+                    class="material-symbols-outlined text-on-surface-variant text-[48px] opacity-40"
+                    aria-hidden="true"
+                  >image</span>
+                  <span class="absolute bottom-2 left-2 right-2 text-center font-label-caps text-[9px] md:text-[10px] uppercase tracking-widest text-ink-muted">
+                    {{ teamPackage.executive?.name || 'Executive' }}
+                  </span>
                 </div>
-              </button>
-              <button
-                type="button"
-                class="w-full border border-primary text-primary py-3 md:py-4 font-button-text uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-colors"
-                @click="openPackage('team', product.id)"
-              >
-                View package
-              </button>
-            </article>
-          </div>
+              </div>
+              <div class="flex flex-col gap-1">
+                <div class="flex justify-between items-start gap-3">
+                  <h3 class="font-headline-lg-mobile text-[18px] md:text-[20px] font-medium">Connect Team package</h3>
+                  <span class="font-label-caps text-label-caps shrink-0">from {{ formatPrice(teamPackage.fromPrice) }}</span>
+                </div>
+                <p class="text-on-surface-variant text-sm line-clamp-3">
+                  {{ teamPackage.blurb }}
+                </p>
+              </div>
+            </button>
+            <button
+              type="button"
+              class="w-full border border-primary text-primary py-3 md:py-4 font-button-text uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-colors"
+              @click="openPackage('team', BUSINESS_CARD_ID)"
+            >
+              View package
+            </button>
+          </article>
         </section>
 
         <!-- Testimonial -->

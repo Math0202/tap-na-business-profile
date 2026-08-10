@@ -268,7 +268,6 @@ async function placeOrder() {
                 <div class="flex justify-between gap-2 items-start">
                   <div class="min-w-0">
                     <h3 class="text-[15px] font-medium truncate">{{ businessProduct.name }}</h3>
-                    <p v-if="businessProduct.label" class="font-label-caps text-[10px] uppercase tracking-widest text-primary">{{ businessProduct.label }}</p>
                   </div>
                   <span class="font-label-caps text-[11px] shrink-0">{{ formatPrice((businessProduct.price || 0) * businessQty) }}</span>
                 </div>
@@ -287,7 +286,6 @@ async function placeOrder() {
                 <div class="flex justify-between gap-2 items-start">
                   <div class="min-w-0">
                     <h3 class="text-[15px] font-medium truncate">{{ executiveProduct.name }}</h3>
-                    <p v-if="executiveProduct.label" class="font-label-caps text-[10px] uppercase tracking-widest text-primary">{{ executiveProduct.label }}</p>
                   </div>
                   <span class="font-label-caps text-[11px] shrink-0">{{ formatPrice((executiveProduct.price || 0) * executiveQty) }}</span>
                 </div>
