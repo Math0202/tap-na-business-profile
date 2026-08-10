@@ -445,6 +445,94 @@ onUnmounted(() => {
           </div>
         </section>
 
+        <!-- Feature matrix -->
+        <section
+          :ref="setSectionRef"
+          class="px-margin-mobile md:px-margin-desktop pt-stack-lg flex flex-col gap-6 scroll-mt-20"
+        >
+          <div class="flex flex-col gap-1 max-w-2xl">
+            <h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg uppercase">
+              Feature matrix
+            </h2>
+            <div class="h-1 w-12 bg-primary" />
+            <p class="text-on-surface-variant text-sm mt-1">
+              Connect Solo is one Professional card. Connect Team is one mixable package — Business and Executive finishes in any ratio.
+            </p>
+          </div>
+          <div class="overflow-x-auto -mx-1 px-1">
+            <table class="w-full min-w-[420px] text-left text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-border-subtle">
+                  <th class="py-3 pr-4 font-label-caps text-[10px] uppercase tracking-widest text-ink-muted font-medium">
+                    Feature
+                  </th>
+                  <th class="py-3 px-3 font-label-caps text-[10px] uppercase tracking-widest text-ink-muted font-medium text-center">
+                    Connect Solo
+                  </th>
+                  <th class="py-3 pl-3 font-label-caps text-[10px] uppercase tracking-widest text-ink-muted font-medium text-center">
+                    Connect Team
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="text-on-surface-variant">
+                <tr class="border-b border-border-subtle/70">
+                  <td class="py-3 pr-4 text-on-surface">NFC + QR → live profile</td>
+                  <td class="py-3 px-3 text-center text-primary">✓</td>
+                  <td class="py-3 pl-3 text-center text-primary">✓</td>
+                </tr>
+                <tr class="border-b border-border-subtle/70">
+                  <td class="py-3 pr-4 text-on-surface">Once-off (no monthly fee)</td>
+                  <td class="py-3 px-3 text-center text-primary">✓</td>
+                  <td class="py-3 pl-3 text-center text-primary">✓</td>
+                </tr>
+                <tr class="border-b border-border-subtle/70">
+                  <td class="py-3 pr-4 text-on-surface">Catalogue &amp; book meeting</td>
+                  <td class="py-3 px-3 text-center text-primary">✓</td>
+                  <td class="py-3 pl-3 text-center text-primary">✓</td>
+                </tr>
+                <tr class="border-b border-border-subtle/70">
+                  <td class="py-3 pr-4 text-on-surface">Custom logo on card</td>
+                  <td class="py-3 px-3 text-center">—</td>
+                  <td class="py-3 pl-3 text-center text-primary text-xs leading-snug">
+                    Business: B&amp;W<br>
+                    Executive: Colour
+                  </td>
+                </tr>
+                <tr class="border-b border-border-subtle/70">
+                  <td class="py-3 pr-4 text-on-surface">Team profiles</td>
+                  <td class="py-3 px-3 text-center">—</td>
+                  <td class="py-3 pl-3 text-center text-primary">✓</td>
+                </tr>
+                <tr class="border-b border-border-subtle/70">
+                  <td class="py-3 pr-4 text-on-surface">Owner can block a member</td>
+                  <td class="py-3 px-3 text-center">—</td>
+                  <td class="py-3 pl-3 text-center text-primary">✓</td>
+                </tr>
+                <tr class="border-b border-border-subtle/70">
+                  <td class="py-3 pr-4 text-on-surface">Mix Business &amp; Executive</td>
+                  <td class="py-3 px-3 text-center">—</td>
+                  <td class="py-3 pl-3 text-center text-primary">✓</td>
+                </tr>
+                <tr class="border-b border-border-subtle/70">
+                  <td class="py-3 pr-4 text-on-surface">Subdomain (e.g. cards.company.com)</td>
+                  <td class="py-3 px-3 text-center">—</td>
+                  <td class="py-3 pl-3 text-center text-primary text-xs leading-snug">
+                    Optional at 10+ cards
+                  </td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4 text-on-surface">Suggested size</td>
+                  <td class="py-3 px-3 text-center text-xs leading-snug">From 1</td>
+                  <td class="py-3 pl-3 text-center text-xs leading-snug">
+                    Min 5 combined<br>
+                    Unlimited max
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
         <!-- Testimonial -->
         <section :ref="setSectionRef" class="px-margin-mobile md:px-margin-desktop pt-stack-lg">
           <div class="bg-surface-container p-10 md:p-14 rounded-xl relative overflow-hidden max-w-3xl">
