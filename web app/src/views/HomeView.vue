@@ -326,10 +326,10 @@ onUnmounted(() => {
             >
               <button
                 type="button"
-                class="text-left no-underline text-inherit flex flex-row gap-4 md:flex-col bg-transparent border-0 p-0 cursor-pointer w-full"
+                class="text-left no-underline text-inherit flex flex-col gap-4 bg-transparent border-0 p-0 cursor-pointer w-full"
                 @click="openProductInfo(product.id)"
               >
-                <div class="w-28 h-36 shrink-0 md:w-full md:h-auto md:aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-3 md:p-4">
+                <div class="w-full aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4">
                   <img
                     v-if="product.image"
                     :alt="product.alt"
@@ -342,7 +342,7 @@ onUnmounted(() => {
                     aria-hidden="true"
                   >image</span>
                 </div>
-                <div class="flex flex-1 min-w-0 flex-col gap-1 justify-center md:justify-start">
+                <div class="flex flex-1 min-w-0 flex-col gap-1">
                   <div class="flex justify-between items-start gap-3">
                     <h3 class="font-headline-lg-mobile text-[18px] md:text-[20px] font-medium">{{ product.name }}</h3>
                     <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(product.price) }}</span>
@@ -396,10 +396,10 @@ onUnmounted(() => {
             >
               <button
                 type="button"
-                class="text-left no-underline text-inherit flex flex-row gap-4 md:flex-col bg-transparent border-0 p-0 cursor-pointer w-full"
+                class="text-left no-underline text-inherit flex flex-col gap-4 bg-transparent border-0 p-0 cursor-pointer w-full"
                 @click="openProductInfo(product.id)"
               >
-                <div class="w-28 h-36 shrink-0 md:w-full md:h-auto md:aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-3 md:p-4">
+                <div class="w-full aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4">
                   <img
                     v-if="product.image"
                     :alt="product.alt"
@@ -413,12 +413,12 @@ onUnmounted(() => {
                   >image</span>
                   <div
                     v-if="product.badge"
-                    class="absolute top-2 left-2 md:top-4 md:left-4 bg-primary text-on-primary px-2 py-0.5 md:px-3 md:py-1 font-label-caps text-[9px] md:text-[10px] uppercase tracking-widest"
+                    class="absolute top-4 left-4 bg-primary text-on-primary px-3 py-1 font-label-caps text-[10px] uppercase tracking-widest"
                   >
                     {{ product.badge }}
                   </div>
                 </div>
-                <div class="flex flex-1 min-w-0 flex-col gap-1 justify-center md:justify-start">
+                <div class="flex flex-1 min-w-0 flex-col gap-1">
                   <div class="flex justify-between items-start gap-3">
                     <h3 class="font-headline-lg-mobile text-[18px] md:text-[20px] font-medium">{{ product.name }}</h3>
                     <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(product.price) }}</span>
