@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import ShopHeader from '../components/ShopHeader.vue'
 import ShopBottomNav from '../components/ShopBottomNav.vue'
-import { formatPrice, getProduct, loadShopProducts } from '../lib/shopCatalog'
+import { formatPrice, getMinQty, getProduct, isTeamCard, loadShopProducts } from '../lib/shopCatalog'
 import { addToCart } from '../lib/cartStore'
 import { youtubeEmbedUrl } from '../lib/shareHelpers'
 import { setPageSeo } from '../lib/seo'
@@ -17,6 +17,8 @@ const activeImage = ref(0)
 let toastTimer = null
 
 const productId = computed(() => String(route.params.id || '').trim())
+const minQty = computed(() => getMinQty(productId.value))
+const teamPack = computed(() => isTeamCard(productId.value))
 const product = computed(() => {
   const id = productId.value
   if (!id) return null
@@ -85,8 +87,9 @@ function showToast(msg) {
 function addProduct() {
   const p = product.value
   if (!p) return
-  if (!addToCart(p.id)) return
-  showToast(`${p.name} added to cart`)
+  const min = getMinQty(p.id)
+  if (!addToCart(p.id, min)) return
+  showToast(min > 1 ? (min + ' × ' + p.name + ' added to cart') : (p.name + ' added to cart'))
 }
 
 watch(productId, () => {
@@ -220,13 +223,16 @@ onUnmounted(() => {
               playsinline
             />
 
-            <div class="flex flex-col sm:flex-row gap-3 mt-2">
+            <p v-if="teamPack" class="font-label-caps text-[11px] uppercase tracking-widest text-primary">
+                  Team pack · Min {{ minQty }} cards
+                </p>
+              <div class="flex flex-col sm:flex-row gap-3 mt-2">
               <button
                 type="button"
                 class="flex-1 bg-primary text-on-primary py-4 font-button-text uppercase tracking-widest hover:opacity-90 transition-opacity"
                 @click="addProduct"
               >
-                Add to cart
+                {{ teamPack ? ('Add ' + minQty + ' to cart') : 'Add to cart' }}
               </button>
               <RouterLink
                 to="/cart"

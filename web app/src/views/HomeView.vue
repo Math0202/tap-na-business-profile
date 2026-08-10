@@ -4,8 +4,10 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import ShopHeader from '../components/ShopHeader.vue'
 import ShopBottomNav from '../components/ShopBottomNav.vue'
 import {
-  businessCardsList,
+  connectSoloCards,
+  connectTeamCards,
   formatPrice,
+  getMinQty,
   loadShopProducts,
 } from '../lib/shopCatalog'
 import { addToCart } from '../lib/cartStore'
@@ -50,9 +52,14 @@ const HERO_CARDS = [
   }
 ]
 
-const cards = computed(() => {
+const soloCards = computed(() => {
   catalogTick.value
-  return businessCardsList()
+  return connectSoloCards()
+})
+
+const teamCards = computed(() => {
+  catalogTick.value
+  return connectTeamCards()
 })
 
 async function refreshCatalog() {
@@ -62,7 +69,12 @@ async function refreshCatalog() {
 
 function scrollToShop() {
   menuOpen.value = false
-  document.getElementById('business-cards')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  document.getElementById('connect-solo')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function scrollToTeam() {
+  menuOpen.value = false
+  document.getElementById('connect-team')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 function handleSubscribe() {
@@ -79,8 +91,9 @@ function showToast(msg) {
 }
 
 function addProduct(id, name) {
-  if (!addToCart(id)) return
-  showToast(`${name} added to cart`)
+  const min = getMinQty(id)
+  if (!addToCart(id, min)) return
+  showToast(min > 1 ? `${min} × ${name} added to cart` : `${name} added to cart`)
 }
 
 function setSectionRef(el) {
@@ -95,7 +108,8 @@ function revealSection(el) {
 watch(
   () => route.hash,
   (hash) => {
-    if (hash === '#business-cards') nextTick(() => scrollToShop())
+    if (hash === '#business-cards' || hash === '#connect-solo') nextTick(() => scrollToShop())
+    if (hash === '#connect-team') nextTick(() => scrollToTeam())
     if (hash === '#table-brochures') router.replace('/table-top')
   }
 )
@@ -115,7 +129,8 @@ onMounted(async () => {
     }, 120 + index * 180)
     heroStaggerTimers.push(timer)
   })
-  if (route.hash === '#business-cards') scrollToShop()
+  if (route.hash === '#connect-team') scrollToTeam()
+  else if (route.hash === '#business-cards' || route.hash === '#connect-solo') scrollToShop()
   observer = new IntersectionObserver(
     (entries) => {
       entries.forEach((entry) => {
@@ -229,11 +244,13 @@ onUnmounted(() => {
                 </RouterLink>
               </div>
               <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] uppercase tracking-[0.16em] text-on-primary/55">
-                <span>Professional</span>
+                <button type="button" class="hover:text-on-primary transition-colors bg-transparent border-0 p-0 text-inherit uppercase tracking-[0.16em] cursor-pointer" @click="scrollToShop">
+                  Connect Solo
+                </button>
                 <span aria-hidden="true">·</span>
-                <span>Business</span>
-                <span aria-hidden="true">·</span>
-                <span>Executive</span>
+                <button type="button" class="hover:text-on-primary transition-colors bg-transparent border-0 p-0 text-inherit uppercase tracking-[0.16em] cursor-pointer" @click="scrollToTeam">
+                  Connect Team
+                </button>
               </div>
             </div>
           </div>
@@ -257,25 +274,28 @@ onUnmounted(() => {
           </div>
         </section>
 
-        <!-- Business Cards -->
+        <!-- Connect Solo -->
         <section
-          id="business-cards"
+          id="connect-solo"
           :ref="setSectionRef"
           class="px-margin-mobile md:px-margin-desktop pt-stack-lg flex flex-col gap-8 scroll-mt-20"
         >
-          <div class="flex justify-between items-end">
-            <div class="flex flex-col gap-1">
+          <div class="flex justify-between items-end gap-4">
+            <div class="flex flex-col gap-1 min-w-0">
               <h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg uppercase">
-                Connect Cards
+                Connect Solo
               </h2>
               <div class="h-1 w-12 bg-primary" />
+              <p class="text-on-surface-variant text-sm mt-1">
+                Professional Class — one card for individuals. Min 1.
+              </p>
             </div>
-            <span class="font-label-caps text-label-caps text-ink-muted">{{ cards.length }} ITEMS</span>
+            <span class="font-label-caps text-label-caps text-ink-muted shrink-0">{{ soloCards.length }} ITEMS</span>
           </div>
 
           <div class="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-12 md:gap-8">
             <article
-              v-for="product in cards"
+              v-for="product in soloCards"
               :key="product.id"
               class="flex flex-col gap-4 group"
             >
@@ -319,6 +339,77 @@ onUnmounted(() => {
                 @click="addProduct(product.id, product.name)"
               >
                 Add to Cart
+              </button>
+            </article>
+          </div>
+        </section>
+
+        <!-- Connect Team -->
+        <section
+          id="connect-team"
+          :ref="setSectionRef"
+          class="px-margin-mobile md:px-margin-desktop pt-stack-lg flex flex-col gap-8 scroll-mt-20"
+        >
+          <div class="flex justify-between items-end gap-4">
+            <div class="flex flex-col gap-1 min-w-0">
+              <h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg uppercase">
+                Connect Team
+              </h2>
+              <div class="h-1 w-12 bg-primary" />
+              <p class="text-on-surface-variant text-sm mt-1">
+                Business &amp; Executive — one team package. Minimum 5 cards per order.
+              </p>
+            </div>
+            <span class="font-label-caps text-label-caps text-ink-muted shrink-0">{{ teamCards.length }} ITEMS</span>
+          </div>
+
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-12 md:gap-8">
+            <article
+              v-for="product in teamCards"
+              :key="product.id"
+              class="flex flex-col gap-4 group"
+            >
+              <RouterLink
+                :to="`/product/${product.id}`"
+                class="no-underline text-inherit flex flex-col gap-4"
+              >
+                <div class="aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4">
+                  <img
+                    v-if="product.image"
+                    :alt="product.alt"
+                    class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
+                    :src="product.image"
+                  >
+                  <span
+                    v-else
+                    class="material-symbols-outlined text-on-surface-variant text-[48px] opacity-40"
+                    aria-hidden="true"
+                  >image</span>
+                  <div
+                    class="absolute top-4 left-4 bg-primary text-on-primary px-3 py-1 font-label-caps text-[10px] uppercase tracking-widest"
+                  >
+                    {{ product.badge || 'Min 5' }}
+                  </div>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <div class="flex justify-between items-start gap-3">
+                    <h3 class="font-headline-lg-mobile text-[20px] font-medium">{{ product.name }}</h3>
+                    <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(product.price) }}</span>
+                  </div>
+                  <p class="font-label-caps text-[11px] uppercase tracking-widest text-primary">
+                    {{ product.label || 'Team pack · Min 5' }}
+                  </p>
+                  <p class="text-on-surface-variant text-sm line-clamp-2">
+                    {{ product.desc || 'Sold as a team package — order at least 5 cards.' }}
+                  </p>
+                </div>
+              </RouterLink>
+              <button
+                type="button"
+                class="w-full border border-primary text-primary py-4 font-button-text uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-colors"
+                @click="addProduct(product.id, product.name)"
+              >
+                Add 5 to Cart
               </button>
             </article>
           </div>
@@ -440,7 +531,14 @@ onUnmounted(() => {
               class="text-left text-on-surface hover:opacity-70"
               @click="scrollToShop"
             >
-              Connect Cards
+              Connect Solo
+            </button>
+            <button
+              type="button"
+              class="text-left text-on-surface hover:opacity-70"
+              @click="scrollToTeam"
+            >
+              Connect Team
             </button>
             <RouterLink to="/table-top" class="text-on-surface no-underline hover:opacity-70">
               Table Top Tap

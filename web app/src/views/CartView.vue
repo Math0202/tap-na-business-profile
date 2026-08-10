@@ -61,13 +61,18 @@ function showToast(msg) {
 
 function shopAll() {
   menuOpen.value = false
-  router.push({ path: '/', hash: '#business-cards' })
+  router.push({ path: '/', hash: '#connect-solo' })
 }
 
 function bump(id, delta) {
   const line = lines.value.find((l) => l.id === id)
   if (!line) return
-  setCartQty(id, line.qty + delta)
+  const next = line.qty + delta
+  if (delta < 0 && next < (line.minQty || 1)) {
+    removeFromCart(id)
+    return
+  }
+  setCartQty(id, next)
 }
 
 function openCheckout() {
@@ -205,7 +210,13 @@ async function placeOrder() {
                       {{ line.name }}
                     </h3>
                     <p class="text-on-surface-variant text-sm line-clamp-1">{{ line.desc }}</p>
-                    <p class="font-label-caps text-[11px] text-ink-muted uppercase mt-1">
+                    <p
+                      v-if="line.minQty > 1"
+                      class="font-label-caps text-[11px] text-primary uppercase mt-1"
+                    >
+                      Team pack · Min {{ line.minQty }}
+                    </p>
+                    <p v-else class="font-label-caps text-[11px] text-ink-muted uppercase mt-1">
                       {{ line.category }}
                     </p>
                   </div>

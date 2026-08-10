@@ -141,8 +141,29 @@ export function getProduct(id) {
   return listShopProducts({ includeInactive: true }).find((p) => p.id === id) || null
 }
 
+/** Business + Executive are team packs — minimum order quantity. */
+export const TEAM_CARD_IDS = new Set(['black-card', 'black-card-front'])
+
+export function isTeamCard(productId) {
+  return TEAM_CARD_IDS.has(String(productId || ''))
+}
+
+export function getMinQty(productId) {
+  return isTeamCard(productId) ? 5 : 1
+}
+
 export function businessCards() {
   return loadShopCatalog().filter((p) => p.section === 'business-cards')
+}
+
+/** Professional / individual Connect cards (min 1). */
+export function connectSoloCards() {
+  return businessCards().filter((p) => !isTeamCard(p.id))
+}
+
+/** Business + Executive team packs (min 5). */
+export function connectTeamCards() {
+  return businessCards().filter((p) => isTeamCard(p.id))
 }
 
 export function tableBrochures() {

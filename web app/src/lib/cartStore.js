@@ -3,11 +3,18 @@
  */
 
 import { computed, ref } from 'vue'
-import { getProduct } from './shopCatalog'
+import { getMinQty, getProduct } from './shopCatalog'
 
 const CART_KEY = 'tapna_shop_cart'
 
 const items = ref(load())
+
+function clampQty(productId, qty) {
+  const min = getMinQty(productId)
+  const n = Math.floor(Number(qty) || 0)
+  if (n <= 0) return 0
+  return Math.min(99, Math.max(min, n))
+}
 
 function load() {
   try {
@@ -16,7 +23,7 @@ function load() {
     return raw
       .filter((row) => row && typeof row.id === 'string' && Number(row.qty) > 0)
       .filter((row) => getProduct(row.id))
-      .map((row) => ({ id: row.id, qty: Math.min(99, Math.max(1, Math.floor(Number(row.qty) || 1))) }))
+      .map((row) => ({ id: row.id, qty: clampQty(row.id, row.qty) || getMinQty(row.id) }))
   } catch {
     return []
   }
@@ -38,6 +45,7 @@ export const cartLines = computed(() =>
       return {
         ...product,
         qty: row.qty,
+        minQty: getMinQty(row.id),
         lineTotal: product.price * row.qty,
       }
     })
@@ -52,13 +60,16 @@ export const cartSubtotal = computed(() =>
   cartLines.value.reduce((sum, line) => sum + line.lineTotal, 0)
 )
 
-export function addToCart(productId, qty = 1) {
+export function addToCart(productId, qty) {
   const product = getProduct(productId)
   if (!product) return false
-  const amount = Math.min(99, Math.max(1, Math.floor(Number(qty) || 1)))
+  const min = getMinQty(productId)
+  const requested = qty == null ? min : Math.floor(Number(qty) || 0)
+  const amount = clampQty(productId, Math.max(min, requested))
+  if (!amount) return false
   const existing = items.value.find((row) => row.id === productId)
   if (existing) {
-    existing.qty = Math.min(99, existing.qty + amount)
+    existing.qty = clampQty(productId, existing.qty + amount)
   } else {
     items.value.push({ id: productId, qty: amount })
   }
@@ -70,10 +81,11 @@ export function setCartQty(productId, qty) {
   const next = Math.floor(Number(qty) || 0)
   const idx = items.value.findIndex((row) => row.id === productId)
   if (idx < 0) return
-  if (next <= 0) {
+  const min = getMinQty(productId)
+  if (next <= 0 || next < min) {
     items.value.splice(idx, 1)
   } else {
-    items.value[idx].qty = Math.min(99, next)
+    items.value[idx].qty = clampQty(productId, next)
   }
   persist()
 }
