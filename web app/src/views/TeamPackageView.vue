@@ -40,6 +40,32 @@ const businessProduct = computed(() => getProduct(BUSINESS_CARD_ID))
 const executiveProduct = computed(() => getProduct(EXECUTIVE_CARD_ID))
 const teamTotal = computed(() => businessQty.value + executiveQty.value)
 const subdomainEligible = computed(() => isTeamSubdomainEligible(executiveQty.value))
+const teamMixCheck = computed(() => validateTeamMix(businessQty.value, executiveQty.value))
+const cardsNeededForMin = computed(() => Math.max(0, TEAM_PACKAGE_MIN - teamTotal.value))
+const mixStatusLabel = computed(() => {
+  if (teamTotal.value < TEAM_PACKAGE_MIN) {
+    const n = cardsNeededForMin.value
+    return `Add ${n} more card${n === 1 ? '' : 's'} to reach the ${TEAM_PACKAGE_MIN}-card minimum`
+  }
+  if (!teamMixCheck.value.ok) return 'Adjust the mix to continue'
+  return `${teamTotal.value} cards · ready to order`
+})
+const mixHint = computed(() => {
+  if (teamTotal.value < TEAM_PACKAGE_MIN) {
+    return `Team packages start at ${TEAM_PACKAGE_MIN} cards. Use +/− or a quick start below.`
+  }
+  if (isTeamExecutiveBridge(teamTotal.value)) {
+    return `Cards 11–${TEAM_FREE_MIX_AFTER} must be Executive. After that you can mix freely again.`
+  }
+  if (executiveQty.value === 0 && businessQty.value >= TEAM_BUSINESS_ALONE_MAX) {
+    return `Business alone tops out at ${TEAM_BUSINESS_ALONE_MAX}. Add Executive to grow further.`
+  }
+  if (!subdomainEligible.value) {
+    const need = TEAM_EXEC_SUBDOMAIN_MIN - executiveQty.value
+    return `Add ${need} more Executive card${need === 1 ? '' : 's'} to unlock an optional company subdomain.`
+  }
+  return 'Optional company subdomain unlocked below.'
+})
 const subtotal = computed(
   () =>
     (businessProduct.value?.price || 0) * businessQty.value +
@@ -133,6 +159,20 @@ function bumpExecutive(delta) {
     return
   }
   executiveQty.value = next
+  error.value = ''
+}
+
+function setTeamMix(business, executive) {
+  const b = Math.max(0, Math.floor(Number(business) || 0))
+  const e = Math.max(0, Math.floor(Number(executive) || 0))
+  const check = validateTeamMix(b, e)
+  if (!check.ok) {
+    error.value = check.error
+    showToast(check.error)
+    return
+  }
+  businessQty.value = b
+  executiveQty.value = e
   error.value = ''
 }
 
@@ -331,46 +371,122 @@ onUnmounted(() => {
           <!-- Mix builder -->
           <section class="bg-surface-container rounded-xl p-6 md:p-8 flex flex-col gap-6 max-w-3xl">
             <div class="flex flex-col gap-1">
-              <h2 class="font-label-caps text-label-caps uppercase tracking-widest">Build your mix</h2>
-              <p class="text-on-surface-variant text-sm">
-                Mix freely. Business alone max {{ TEAM_BUSINESS_ALONE_MAX }}. Total min {{ TEAM_PACKAGE_MIN }}.
-                Cards 11–{{ TEAM_FREE_MIX_AFTER }} must be Executive; after that mix freely.
+              <h2 class="font-label-caps text-label-caps uppercase tracking-widest">Choose your cards</h2>
+              <p
+                class="text-sm font-medium leading-snug"
+                :class="teamMixCheck.ok ? 'text-on-surface' : 'text-amber-800'"
+                aria-live="polite"
+              >
+                {{ mixStatusLabel }}
               </p>
+              <p class="text-on-surface-variant text-sm">{{ mixHint }}</p>
             </div>
 
-            <div class="flex flex-col gap-5 divide-y divide-border-subtle">
-              <div class="flex items-center justify-between gap-4 pt-0">
-                <div class="min-w-0">
-                  <p class="font-medium">{{ businessProduct?.name || 'Business' }}</p>
-                  <p class="font-label-caps text-[10px] uppercase tracking-widest text-ink-muted">
-                    {{ formatPrice(businessProduct?.price || 0) }} each
-                  </p>
+            <div class="flex flex-wrap gap-2" role="group" aria-label="Quick start mixes">
+              <button
+                type="button"
+                class="px-3 py-2 rounded-full border text-[11px] font-medium transition-colors"
+                :class="businessQty === 5 && executiveQty === 0 ? 'border-primary bg-primary text-on-primary' : 'border-border-subtle bg-surface hover:border-primary'"
+                @click="setTeamMix(5, 0)"
+              >
+                5 Business
+              </button>
+              <button
+                type="button"
+                class="px-3 py-2 rounded-full border text-[11px] font-medium transition-colors"
+                :class="businessQty === 0 && executiveQty === 5 ? 'border-primary bg-primary text-on-primary' : 'border-border-subtle bg-surface hover:border-primary'"
+                @click="setTeamMix(0, 5)"
+              >
+                5 Executive
+              </button>
+              <button
+                type="button"
+                class="px-3 py-2 rounded-full border text-[11px] font-medium transition-colors"
+                :class="businessQty === 2 && executiveQty === 3 ? 'border-primary bg-primary text-on-primary' : 'border-border-subtle bg-surface hover:border-primary'"
+                @click="setTeamMix(2, 3)"
+              >
+                2 Business + 3 Executive
+              </button>
+            </div>
+
+            <div class="flex flex-col gap-3">
+              <div class="rounded-xl border border-border-subtle bg-surface p-4 flex flex-col gap-3">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="font-medium text-[15px]">Business</p>
+                    <p class="text-[12px] text-on-surface-variant mt-0.5">Charcoal · logo black &amp; white</p>
+                    <p class="text-[12px] text-on-surface mt-1">{{ formatPrice(businessProduct?.price || 0) }} each</p>
+                  </div>
+                  <div class="text-right shrink-0">
+                    <p class="font-label-caps text-[9px] uppercase tracking-widest text-ink-muted">Line total</p>
+                    <p class="text-[14px] font-medium mt-0.5">{{ formatPrice((businessProduct?.price || 0) * businessQty) }}</p>
+                  </div>
                 </div>
-                <div class="inline-flex items-center border border-border-subtle rounded-full overflow-hidden bg-surface">
-                  <button type="button" class="w-10 h-10 flex items-center justify-center" aria-label="Decrease Business" @click="bumpBusiness(-1)">
-                    <span class="material-symbols-outlined text-[18px]">remove</span>
-                  </button>
-                  <span class="w-10 text-center font-label-caps text-[12px]">{{ businessQty }}</span>
-                  <button type="button" class="w-10 h-10 flex items-center justify-center" aria-label="Increase Business" @click="bumpBusiness(1)">
-                    <span class="material-symbols-outlined text-[18px]">add</span>
-                  </button>
+                <div class="flex items-center justify-between gap-3">
+                  <span class="text-[12px] text-on-surface-variant">How many?</span>
+                  <div class="inline-flex items-center border border-border-subtle rounded-full overflow-hidden bg-surface-container">
+                    <button
+                      type="button"
+                      class="w-10 h-10 flex items-center justify-center disabled:opacity-35"
+                      aria-label="Remove one Business card"
+                      :disabled="businessQty <= 0"
+                      @click="bumpBusiness(-1)"
+                    >
+                      <span class="material-symbols-outlined text-[18px]" aria-hidden="true">remove</span>
+                    </button>
+                    <span class="min-w-[4.25rem] px-1 text-center text-[13px] font-medium tabular-nums" aria-live="polite">
+                      {{ businessQty }}
+                      <span class="block text-[9px] font-label-caps uppercase tracking-widest text-ink-muted font-normal -mt-0.5">cards</span>
+                    </span>
+                    <button
+                      type="button"
+                      class="w-10 h-10 flex items-center justify-center"
+                      aria-label="Add one Business card"
+                      @click="bumpBusiness(1)"
+                    >
+                      <span class="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
+                    </button>
+                  </div>
                 </div>
               </div>
-              <div class="flex items-center justify-between gap-4 pt-5">
-                <div class="min-w-0">
-                  <p class="font-medium">{{ executiveProduct?.name || 'Executive' }}</p>
-                  <p class="font-label-caps text-[10px] uppercase tracking-widest text-ink-muted">
-                    {{ formatPrice(executiveProduct?.price || 0) }} each
-                  </p>
+
+              <div class="rounded-xl border border-border-subtle bg-surface p-4 flex flex-col gap-3">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="font-medium text-[15px]">Executive</p>
+                    <p class="text-[12px] text-on-surface-variant mt-0.5">Matte black · logo black &amp; white</p>
+                    <p class="text-[12px] text-on-surface mt-1">{{ formatPrice(executiveProduct?.price || 0) }} each</p>
+                  </div>
+                  <div class="text-right shrink-0">
+                    <p class="font-label-caps text-[9px] uppercase tracking-widest text-ink-muted">Line total</p>
+                    <p class="text-[14px] font-medium mt-0.5">{{ formatPrice((executiveProduct?.price || 0) * executiveQty) }}</p>
+                  </div>
                 </div>
-                <div class="inline-flex items-center border border-border-subtle rounded-full overflow-hidden bg-surface">
-                  <button type="button" class="w-10 h-10 flex items-center justify-center" aria-label="Decrease Executive" @click="bumpExecutive(-1)">
-                    <span class="material-symbols-outlined text-[18px]">remove</span>
-                  </button>
-                  <span class="w-10 text-center font-label-caps text-[12px]">{{ executiveQty }}</span>
-                  <button type="button" class="w-10 h-10 flex items-center justify-center" aria-label="Increase Executive" @click="bumpExecutive(1)">
-                    <span class="material-symbols-outlined text-[18px]">add</span>
-                  </button>
+                <div class="flex items-center justify-between gap-3">
+                  <span class="text-[12px] text-on-surface-variant">How many?</span>
+                  <div class="inline-flex items-center border border-border-subtle rounded-full overflow-hidden bg-surface-container">
+                    <button
+                      type="button"
+                      class="w-10 h-10 flex items-center justify-center disabled:opacity-35"
+                      aria-label="Remove one Executive card"
+                      :disabled="executiveQty <= 0"
+                      @click="bumpExecutive(-1)"
+                    >
+                      <span class="material-symbols-outlined text-[18px]" aria-hidden="true">remove</span>
+                    </button>
+                    <span class="min-w-[4.25rem] px-1 text-center text-[13px] font-medium tabular-nums" aria-live="polite">
+                      {{ executiveQty }}
+                      <span class="block text-[9px] font-label-caps uppercase tracking-widest text-ink-muted font-normal -mt-0.5">cards</span>
+                    </span>
+                    <button
+                      type="button"
+                      class="w-10 h-10 flex items-center justify-center"
+                      aria-label="Add one Executive card"
+                      @click="bumpExecutive(1)"
+                    >
+                      <span class="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -378,7 +494,7 @@ onUnmounted(() => {
             <div class="flex flex-col gap-2 text-sm">
               <div class="flex justify-between">
                 <span class="text-on-surface-variant">Mix</span>
-                <span class="font-label-caps text-[11px] uppercase tracking-widest">{{ businessQty }} : {{ executiveQty }}</span>
+                <span class="font-label-caps text-[11px] uppercase tracking-widest">{{ businessQty }} Business · {{ executiveQty }} Executive</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-on-surface-variant">Total cards</span>

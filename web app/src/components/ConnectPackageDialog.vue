@@ -66,6 +66,33 @@ const teamSubtotal = computed(
 const subtotal = computed(() => (isTeam.value ? teamSubtotal.value : soloSubtotal.value))
 const title = computed(() => (isTeam.value ? 'Connect Team package' : 'Connect Solo'))
 const itemCount = computed(() => (isTeam.value ? teamTotal.value : soloQty.value))
+const cardsNeededForMin = computed(() => Math.max(0, TEAM_PACKAGE_MIN - teamTotal.value))
+const mixStatusLabel = computed(() => {
+  if (teamTotal.value < TEAM_PACKAGE_MIN) {
+    const n = cardsNeededForMin.value
+    return `Add ${n} more card${n === 1 ? '' : 's'} to reach the ${TEAM_PACKAGE_MIN}-card minimum`
+  }
+  if (!teamMixCheck.value.ok) return 'Adjust the mix to continue'
+  return `${teamTotal.value} cards · ready to order`
+})
+const mixHint = computed(() => {
+  if (teamTotal.value < TEAM_PACKAGE_MIN) {
+    return `Team packages start at ${TEAM_PACKAGE_MIN} cards. Use +/− or a quick start below.`
+  }
+  if (isTeamExecutiveBridge(teamTotal.value)) {
+    return `Cards 11–${TEAM_FREE_MIX_AFTER} must be Executive. After that you can mix freely again.`
+  }
+  if (executiveQty.value === 0 && businessQty.value >= TEAM_BUSINESS_ALONE_MAX) {
+    return `Business alone tops out at ${TEAM_BUSINESS_ALONE_MAX}. Add Executive to grow further.`
+  }
+  if (!subdomainEligible.value) {
+    const need = TEAM_EXEC_SUBDOMAIN_MIN - executiveQty.value
+    return `Add ${need} more Executive card${need === 1 ? '' : 's'} to unlock an optional company subdomain.`
+  }
+  return 'Optional company subdomain unlocked in the summary below.'
+})
+const businessLineTotal = computed(() => (businessProduct.value?.price || 0) * businessQty.value)
+const executiveLineTotal = computed(() => (executiveProduct.value?.price || 0) * executiveQty.value)
 
 
 let previousHtmlOverflow = ''
@@ -182,6 +209,20 @@ function bumpExecutive(delta) {
     return
   }
   executiveQty.value = next
+  error.value = ''
+  notice.value = ''
+}
+function setTeamMix(business, executive) {
+  const b = Math.max(0, Math.floor(Number(business) || 0))
+  const e = Math.max(0, Math.floor(Number(executive) || 0))
+  const check = validateTeamMix(b, e)
+  if (!check.ok) {
+    error.value = check.error
+    showNotice(check.error)
+    return
+  }
+  businessQty.value = b
+  executiveQty.value = e
   error.value = ''
   notice.value = ''
 }
@@ -318,7 +359,7 @@ async function requestQuote() {
           <div class="min-w-0">
             <h2 class="font-headline-lg-mobile text-[22px] font-medium uppercase tracking-tight">{{ title }}</h2>
             <p class="text-on-surface-variant text-sm mt-1">
-              {{ isTeam ? `Business & Executive · min ${TEAM_PACKAGE_MIN} · Business alone max ${TEAM_BUSINESS_ALONE_MAX}` : `Professional Class · 1–${SOLO_PACKAGE_MAX} cards` }}
+              {{ isTeam ? 'Pick how many Business and Executive cards you need (min 5 total)' : `Professional Class · 1–${SOLO_PACKAGE_MAX} cards` }}
             </p>
           </div>
           <button
@@ -344,12 +385,15 @@ async function requestQuote() {
                   <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(soloSubtotal) }}</span>
                 </div>
                 <div class="inline-flex items-center border border-border-subtle rounded-full overflow-hidden self-start">
-                  <button type="button" class="w-10 h-10 flex items-center justify-center" aria-label="Decrease" @click="bumpSolo(-1)">
-                    <span class="material-symbols-outlined text-[18px]">remove</span>
+                  <button type="button" class="w-10 h-10 flex items-center justify-center" aria-label="Decrease quantity" @click="bumpSolo(-1)">
+                    <span class="material-symbols-outlined text-[18px]" aria-hidden="true">remove</span>
                   </button>
-                  <span class="w-10 text-center font-label-caps text-[12px]">{{ soloQty }}</span>
-                  <button type="button" class="w-10 h-10 flex items-center justify-center" aria-label="Increase" @click="bumpSolo(1)">
-                    <span class="material-symbols-outlined text-[18px]">add</span>
+                  <span class="min-w-[3.5rem] px-1 text-center text-[13px] font-medium tabular-nums" aria-live="polite">
+                    {{ soloQty }}
+                    <span class="block text-[9px] font-label-caps uppercase tracking-widest text-ink-muted font-normal -mt-0.5">cards</span>
+                  </span>
+                  <button type="button" class="w-10 h-10 flex items-center justify-center" aria-label="Increase quantity" @click="bumpSolo(1)">
+                    <span class="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
                   </button>
                 </div>
               </div>
@@ -423,52 +467,143 @@ async function requestQuote() {
 
           <!-- Team lines -->
           <template v-else-if="isTeam">
-            <ul class="flex flex-col divide-y divide-border-subtle border-y border-border-subtle list-none p-0 m-0">
-              <li v-if="businessProduct" class="flex gap-3 py-4">
-                <div class="w-16 h-16 shrink-0 bg-surface-container rounded-lg overflow-hidden flex items-center justify-center p-1.5">
-                  <img :src="businessProduct.image" :alt="businessProduct.name" class="w-full h-full object-contain">
-                </div>
-                <div class="flex-1 min-w-0 flex flex-col gap-2">
-                  <div class="flex justify-between gap-2">
-                    <h3 class="text-[15px] font-medium truncate">{{ businessProduct.name }}</h3>
-                    <span class="font-label-caps text-[11px] shrink-0">{{ formatPrice((businessProduct.price || 0) * businessQty) }}</span>
+            <section class="flex flex-col gap-4" aria-labelledby="team-mix-heading">
+              <div class="flex flex-col gap-1">
+                <h3 id="team-mix-heading" class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">
+                  Choose your cards
+                </h3>
+                <p
+                  class="text-sm font-medium leading-snug"
+                  :class="teamMixCheck.ok ? 'text-on-surface' : 'text-amber-800'"
+                  aria-live="polite"
+                >
+                  {{ mixStatusLabel }}
+                </p>
+                <p class="text-[12px] text-on-surface-variant leading-snug">{{ mixHint }}</p>
+              </div>
+
+              <div class="flex flex-wrap gap-2" role="group" aria-label="Quick start mixes">
+                <button
+                  type="button"
+                  class="px-3 py-2 rounded-full border text-[11px] font-medium transition-colors"
+                  :class="businessQty === 5 && executiveQty === 0 ? 'border-primary bg-primary text-on-primary' : 'border-border-subtle bg-surface hover:border-primary'"
+                  @click="setTeamMix(5, 0)"
+                >
+                  5 Business
+                </button>
+                <button
+                  type="button"
+                  class="px-3 py-2 rounded-full border text-[11px] font-medium transition-colors"
+                  :class="businessQty === 0 && executiveQty === 5 ? 'border-primary bg-primary text-on-primary' : 'border-border-subtle bg-surface hover:border-primary'"
+                  @click="setTeamMix(0, 5)"
+                >
+                  5 Executive
+                </button>
+                <button
+                  type="button"
+                  class="px-3 py-2 rounded-full border text-[11px] font-medium transition-colors"
+                  :class="businessQty === 2 && executiveQty === 3 ? 'border-primary bg-primary text-on-primary' : 'border-border-subtle bg-surface hover:border-primary'"
+                  @click="setTeamMix(2, 3)"
+                >
+                  2 Business + 3 Executive
+                </button>
+              </div>
+
+              <ul class="flex flex-col gap-3 list-none p-0 m-0">
+                <li v-if="businessProduct" class="rounded-xl border border-border-subtle bg-surface-container-lowest p-3.5 flex gap-3">
+                  <div class="w-16 h-16 shrink-0 bg-surface-container rounded-lg overflow-hidden flex items-center justify-center p-1.5" aria-hidden="true">
+                    <img :src="businessProduct.image" alt="" class="w-full h-full object-contain">
                   </div>
-                  <div class="inline-flex items-center border border-border-subtle rounded-full overflow-hidden self-start">
-                    <button type="button" class="w-9 h-9 flex items-center justify-center" @click="bumpBusiness(-1)">
-                      <span class="material-symbols-outlined text-[16px]">remove</span>
-                    </button>
-                    <span class="w-8 text-center font-label-caps text-[11px]">{{ businessQty }}</span>
-                    <button type="button" class="w-9 h-9 flex items-center justify-center" @click="bumpBusiness(1)">
-                      <span class="material-symbols-outlined text-[16px]">add</span>
-                    </button>
+                  <div class="flex-1 min-w-0 flex flex-col gap-3">
+                    <div class="flex justify-between gap-3 items-start">
+                      <div class="min-w-0">
+                        <p class="text-[15px] font-medium leading-tight">Business</p>
+                        <p class="text-[12px] text-on-surface-variant mt-0.5">Charcoal · logo black &amp; white</p>
+                        <p class="text-[12px] text-on-surface mt-1">{{ formatPrice(businessProduct.price || 0) }} each</p>
+                      </div>
+                      <div class="text-right shrink-0">
+                        <p class="font-label-caps text-[9px] uppercase tracking-widest text-ink-muted">Line total</p>
+                        <p class="text-[14px] font-medium mt-0.5">{{ formatPrice(businessLineTotal) }}</p>
+                      </div>
+                    </div>
+                    <div class="flex items-center justify-between gap-3">
+                      <span class="text-[12px] text-on-surface-variant">How many?</span>
+                      <div class="inline-flex items-center border border-border-subtle rounded-full overflow-hidden bg-surface">
+                        <button
+                          type="button"
+                          class="w-10 h-10 flex items-center justify-center disabled:opacity-35"
+                          aria-label="Remove one Business card"
+                          :disabled="businessQty <= 0"
+                          @click="bumpBusiness(-1)"
+                        >
+                          <span class="material-symbols-outlined text-[18px]" aria-hidden="true">remove</span>
+                        </button>
+                        <span class="min-w-[4.25rem] px-1 text-center text-[13px] font-medium tabular-nums" aria-live="polite">
+                          {{ businessQty }}
+                          <span class="block text-[9px] font-label-caps uppercase tracking-widest text-ink-muted font-normal -mt-0.5">cards</span>
+                        </span>
+                        <button
+                          type="button"
+                          class="w-10 h-10 flex items-center justify-center"
+                          aria-label="Add one Business card"
+                          @click="bumpBusiness(1)"
+                        >
+                          <span class="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </li>
-              <li v-if="executiveProduct" class="flex gap-3 py-4">
-                <div class="w-16 h-16 shrink-0 bg-surface-container rounded-lg overflow-hidden flex items-center justify-center p-1.5">
-                  <img :src="executiveProduct.image" :alt="executiveProduct.name" class="w-full h-full object-contain">
-                </div>
-                <div class="flex-1 min-w-0 flex flex-col gap-2">
-                  <div class="flex justify-between gap-2">
-                    <h3 class="text-[15px] font-medium truncate">{{ executiveProduct.name }}</h3>
-                    <span class="font-label-caps text-[11px] shrink-0">{{ formatPrice((executiveProduct.price || 0) * executiveQty) }}</span>
+                </li>
+                <li v-if="executiveProduct" class="rounded-xl border border-border-subtle bg-surface-container-lowest p-3.5 flex gap-3">
+                  <div class="w-16 h-16 shrink-0 bg-surface-container rounded-lg overflow-hidden flex items-center justify-center p-1.5" aria-hidden="true">
+                    <img :src="executiveProduct.image" alt="" class="w-full h-full object-contain">
                   </div>
-                  <div class="inline-flex items-center border border-border-subtle rounded-full overflow-hidden self-start">
-                    <button type="button" class="w-9 h-9 flex items-center justify-center" @click="bumpExecutive(-1)">
-                      <span class="material-symbols-outlined text-[16px]">remove</span>
-                    </button>
-                    <span class="w-8 text-center font-label-caps text-[11px]">{{ executiveQty }}</span>
-                    <button type="button" class="w-9 h-9 flex items-center justify-center" @click="bumpExecutive(1)">
-                      <span class="material-symbols-outlined text-[16px]">add</span>
-                    </button>
+                  <div class="flex-1 min-w-0 flex flex-col gap-3">
+                    <div class="flex justify-between gap-3 items-start">
+                      <div class="min-w-0">
+                        <p class="text-[15px] font-medium leading-tight">Executive</p>
+                        <p class="text-[12px] text-on-surface-variant mt-0.5">Matte black · logo black &amp; white</p>
+                        <p class="text-[12px] text-on-surface mt-1">{{ formatPrice(executiveProduct.price || 0) }} each</p>
+                      </div>
+                      <div class="text-right shrink-0">
+                        <p class="font-label-caps text-[9px] uppercase tracking-widest text-ink-muted">Line total</p>
+                        <p class="text-[14px] font-medium mt-0.5">{{ formatPrice(executiveLineTotal) }}</p>
+                      </div>
+                    </div>
+                    <div class="flex items-center justify-between gap-3">
+                      <span class="text-[12px] text-on-surface-variant">How many?</span>
+                      <div class="inline-flex items-center border border-border-subtle rounded-full overflow-hidden bg-surface">
+                        <button
+                          type="button"
+                          class="w-10 h-10 flex items-center justify-center disabled:opacity-35"
+                          aria-label="Remove one Executive card"
+                          :disabled="executiveQty <= 0"
+                          @click="bumpExecutive(-1)"
+                        >
+                          <span class="material-symbols-outlined text-[18px]" aria-hidden="true">remove</span>
+                        </button>
+                        <span class="min-w-[4.25rem] px-1 text-center text-[13px] font-medium tabular-nums" aria-live="polite">
+                          {{ executiveQty }}
+                          <span class="block text-[9px] font-label-caps uppercase tracking-widest text-ink-muted font-normal -mt-0.5">cards</span>
+                        </span>
+                        <button
+                          type="button"
+                          class="w-10 h-10 flex items-center justify-center"
+                          aria-label="Add one Executive card"
+                          @click="bumpExecutive(1)"
+                        >
+                          <span class="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </li>
-            </ul>
+                </li>
+              </ul>
+            </section>
             <div class="bg-surface-container rounded-xl p-4 flex flex-col gap-3">
               <div class="flex items-baseline justify-between gap-3">
                 <h3 class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">Summary</h3>
-                <span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface">{{ teamTotal }} cards · {{ businessQty }}:{{ executiveQty }}</span>
+                <span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface">{{ teamTotal }} cards · {{ businessQty }} Business · {{ executiveQty }} Executive</span>
               </div>
               <table class="w-full text-left text-[12px] border-collapse">
                 <thead>
