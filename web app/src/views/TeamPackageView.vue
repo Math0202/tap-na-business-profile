@@ -9,16 +9,16 @@ import {
   EXECUTIVE_CARD_ID,
   TEAM_BUSINESS_ALONE_MAX,
   TEAM_EXEC_SUBDOMAIN_MIN,
-  TEAM_EXEC_SCALE_MIN,
   TEAM_FREE_MIX_AFTER,
   TEAM_PACKAGE_MIN,
-  TEAM_SCALE_THRESHOLD,
   isTeamExecutiveBridge,
   formatPrice,
   getProduct,
   initialTeamMix,
   isTeamSubdomainEligible,
   loadShopProducts,
+  canApplyTeamMix,
+  isTeamMixOrderReady,
   validateTeamMix
 } from '../lib/shopCatalog'
 import { setPageSeo } from '../lib/seo'
@@ -40,22 +40,23 @@ const businessProduct = computed(() => getProduct(BUSINESS_CARD_ID))
 const executiveProduct = computed(() => getProduct(EXECUTIVE_CARD_ID))
 const teamTotal = computed(() => businessQty.value + executiveQty.value)
 const subdomainEligible = computed(() => isTeamSubdomainEligible(executiveQty.value))
-const teamMixCheck = computed(() => validateTeamMix(businessQty.value, executiveQty.value))
+const teamOrderReady = computed(() => isTeamMixOrderReady(businessQty.value, executiveQty.value))
+const inExecutiveBridge = computed(() => isTeamExecutiveBridge(teamTotal.value))
 const cardsNeededForMin = computed(() => Math.max(0, TEAM_PACKAGE_MIN - teamTotal.value))
 const mixStatusLabel = computed(() => {
   if (teamTotal.value < TEAM_PACKAGE_MIN) {
     const n = cardsNeededForMin.value
     return `Add ${n} more card${n === 1 ? '' : 's'} to reach the ${TEAM_PACKAGE_MIN}-card minimum`
   }
-  if (!teamMixCheck.value.ok) return 'Adjust the mix to continue'
+  if (!teamOrderReady.value) return 'Adjust the mix to continue'
   return `${teamTotal.value} cards · ready to order`
 })
 const mixHint = computed(() => {
   if (teamTotal.value < TEAM_PACKAGE_MIN) {
     return `Team packages start at ${TEAM_PACKAGE_MIN} cards. Use +/− or a quick start below.`
   }
-  if (isTeamExecutiveBridge(teamTotal.value)) {
-    return `Cards 11–${TEAM_FREE_MIX_AFTER} must be Executive. After that you can mix freely again.`
+  if (inExecutiveBridge.value) {
+    return `Next cards through ${TEAM_FREE_MIX_AFTER} must be Executive. Business + is paused until then.`
   }
   if (executiveQty.value === 0 && businessQty.value >= TEAM_BUSINESS_ALONE_MAX) {
     return `Business alone tops out at ${TEAM_BUSINESS_ALONE_MAX}. Add Executive to grow further.`
@@ -65,6 +66,42 @@ const mixHint = computed(() => {
     return `Add ${need} more Executive card${need === 1 ? '' : 's'} to unlock an optional company subdomain.`
   }
   return 'Optional company subdomain unlocked below.'
+})
+const canAddBusiness = computed(() => {
+  if (inExecutiveBridge.value) return false
+  return canApplyTeamMix(businessQty.value + 1, executiveQty.value)
+})
+const canRemoveBusiness = computed(() => businessQty.value > 0)
+const canAddExecutive = computed(() => canApplyTeamMix(businessQty.value, executiveQty.value + 1))
+const canRemoveExecutive = computed(
+  () => executiveQty.value > 0 && canApplyTeamMix(businessQty.value, executiveQty.value - 1)
+)
+const businessAddTitle = computed(() => {
+  if (inExecutiveBridge.value) {
+    return `Cards 11–${TEAM_FREE_MIX_AFTER} must be Executive — use + on Executive`
+  }
+  if (!canAddBusiness.value) {
+    return validateTeamMix(businessQty.value + 1, executiveQty.value, { enforceMin: false }).error || 'Cannot add Business'
+  }
+  return 'Add one Business card'
+})
+const executiveRemoveTitle = computed(() => {
+  if (executiveQty.value <= 0) return 'No Executive cards to remove'
+  if (!canRemoveExecutive.value) {
+    return (
+      validateTeamMix(businessQty.value, executiveQty.value - 1, { enforceMin: false }).error ||
+      'Cannot remove Executive'
+    )
+  }
+  return 'Remove one Executive card'
+})
+const placeOrderLabel = computed(() => {
+  if (teamTotal.value < TEAM_PACKAGE_MIN) {
+    const n = cardsNeededForMin.value
+    return `Add ${n} more card${n === 1 ? '' : 's'} to order`
+  }
+  if (!teamOrderReady.value) return 'Fix mix to order'
+  return 'Place order'
 })
 const subtotal = computed(
   () =>
@@ -134,13 +171,13 @@ function showToast(msg, ms = 4500) {
 }
 
 function bumpBusiness(delta) {
-  if (delta > 0 && isTeamExecutiveBridge(teamTotal.value)) {
-    showToast(`Cards 11–${TEAM_FREE_MIX_AFTER} must be Executive. Adding Executive instead.`)
-    bumpExecutive(1)
+  const next = Math.min(99, Math.max(0, businessQty.value + delta))
+  if (next === businessQty.value) return
+  if (delta > 0 && inExecutiveBridge.value) {
+    showToast(`Cards 11–${TEAM_FREE_MIX_AFTER} must be Executive. Use + on Executive instead.`)
     return
   }
-  const next = Math.min(99, Math.max(0, businessQty.value + delta))
-  const check = validateTeamMix(next, executiveQty.value)
+  const check = validateTeamMix(next, executiveQty.value, { enforceMin: false })
   if (!check.ok) {
     error.value = check.error
     showToast(check.error)
@@ -152,7 +189,8 @@ function bumpBusiness(delta) {
 
 function bumpExecutive(delta) {
   const next = Math.min(99, Math.max(0, executiveQty.value + delta))
-  const check = validateTeamMix(businessQty.value, next)
+  if (next === executiveQty.value) return
+  const check = validateTeamMix(businessQty.value, next, { enforceMin: false })
   if (!check.ok) {
     error.value = check.error
     showToast(check.error)
@@ -165,7 +203,7 @@ function bumpExecutive(delta) {
 function setTeamMix(business, executive) {
   const b = Math.max(0, Math.floor(Number(business) || 0))
   const e = Math.max(0, Math.floor(Number(executive) || 0))
-  const check = validateTeamMix(b, e)
+  const check = validateTeamMix(b, e, { enforceMin: true })
   if (!check.ok) {
     error.value = check.error
     showToast(check.error)
@@ -374,7 +412,7 @@ onUnmounted(() => {
               <h2 class="font-label-caps text-label-caps uppercase tracking-widest">Choose your cards</h2>
               <p
                 class="text-sm font-medium leading-snug"
-                :class="teamMixCheck.ok ? 'text-on-surface' : 'text-amber-800'"
+                :class="teamOrderReady ? 'text-on-surface' : 'text-amber-800'"
                 aria-live="polite"
               >
                 {{ mixStatusLabel }}
@@ -429,19 +467,21 @@ onUnmounted(() => {
                       type="button"
                       class="w-10 h-10 flex items-center justify-center disabled:opacity-35"
                       aria-label="Remove one Business card"
-                      :disabled="businessQty <= 0"
+                      :disabled="!canRemoveBusiness"
                       @click="bumpBusiness(-1)"
                     >
                       <span class="material-symbols-outlined text-[18px]" aria-hidden="true">remove</span>
                     </button>
                     <span class="min-w-[4.25rem] px-1 text-center text-[13px] font-medium tabular-nums" aria-live="polite">
                       {{ businessQty }}
-                      <span class="block text-[9px] font-label-caps uppercase tracking-widest text-ink-muted font-normal -mt-0.5">cards</span>
+                      <span class="block text-[9px] font-label-caps uppercase tracking-widest text-ink-muted font-normal -mt-0.5">{{ businessQty === 1 ? 'card' : 'cards' }}</span>
                     </span>
                     <button
                       type="button"
-                      class="w-10 h-10 flex items-center justify-center"
-                      aria-label="Add one Business card"
+                      class="w-10 h-10 flex items-center justify-center disabled:opacity-35"
+                      :aria-label="businessAddTitle"
+                      :title="businessAddTitle"
+                      :disabled="!canAddBusiness"
                       @click="bumpBusiness(1)"
                     >
                       <span class="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
@@ -464,24 +504,29 @@ onUnmounted(() => {
                 </div>
                 <div class="flex items-center justify-between gap-3">
                   <span class="text-[12px] text-on-surface-variant">How many?</span>
-                  <div class="inline-flex items-center border border-border-subtle rounded-full overflow-hidden bg-surface-container">
+                  <div
+                    class="inline-flex items-center border rounded-full overflow-hidden bg-surface-container"
+                    :class="inExecutiveBridge ? 'border-primary' : 'border-border-subtle'"
+                  >
                     <button
                       type="button"
                       class="w-10 h-10 flex items-center justify-center disabled:opacity-35"
-                      aria-label="Remove one Executive card"
-                      :disabled="executiveQty <= 0"
+                      :aria-label="executiveRemoveTitle"
+                      :title="executiveRemoveTitle"
+                      :disabled="!canRemoveExecutive"
                       @click="bumpExecutive(-1)"
                     >
                       <span class="material-symbols-outlined text-[18px]" aria-hidden="true">remove</span>
                     </button>
                     <span class="min-w-[4.25rem] px-1 text-center text-[13px] font-medium tabular-nums" aria-live="polite">
                       {{ executiveQty }}
-                      <span class="block text-[9px] font-label-caps uppercase tracking-widest text-ink-muted font-normal -mt-0.5">cards</span>
+                      <span class="block text-[9px] font-label-caps uppercase tracking-widest text-ink-muted font-normal -mt-0.5">{{ executiveQty === 1 ? 'card' : 'cards' }}</span>
                     </span>
                     <button
                       type="button"
-                      class="w-10 h-10 flex items-center justify-center"
+                      class="w-10 h-10 flex items-center justify-center disabled:opacity-35"
                       aria-label="Add one Executive card"
+                      :disabled="!canAddExecutive"
                       @click="bumpExecutive(1)"
                     >
                       <span class="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
@@ -525,10 +570,11 @@ onUnmounted(() => {
             <div class="flex flex-col sm:flex-row gap-3">
               <button
                 type="button"
-                class="flex-1 bg-primary text-on-primary py-4 font-button-text uppercase tracking-widest hover:opacity-90"
+                class="flex-1 bg-primary text-on-primary py-4 font-button-text uppercase tracking-widest hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                :disabled="!teamOrderReady"
                 @click="openCheckout"
               >
-                Place order
+                {{ placeOrderLabel }}
               </button>
               <RouterLink
                 to="/cart"

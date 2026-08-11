@@ -7,7 +7,6 @@ import {
   TEAM_EXEC_SUBDOMAIN_MIN,
   TEAM_PACKAGE_MIN,
   SOLO_PACKAGE_MAX,
-  TEAM_EXEC_SCALE_MIN,
   TEAM_FREE_MIX_AFTER,
   TEAM_SCALE_THRESHOLD,
   isTeamExecutiveBridge,
@@ -16,6 +15,8 @@ import {
   initialTeamMix,
   isTeamSubdomainEligible,
   minExecutiveForTeamTotal,
+  canApplyTeamMix,
+  isTeamMixOrderReady,
   validateTeamMix
 } from '../lib/shopCatalog'
 import { apiShopOrderQuote } from '../lib/api'
@@ -55,6 +56,8 @@ const businessProduct = computed(() => getProduct(BUSINESS_CARD_ID))
 const executiveProduct = computed(() => getProduct(EXECUTIVE_CARD_ID))
 const teamTotal = computed(() => businessQty.value + executiveQty.value)
 const teamMixCheck = computed(() => validateTeamMix(businessQty.value, executiveQty.value))
+const teamOrderReady = computed(() => isTeamMixOrderReady(businessQty.value, executiveQty.value))
+const inExecutiveBridge = computed(() => isTeamExecutiveBridge(teamTotal.value))
 const minExecutiveNeeded = computed(() => minExecutiveForTeamTotal(teamTotal.value))
 const subdomainEligible = computed(() => isTeamSubdomainEligible(executiveQty.value))
 const soloSubtotal = computed(() => (soloProduct.value?.price || 0) * soloQty.value)
@@ -72,15 +75,15 @@ const mixStatusLabel = computed(() => {
     const n = cardsNeededForMin.value
     return `Add ${n} more card${n === 1 ? '' : 's'} to reach the ${TEAM_PACKAGE_MIN}-card minimum`
   }
-  if (!teamMixCheck.value.ok) return 'Adjust the mix to continue'
+  if (!teamOrderReady.value) return 'Adjust the mix to continue'
   return `${teamTotal.value} cards · ready to order`
 })
 const mixHint = computed(() => {
   if (teamTotal.value < TEAM_PACKAGE_MIN) {
     return `Team packages start at ${TEAM_PACKAGE_MIN} cards. Use +/− or a quick start below.`
   }
-  if (isTeamExecutiveBridge(teamTotal.value)) {
-    return `Cards 11–${TEAM_FREE_MIX_AFTER} must be Executive. After that you can mix freely again.`
+  if (inExecutiveBridge.value) {
+    return `Next cards through ${TEAM_FREE_MIX_AFTER} must be Executive. Business + is paused until then.`
   }
   if (executiveQty.value === 0 && businessQty.value >= TEAM_BUSINESS_ALONE_MAX) {
     return `Business alone tops out at ${TEAM_BUSINESS_ALONE_MAX}. Add Executive to grow further.`
@@ -93,6 +96,49 @@ const mixHint = computed(() => {
 })
 const businessLineTotal = computed(() => (businessProduct.value?.price || 0) * businessQty.value)
 const executiveLineTotal = computed(() => (executiveProduct.value?.price || 0) * executiveQty.value)
+const canAddBusiness = computed(() => {
+  if (inExecutiveBridge.value) return false
+  return canApplyTeamMix(businessQty.value + 1, executiveQty.value)
+})
+const canRemoveBusiness = computed(() => businessQty.value > 0)
+const canAddExecutive = computed(() => canApplyTeamMix(businessQty.value, executiveQty.value + 1))
+const canRemoveExecutive = computed(
+  () => executiveQty.value > 0 && canApplyTeamMix(businessQty.value, executiveQty.value - 1)
+)
+const businessAddTitle = computed(() => {
+  if (inExecutiveBridge.value) {
+    return `Cards 11–${TEAM_FREE_MIX_AFTER} must be Executive — use + on Executive`
+  }
+  if (!canAddBusiness.value) {
+    return validateTeamMix(businessQty.value + 1, executiveQty.value, { enforceMin: false }).error || 'Cannot add Business'
+  }
+  return 'Add one Business card'
+})
+const executiveRemoveTitle = computed(() => {
+  if (executiveQty.value <= 0) return 'No Executive cards to remove'
+  if (!canRemoveExecutive.value) {
+    return (
+      validateTeamMix(businessQty.value, executiveQty.value - 1, { enforceMin: false }).error ||
+      'Cannot remove Executive'
+    )
+  }
+  return 'Remove one Executive card'
+})
+const placeOrderDisabled = computed(() => {
+  if (submitting.value) return true
+  if (isTeam.value && !teamOrderReady.value) return true
+  return false
+})
+const placeOrderLabel = computed(() => {
+  if (submitting.value) return 'Sending quote…'
+  if (isTeam.value && teamTotal.value < TEAM_PACKAGE_MIN) {
+    const n = cardsNeededForMin.value
+    return `Add ${n} more card${n === 1 ? '' : 's'} to order`
+  }
+  if (isTeam.value && !teamOrderReady.value) return 'Fix mix to order'
+  return 'Place order'
+})
+const compareOpen = ref(false)
 
 
 let previousHtmlOverflow = ''
@@ -133,6 +179,7 @@ watch(
     error.value = ''
     notice.value = ''
     soloLimitOpen.value = false
+    compareOpen.value = false
     subdomain.value = ''
     submitting.value = false
     if (props.mode === 'team') {
@@ -183,14 +230,13 @@ function switchToTeam() {
   emit('switch-to-team')
 }
 function bumpBusiness(delta) {
-  // Cards 11–15 must be Executive, regardless of which + the user taps.
-  if (delta > 0 && isTeamExecutiveBridge(teamTotal.value)) {
-    showNotice(`Cards 11–${TEAM_FREE_MIX_AFTER} must be Executive. Adding Executive instead.`)
-    bumpExecutive(1)
+  const next = Math.min(99, Math.max(0, businessQty.value + delta))
+  if (next === businessQty.value) return
+  if (delta > 0 && inExecutiveBridge.value) {
+    showNotice(`Cards 11–${TEAM_FREE_MIX_AFTER} must be Executive. Use + on Executive instead.`)
     return
   }
-  const next = Math.min(99, Math.max(0, businessQty.value + delta))
-  const check = validateTeamMix(next, executiveQty.value)
+  const check = validateTeamMix(next, executiveQty.value, { enforceMin: false })
   if (!check.ok) {
     error.value = check.error
     showNotice(check.error)
@@ -202,7 +248,8 @@ function bumpBusiness(delta) {
 }
 function bumpExecutive(delta) {
   const next = Math.min(99, Math.max(0, executiveQty.value + delta))
-  const check = validateTeamMix(businessQty.value, next)
+  if (next === executiveQty.value) return
+  const check = validateTeamMix(businessQty.value, next, { enforceMin: false })
   if (!check.ok) {
     error.value = check.error
     showNotice(check.error)
@@ -215,7 +262,7 @@ function bumpExecutive(delta) {
 function setTeamMix(business, executive) {
   const b = Math.max(0, Math.floor(Number(business) || 0))
   const e = Math.max(0, Math.floor(Number(executive) || 0))
-  const check = validateTeamMix(b, e)
+  const check = validateTeamMix(b, e, { enforceMin: true })
   if (!check.ok) {
     error.value = check.error
     showNotice(check.error)
@@ -354,8 +401,8 @@ async function requestQuote() {
         aria-label="Close package dialog"
         @click="close"
       />
-      <div class="relative w-full sm:max-w-lg max-h-[92vh] overflow-y-auto bg-surface text-on-surface rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col">
-        <div class="sticky top-0 z-10 bg-surface/95 backdrop-blur-md border-b border-border-subtle px-5 py-4 flex items-start justify-between gap-3">
+      <div class="relative w-full sm:max-w-lg max-h-[92vh] bg-surface text-on-surface rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div class="shrink-0 z-10 bg-surface/95 backdrop-blur-md border-b border-border-subtle px-5 py-4 flex items-start justify-between gap-3">
           <div class="min-w-0">
             <h2 class="font-headline-lg-mobile text-[22px] font-medium uppercase tracking-tight">{{ title }}</h2>
             <p class="text-on-surface-variant text-sm mt-1">
@@ -368,11 +415,11 @@ async function requestQuote() {
             aria-label="Close"
             @click="close"
           >
-            <span class="material-symbols-outlined">close</span>
+            <span class="material-symbols-outlined" aria-hidden="true">close</span>
           </button>
         </div>
 
-        <form class="px-5 py-5 flex flex-col gap-5" @submit.prevent="requestQuote">
+        <form class="px-5 py-5 flex flex-col gap-5 overflow-y-auto flex-1 min-h-0" @submit.prevent="requestQuote">
           <!-- Solo line -->
           <template v-if="!isTeam && soloProduct">
             <div class="flex gap-4 py-1">
@@ -474,7 +521,7 @@ async function requestQuote() {
                 </h3>
                 <p
                   class="text-sm font-medium leading-snug"
-                  :class="teamMixCheck.ok ? 'text-on-surface' : 'text-amber-800'"
+                  :class="teamOrderReady ? 'text-on-surface' : 'text-amber-800'"
                   aria-live="polite"
                 >
                   {{ mixStatusLabel }}
@@ -533,19 +580,21 @@ async function requestQuote() {
                           type="button"
                           class="w-10 h-10 flex items-center justify-center disabled:opacity-35"
                           aria-label="Remove one Business card"
-                          :disabled="businessQty <= 0"
+                          :disabled="!canRemoveBusiness"
                           @click="bumpBusiness(-1)"
                         >
                           <span class="material-symbols-outlined text-[18px]" aria-hidden="true">remove</span>
                         </button>
                         <span class="min-w-[4.25rem] px-1 text-center text-[13px] font-medium tabular-nums" aria-live="polite">
                           {{ businessQty }}
-                          <span class="block text-[9px] font-label-caps uppercase tracking-widest text-ink-muted font-normal -mt-0.5">cards</span>
+                          <span class="block text-[9px] font-label-caps uppercase tracking-widest text-ink-muted font-normal -mt-0.5">{{ businessQty === 1 ? 'card' : 'cards' }}</span>
                         </span>
                         <button
                           type="button"
-                          class="w-10 h-10 flex items-center justify-center"
-                          aria-label="Add one Business card"
+                          class="w-10 h-10 flex items-center justify-center disabled:opacity-35"
+                          :aria-label="businessAddTitle"
+                          :title="businessAddTitle"
+                          :disabled="!canAddBusiness"
                           @click="bumpBusiness(1)"
                         >
                           <span class="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
@@ -572,24 +621,29 @@ async function requestQuote() {
                     </div>
                     <div class="flex items-center justify-between gap-3">
                       <span class="text-[12px] text-on-surface-variant">How many?</span>
-                      <div class="inline-flex items-center border border-border-subtle rounded-full overflow-hidden bg-surface">
+                      <div
+                        class="inline-flex items-center border rounded-full overflow-hidden bg-surface"
+                        :class="inExecutiveBridge ? 'border-primary' : 'border-border-subtle'"
+                      >
                         <button
                           type="button"
                           class="w-10 h-10 flex items-center justify-center disabled:opacity-35"
-                          aria-label="Remove one Executive card"
-                          :disabled="executiveQty <= 0"
+                          :aria-label="executiveRemoveTitle"
+                          :title="executiveRemoveTitle"
+                          :disabled="!canRemoveExecutive"
                           @click="bumpExecutive(-1)"
                         >
                           <span class="material-symbols-outlined text-[18px]" aria-hidden="true">remove</span>
                         </button>
                         <span class="min-w-[4.25rem] px-1 text-center text-[13px] font-medium tabular-nums" aria-live="polite">
                           {{ executiveQty }}
-                          <span class="block text-[9px] font-label-caps uppercase tracking-widest text-ink-muted font-normal -mt-0.5">cards</span>
+                          <span class="block text-[9px] font-label-caps uppercase tracking-widest text-ink-muted font-normal -mt-0.5">{{ executiveQty === 1 ? 'card' : 'cards' }}</span>
                         </span>
                         <button
                           type="button"
-                          class="w-10 h-10 flex items-center justify-center"
+                          class="w-10 h-10 flex items-center justify-center disabled:opacity-35"
                           aria-label="Add one Executive card"
+                          :disabled="!canAddExecutive"
                           @click="bumpExecutive(1)"
                         >
                           <span class="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
@@ -602,10 +656,19 @@ async function requestQuote() {
             </section>
             <div class="bg-surface-container rounded-xl p-4 flex flex-col gap-3">
               <div class="flex items-baseline justify-between gap-3">
-                <h3 class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">Summary</h3>
-                <span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface">{{ teamTotal }} cards · {{ businessQty }} Business · {{ executiveQty }} Executive</span>
+                <h3 class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">Package</h3>
+                <span class="text-[12px] text-on-surface font-medium">{{ teamTotal }} cards · {{ businessQty }} Business · {{ executiveQty }} Executive</span>
               </div>
-              <table class="w-full text-left text-[12px] border-collapse">
+              <button
+                type="button"
+                class="w-full flex items-center justify-between gap-2 text-left py-1 border-0 bg-transparent cursor-pointer"
+                :aria-expanded="compareOpen ? 'true' : 'false'"
+                @click="compareOpen = !compareOpen"
+              >
+                <span class="font-label-caps text-[10px] uppercase tracking-widest text-ink-muted">Compare finishes</span>
+                <span class="material-symbols-outlined text-[18px] text-ink-muted" aria-hidden="true">{{ compareOpen ? 'expand_less' : 'expand_more' }}</span>
+              </button>
+              <table v-if="compareOpen" class="w-full text-left text-[12px] border-collapse">
                 <thead>
                   <tr class="border-b border-border-subtle">
                     <th class="py-2 pr-2 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium">Feature</th>
@@ -656,7 +719,7 @@ async function requestQuote() {
                   </tr>
                 </tbody>
               </table>
-              <p v-if="teamTotal >= TEAM_SCALE_THRESHOLD && teamTotal < TEAM_FREE_MIX_AFTER" class="text-[11px] text-on-surface-variant leading-snug">
+              <p v-if="inExecutiveBridge" class="text-[11px] text-on-surface-variant leading-snug">
                 Cards 11–{{ TEAM_FREE_MIX_AFTER }} must be Executive
                 ({{ minExecutiveNeeded }} needed · you have {{ executiveQty }}).
                 After {{ TEAM_FREE_MIX_AFTER }}, mix Business or Executive freely.
@@ -664,7 +727,7 @@ async function requestQuote() {
               <p v-else-if="minExecutiveNeeded > 0" class="text-[11px] text-on-surface-variant leading-snug">
                 Keep at least <span class="text-on-surface font-medium">{{ minExecutiveNeeded }} Executive</span>
                 for {{ teamTotal }} cards.
-                <span v-if="!teamMixCheck.ok" class="text-red-600"> {{ teamMixCheck.error }}</span>
+                <span v-if="!teamOrderReady" class="text-red-600"> {{ teamMixCheck.error }}</span>
               </p>
               <label v-if="subdomainEligible" class="flex flex-col gap-2 pt-1 border-t border-border-subtle">
                 <span class="font-label-caps text-[10px] uppercase tracking-widest text-primary">Optional custom subdomain</span>
@@ -741,18 +804,21 @@ async function requestQuote() {
           <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
         </form>
 
-        <div class="sticky bottom-0 bg-surface border-t border-border-subtle px-5 py-4 flex flex-col gap-3">
+        <div class="shrink-0 bg-surface border-t border-border-subtle px-5 py-4 flex flex-col gap-3">
           <div class="flex justify-between items-baseline">
             <span class="font-button-text text-button-text uppercase tracking-widest text-sm">Total</span>
             <span class="font-display-lg text-[24px] font-semibold leading-none">{{ formatPrice(subtotal) }}</span>
           </div>
+          <p v-if="isTeam && !teamOrderReady" class="text-[12px] text-amber-800 leading-snug -mt-1">
+            {{ mixStatusLabel }}
+          </p>
           <button
             type="button"
-            class="w-full bg-primary text-on-primary py-4 font-button-text uppercase tracking-widest hover:opacity-90 disabled:opacity-60"
-            :disabled="submitting"
+            class="w-full bg-primary text-on-primary py-4 font-button-text uppercase tracking-widest hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+            :disabled="placeOrderDisabled"
             @click="requestQuote"
           >
-            {{ submitting ? 'Sending quote…' : 'Place order' }}
+            {{ placeOrderLabel }}
           </button>
         </div>
       </div>

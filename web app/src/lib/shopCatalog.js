@@ -188,27 +188,47 @@ export function isTeamSubdomainEligible(executiveQty) {
   return Math.max(0, Math.floor(Number(executiveQty) || 0)) >= TEAM_EXEC_SUBDOMAIN_MIN
 }
 
-/** Validate a Business + Executive mix. Returns { ok, error }. */
-export function validateTeamMix(businessQty, executiveQty) {
+/**
+ * Validate a Business + Executive mix.
+ * @param {number} businessQty
+ * @param {number} executiveQty
+ * @param {{ enforceMin?: boolean }} [options] When enforceMin is false, totals below
+ *   TEAM_PACKAGE_MIN are allowed so steppers can adjust freely while editing.
+ * @returns {{ ok: boolean, error: string, total: number, business: number, executive: number, needed: number }}
+ */
+export function validateTeamMix(businessQty, executiveQty, options = {}) {
+  const enforceMin = options.enforceMin !== false
   const business = Math.max(0, Math.floor(Number(businessQty) || 0))
   const executive = Math.max(0, Math.floor(Number(executiveQty) || 0))
   const total = business + executive
-  if (total < TEAM_PACKAGE_MIN) {
+  if (enforceMin && total < TEAM_PACKAGE_MIN) {
     return {
       ok: false,
-      error: `Team packages need at least ${TEAM_PACKAGE_MIN} cards total.`
+      error: `Team packages need at least ${TEAM_PACKAGE_MIN} cards total.`,
+      total,
+      business,
+      executive,
+      needed: minExecutiveForTeamTotal(total)
     }
   }
   if (executive === 0 && business > TEAM_BUSINESS_ALONE_MAX) {
     return {
       ok: false,
-      error: `Business Class alone is limited to ${TEAM_BUSINESS_ALONE_MAX} cards. Add Executive cards to go beyond 10.`
+      error: `Business alone is limited to ${TEAM_BUSINESS_ALONE_MAX} cards. Add Executive to go beyond 10.`,
+      total,
+      business,
+      executive,
+      needed: 0
     }
   }
   if (total > TEAM_SCALE_THRESHOLD && total <= TEAM_FREE_MIX_AFTER && business > TEAM_BUSINESS_ALONE_MAX) {
     return {
       ok: false,
-      error: `Cards 11–${TEAM_FREE_MIX_AFTER} must be Executive. Mix Business again after ${TEAM_FREE_MIX_AFTER} cards.`
+      error: `Cards 11–${TEAM_FREE_MIX_AFTER} must be Executive. Mix Business again after ${TEAM_FREE_MIX_AFTER} cards.`,
+      total,
+      business,
+      executive,
+      needed: minExecutiveForTeamTotal(total)
     }
   }
   const needed = minExecutiveForTeamTotal(total)
@@ -218,10 +238,24 @@ export function validateTeamMix(businessQty, executiveQty) {
       error:
         total <= TEAM_FREE_MIX_AFTER
           ? `Cards 11–${TEAM_FREE_MIX_AFTER} must be Executive (need ${needed} Executive for ${total} cards; you have ${executive}).`
-          : `Teams over ${TEAM_SCALE_THRESHOLD} need at least ${needed} Executive cards (you have ${executive}).`
+          : `Teams over ${TEAM_SCALE_THRESHOLD} need at least ${needed} Executive cards (you have ${executive}).`,
+      total,
+      business,
+      executive,
+      needed
     }
   }
   return { ok: true, error: '', total, business, executive, needed }
+}
+
+/** Whether a draft mix can be ordered (full rules including package minimum). */
+export function isTeamMixOrderReady(businessQty, executiveQty) {
+  return validateTeamMix(businessQty, executiveQty, { enforceMin: true }).ok
+}
+
+/** Soft check while editing quantities (allows totals below the package minimum). */
+export function canApplyTeamMix(businessQty, executiveQty) {
+  return validateTeamMix(businessQty, executiveQty, { enforceMin: false }).ok
 }
 
 /** Per-line min. Team lines may be 0 inside a mix; package total is enforced separately. */
