@@ -97,12 +97,12 @@ function shopAll() {
   router.push({ path: '/', hash: '#connect-team' })
 }
 
-function showToast(msg) {
+function showToast(msg, ms = 4500) {
   toast.value = msg
   clearTimeout(toastTimer)
   toastTimer = setTimeout(() => {
     toast.value = ''
-  }, 2200)
+  }, ms)
 }
 
 function bumpBusiness(delta) {
@@ -110,6 +110,7 @@ function bumpBusiness(delta) {
   const check = validateTeamMix(next, executiveQty.value)
   if (!check.ok) {
     error.value = check.error
+    showToast(check.error)
     return
   }
   businessQty.value = next
@@ -121,6 +122,7 @@ function bumpExecutive(delta) {
   const check = validateTeamMix(businessQty.value, next)
   if (!check.ok) {
     error.value = check.error
+    showToast(check.error)
     return
   }
   executiveQty.value = next
@@ -132,6 +134,7 @@ function openCheckout() {
   const check = validateTeamMix(businessQty.value, executiveQty.value)
   if (!check.ok) {
     error.value = check.error
+    showToast(check.error)
     return
   }
   checkoutOpen.value = true
@@ -431,10 +434,22 @@ onUnmounted(() => {
 
     <div
       v-if="toast"
-      class="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-[60] bg-primary text-on-primary px-5 py-3 font-label-caps text-[11px] uppercase tracking-widest shadow-lg"
-      role="status"
+      class="fixed left-1/2 top-6 z-[120] w-[min(92vw,28rem)] -translate-x-1/2 rounded-xl bg-primary text-on-primary px-5 py-4 shadow-2xl"
+      role="alert"
+      aria-live="assertive"
     >
-      {{ toast }}
+      <div class="flex items-start gap-3">
+        <span class="material-symbols-outlined shrink-0 mt-0.5" aria-hidden="true">error</span>
+        <p class="flex-1 text-sm font-medium leading-snug normal-case tracking-normal">{{ toast }}</p>
+        <button
+          type="button"
+          class="shrink-0 w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/15 border-0 bg-transparent text-on-primary cursor-pointer"
+          aria-label="Dismiss"
+          @click="toast = ''"
+        >
+          <span class="material-symbols-outlined text-[18px]">close</span>
+        </button>
+      </div>
     </div>
   </div>
 </template>

@@ -37,6 +37,8 @@ const businessQty = ref(2)
 const executiveQty = ref(3)
 const subdomain = ref('')
 const error = ref('')
+const notice = ref('')
+let noticeTimer = null
 const submitting = ref(false)
 const customerName = ref('')
 const customerCompany = ref('')
@@ -50,19 +52,6 @@ const businessProduct = computed(() => getProduct(BUSINESS_CARD_ID))
 const executiveProduct = computed(() => getProduct(EXECUTIVE_CARD_ID))
 const teamTotal = computed(() => businessQty.value + executiveQty.value)
 const teamMixCheck = computed(() => validateTeamMix(businessQty.value, executiveQty.value))
-const teamMixTips = computed(() => {
-  const tips = [
-    `Team packages need at least ${TEAM_PACKAGE_MIN} cards total.`,
-    `Business Class alone is limited to ${TEAM_BUSINESS_ALONE_MAX} cards. Add Executive cards to go beyond 10.`
-  ]
-  if (minExecutiveForTeamTotal(teamTotal.value) > 0) {
-    tips.push(
-      `Teams over ${TEAM_SCALE_THRESHOLD} need at least ${TEAM_EXEC_SCALE_MIN} Executive cards.`
-    )
-  }
-  return tips
-})
-const teamMixAlert = computed(() => (teamMixCheck.value.ok ? '' : teamMixCheck.value.error))
 const minExecutiveNeeded = computed(() => minExecutiveForTeamTotal(teamTotal.value))
 const subdomainEligible = computed(() => isTeamSubdomainEligible(executiveQty.value))
 const soloSubtotal = computed(() => (soloProduct.value?.price || 0) * soloQty.value)
@@ -104,6 +93,7 @@ watch(
 
 onUnmounted(() => {
   lockPageScroll(false)
+  clearTimeout(noticeTimer)
 })
 
 watch(
@@ -111,6 +101,7 @@ watch(
   ([open]) => {
     if (!open) return
     error.value = ''
+    notice.value = ''
     subdomain.value = ''
     submitting.value = false
     if (props.mode === 'team') {
@@ -134,10 +125,21 @@ watch(
   }
 )
 
+function showNotice(msg) {
+  notice.value = String(msg || '').trim()
+  clearTimeout(noticeTimer)
+  if (!notice.value) return
+  noticeTimer = setTimeout(() => {
+    notice.value = ''
+  }, 4500)
+}
+
 function bumpSolo(delta) {
   const next = Math.min(SOLO_PACKAGE_MAX, Math.max(1, soloQty.value + delta))
   if (delta > 0 && soloQty.value >= SOLO_PACKAGE_MAX) {
-    error.value = `Connect Solo is limited to ${SOLO_PACKAGE_MAX} cards. For 5+ cards or a team, choose Connect Team.`
+    const msg = `Connect Solo is limited to ${SOLO_PACKAGE_MAX} cards. For 5+ cards or a team, choose Connect Team.`
+    error.value = msg
+    showNotice(msg)
     return
   }
   soloQty.value = next
@@ -147,12 +149,28 @@ function switchToTeam() {
   emit('switch-to-team')
 }
 function bumpBusiness(delta) {
-  businessQty.value = Math.min(99, Math.max(0, businessQty.value + delta))
+  const next = Math.min(99, Math.max(0, businessQty.value + delta))
+  const check = validateTeamMix(next, executiveQty.value)
+  if (!check.ok) {
+    error.value = check.error
+    showNotice(check.error)
+    return
+  }
+  businessQty.value = next
   error.value = ''
+  notice.value = ''
 }
 function bumpExecutive(delta) {
-  executiveQty.value = Math.min(99, Math.max(0, executiveQty.value + delta))
+  const next = Math.min(99, Math.max(0, executiveQty.value + delta))
+  const check = validateTeamMix(businessQty.value, next)
+  if (!check.ok) {
+    error.value = check.error
+    showNotice(check.error)
+    return
+  }
+  executiveQty.value = next
   error.value = ''
+  notice.value = ''
 }
 function close() {
   emit('close')
@@ -190,10 +208,13 @@ async function requestQuote() {
     const check = validateTeamMix(businessQty.value, executiveQty.value)
     if (!check.ok) {
       error.value = check.error
+      showNotice(check.error)
       return
     }
   } else if (soloQty.value > SOLO_PACKAGE_MAX) {
-    error.value = `Connect Solo is limited to ${SOLO_PACKAGE_MAX} cards. For 5+ cards or a team, choose Connect Team.`
+    const msg = `Connect Solo is limited to ${SOLO_PACKAGE_MAX} cards. For 5+ cards or a team, choose Connect Team.`
+    error.value = msg
+    showNotice(msg)
     return
   }
   const name = customerName.value.trim()
@@ -433,16 +454,6 @@ async function requestQuote() {
                 </div>
               </li>
             </ul>
-            <div
-              v-if="teamMixAlert || teamMixTips.length"
-              class="rounded-xl border px-4 py-3 flex flex-col gap-1.5 text-[12px] leading-snug"
-              :class="teamMixAlert ? 'border-red-300 bg-red-50 text-red-700' : 'border-border-subtle bg-surface-container text-on-surface-variant'"
-            >
-              <p v-if="teamMixAlert" class="font-medium text-red-700">{{ teamMixAlert }}</p>
-              <p v-for="(tip, i) in teamMixTips" :key="i" :class="teamMixAlert && tip === teamMixAlert ? 'hidden' : ''">
-                {{ tip }}
-              </p>
-            </div>
             <div class="bg-surface-container rounded-xl p-4 flex flex-col gap-3">
               <div class="flex items-baseline justify-between gap-3">
                 <h3 class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">Summary</h3>
@@ -499,6 +510,11 @@ async function requestQuote() {
                   </tr>
                 </tbody>
               </table>
+              <p v-if="minExecutiveNeeded > 0" class="text-[11px] text-on-surface-variant leading-snug">
+                This mix needs at least <span class="text-on-surface font-medium">{{ minExecutiveNeeded }} Executive</span>
+                for {{ teamTotal }} cards.
+                <span v-if="!teamMixCheck.ok" class="text-red-600"> {{ teamMixCheck.error }}</span>
+              </p>
               <label v-if="subdomainEligible" class="flex flex-col gap-2 pt-1 border-t border-border-subtle">
                 <span class="font-label-caps text-[10px] uppercase tracking-widest text-primary">Optional custom subdomain</span>
                 <input
@@ -588,6 +604,26 @@ async function requestQuote() {
             {{ submitting ? 'Sending quote…' : 'Place order' }}
           </button>
         </div>
+      </div>
+    </div>
+
+    <div
+      v-if="open && notice"
+      class="fixed left-1/2 top-6 z-[120] w-[min(92vw,28rem)] -translate-x-1/2 rounded-xl bg-primary text-on-primary px-5 py-4 shadow-2xl"
+      role="alert"
+      aria-live="assertive"
+    >
+      <div class="flex items-start gap-3">
+        <span class="material-symbols-outlined shrink-0 mt-0.5" aria-hidden="true">error</span>
+        <p class="flex-1 text-sm font-medium leading-snug">{{ notice }}</p>
+        <button
+          type="button"
+          class="shrink-0 w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/15 border-0 bg-transparent text-on-primary cursor-pointer"
+          aria-label="Dismiss"
+          @click="notice = ''"
+        >
+          <span class="material-symbols-outlined text-[18px]">close</span>
+        </button>
       </div>
     </div>
   </Teleport>
