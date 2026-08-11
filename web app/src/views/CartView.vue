@@ -4,7 +4,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import ShopHeader from '../components/ShopHeader.vue'
 import ShopBottomNav from '../components/ShopBottomNav.vue'
-import { formatPrice, loadShopProducts, TEAM_PACKAGE_MIN } from '../lib/shopCatalog'
+import { EXECUTIVE_CARD_ID, formatPrice, isTeamSubdomainEligible, loadShopProducts, TEAM_PACKAGE_MIN, validateTeamMix } from '../lib/shopCatalog'
 import {
   cartLines,
   cartCount,
@@ -78,7 +78,16 @@ function bump(id, delta) {
     if (next < 0) return
     const ok = setCartQty(id, next)
     if (ok === false) {
-      showToast(`Team mix must total at least ${TEAM_PACKAGE_MIN} cards`)
+      const business =
+        id === EXECUTIVE_CARD_ID
+          ? lines.value.find((l) => l.isTeam && l.id !== EXECUTIVE_CARD_ID)?.qty || 0
+          : next
+      const executive =
+        id === EXECUTIVE_CARD_ID
+          ? next
+          : lines.value.find((l) => l.id === EXECUTIVE_CARD_ID)?.qty || 0
+      const check = validateTeamMix(business, executive)
+      showToast(check.error || `Invalid team mix (min ${TEAM_PACKAGE_MIN} cards)`)
     }
     return
   }
@@ -133,10 +142,11 @@ async function placeOrder() {
   checkoutError.value = ''
   submitting.value = true
   try {
+    const executiveInCart = lines.value.find((l) => l.id === EXECUTIVE_CARD_ID)?.qty || 0
     const subdomainNote = teamSubdomain.value
       ? `Custom subdomain request: ${teamSubdomain.value}`
-      : teamCount.value >= 10
-        ? 'Team pack 10+ (subdomain optional — not specified)'
+      : isTeamSubdomainEligible(executiveInCart)
+        ? 'Executive 5+ (subdomain optional — not specified)'
         : ''
     const combinedNote = [`Company: ${company}`, checkoutNote.value.trim(), subdomainNote]
       .filter(Boolean)
@@ -419,7 +429,6 @@ async function placeOrder() {
               autocomplete="organization"
               required
               class="w-full bg-surface-container-lowest border border-border-subtle rounded-lg px-3 py-3 text-sm text-on-surface focus:outline-none focus:border-primary"
-              placeholder="Company name"
             >
           </label>
           <label class="flex flex-col gap-1.5">
@@ -458,7 +467,6 @@ async function placeOrder() {
               autocomplete="address-level2"
               required
               class="w-full bg-surface-container-lowest border border-border-subtle rounded-lg px-3 py-3 text-sm text-on-surface focus:outline-none focus:border-primary"
-              placeholder="Windhoek"
             >
           </label>
 

@@ -7,7 +7,8 @@ import {
   BUSINESS_CARD_ID,
   EXECUTIVE_CARD_ID,
   TEAM_PACKAGE_MIN,
-  TEAM_SUBDOMAIN_THRESHOLD,
+  isTeamSubdomainEligible,
+  validateTeamMix,
   getMinQty,
   getProduct,
   isTeamCard
@@ -101,10 +102,10 @@ export const cartSubtotal = computed(() =>
 export const cartTeamCount = computed(() => teamQtyInCart())
 
 export function setTeamSubdomain(value) {
-  const total = teamQtyInCart()
+  const executive = items.value.find((row) => row.id === EXECUTIVE_CARD_ID)?.qty || 0
   meta.value = {
     ...meta.value,
-    teamSubdomain: total >= TEAM_SUBDOMAIN_THRESHOLD ? String(value || '').trim() : ''
+    teamSubdomain: isTeamSubdomainEligible(executive) ? String(value || '').trim() : ''
   }
   persistMeta()
 }
@@ -142,7 +143,8 @@ export function addToCart(productId, qty = 1) {
 export function setTeamPackage({ businessQty = 0, executiveQty = 0, subdomain = '' } = {}) {
   const business = Math.min(99, Math.max(0, Math.floor(Number(businessQty) || 0)))
   const executive = Math.min(99, Math.max(0, Math.floor(Number(executiveQty) || 0)))
-  if (business + executive < TEAM_PACKAGE_MIN) return false
+  const check = validateTeamMix(business, executive)
+  if (!check.ok) return false
 
   items.value = items.value.filter((row) => !isTeamCard(row.id))
   if (business > 0) items.value.push({ id: BUSINESS_CARD_ID, qty: business })
@@ -151,8 +153,7 @@ export function setTeamPackage({ businessQty = 0, executiveQty = 0, subdomain = 
 
   meta.value = {
     ...meta.value,
-    teamSubdomain:
-      business + executive >= TEAM_SUBDOMAIN_THRESHOLD ? String(subdomain || '').trim() : ''
+    teamSubdomain: isTeamSubdomainEligible(executive) ? String(subdomain || '').trim() : ''
   }
   persistMeta()
   return true
@@ -208,7 +209,9 @@ export function removeFromCart(productId) {
       persistMeta()
     } else {
       items.value = items.value.filter((row) => row.id !== productId)
-      if (total < TEAM_SUBDOMAIN_THRESHOLD) {
+      const executiveLeft =
+        remaining.find((row) => row.id === EXECUTIVE_CARD_ID)?.qty || 0
+      if (!isTeamSubdomainEligible(executiveLeft)) {
         meta.value = { ...meta.value, teamSubdomain: '' }
         persistMeta()
       }

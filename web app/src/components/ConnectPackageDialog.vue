@@ -3,11 +3,16 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import {
   BUSINESS_CARD_ID,
   EXECUTIVE_CARD_ID,
+  TEAM_BUSINESS_ALONE_MAX,
+  TEAM_EXEC_SUBDOMAIN_MIN,
   TEAM_PACKAGE_MIN,
-  TEAM_SUBDOMAIN_THRESHOLD,
+  TEAM_SCALE_THRESHOLD,
   formatPrice,
   getProduct,
-  initialTeamMix
+  initialTeamMix,
+  isTeamSubdomainEligible,
+  minExecutiveForTeamTotal,
+  validateTeamMix
 } from '../lib/shopCatalog'
 import { apiShopOrderQuote } from '../lib/api'
 import { loadProfile } from '../lib/profileStore'
@@ -42,7 +47,9 @@ const soloProduct = computed(() => getProduct(props.soloProductId || props.focus
 const businessProduct = computed(() => getProduct(BUSINESS_CARD_ID))
 const executiveProduct = computed(() => getProduct(EXECUTIVE_CARD_ID))
 const teamTotal = computed(() => businessQty.value + executiveQty.value)
-const subdomainEligible = computed(() => teamTotal.value >= TEAM_SUBDOMAIN_THRESHOLD)
+const teamMixCheck = computed(() => validateTeamMix(businessQty.value, executiveQty.value))
+const minExecutiveNeeded = computed(() => minExecutiveForTeamTotal(teamTotal.value))
+const subdomainEligible = computed(() => isTeamSubdomainEligible(executiveQty.value))
 const soloSubtotal = computed(() => (soloProduct.value?.price || 0) * soloQty.value)
 const teamSubtotal = computed(
   () =>
@@ -116,11 +123,23 @@ function bumpSolo(delta) {
   soloQty.value = Math.min(99, Math.max(1, soloQty.value + delta))
 }
 function bumpBusiness(delta) {
-  businessQty.value = Math.min(99, Math.max(0, businessQty.value + delta))
+  const next = Math.min(99, Math.max(0, businessQty.value + delta))
+  const check = validateTeamMix(next, executiveQty.value)
+  if (!check.ok) {
+    error.value = check.error
+    return
+  }
+  businessQty.value = next
   error.value = ''
 }
 function bumpExecutive(delta) {
-  executiveQty.value = Math.min(99, Math.max(0, executiveQty.value + delta))
+  const next = Math.min(99, Math.max(0, executiveQty.value + delta))
+  const check = validateTeamMix(businessQty.value, next)
+  if (!check.ok) {
+    error.value = check.error
+    return
+  }
+  executiveQty.value = next
   error.value = ''
 }
 function close() {
@@ -155,9 +174,12 @@ function buildItems() {
 
 async function requestQuote() {
   error.value = ''
-  if (isTeam.value && teamTotal.value < TEAM_PACKAGE_MIN) {
-    error.value = `Team packages need at least ${TEAM_PACKAGE_MIN} cards total (any mix).`
-    return
+  if (isTeam.value) {
+    const check = validateTeamMix(businessQty.value, executiveQty.value)
+    if (!check.ok) {
+      error.value = check.error
+      return
+    }
   }
   const name = customerName.value.trim()
   const company = customerCompany.value.trim()
@@ -197,8 +219,8 @@ async function requestQuote() {
       : `Solo package × ${soloQty.value}`,
     subdomainEligible.value && subdomain.value.trim()
       ? `Custom subdomain request: ${subdomain.value.trim()}`
-      : isTeam.value && teamTotal.value >= TEAM_SUBDOMAIN_THRESHOLD
-        ? 'Team pack 10+ (subdomain optional — not specified)'
+      : isTeam.value && subdomainEligible.value
+        ? 'Executive 5+ (subdomain optional — not specified)'
         : ''
   ].filter(Boolean)
 
@@ -249,7 +271,7 @@ async function requestQuote() {
           <div class="min-w-0">
             <h2 class="font-headline-lg-mobile text-[22px] font-medium uppercase tracking-tight">{{ title }}</h2>
             <p class="text-on-surface-variant text-sm mt-1">
-              {{ isTeam ? `Mix Business & Executive · min ${TEAM_PACKAGE_MIN} cards` : 'Professional Class · from 1 card' }}
+              {{ isTeam ? `Business & Executive · min ${TEAM_PACKAGE_MIN} · Business alone max ${TEAM_BUSINESS_ALONE_MAX}` : 'Professional Class · from 1 card' }}
             </p>
           </div>
           <button
@@ -340,8 +362,8 @@ async function requestQuote() {
                 <thead>
                   <tr class="border-b border-border-subtle">
                     <th class="py-2 pr-2 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium">Feature</th>
-                    <th class="py-2 px-1 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium text-center whitespace-nowrap">Solo</th>
-                    <th class="py-2 pl-1 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium text-center whitespace-nowrap">Team</th>
+                    <th class="py-2 px-1 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium text-center whitespace-nowrap">Business</th>
+                    <th class="py-2 pl-1 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium text-center whitespace-nowrap">Executive</th>
                   </tr>
                 </thead>
                 <tbody class="text-on-surface-variant">
@@ -362,31 +384,36 @@ async function requestQuote() {
                   </tr>
                   <tr class="border-b border-border-subtle/60">
                     <td class="py-2 pr-2 text-on-surface">Custom logo on card</td>
-                    <td class="py-2 px-1 text-center">—</td>
-                    <td class="py-2 pl-1 text-center text-primary">Black &amp; White</td>
+                    <td class="py-2 px-1 text-center text-primary text-[11px]">B&amp;W</td>
+                    <td class="py-2 pl-1 text-center text-primary text-[11px]">Colour</td>
                   </tr>
                   <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">Team profiles</td>
-                    <td class="py-2 px-1 text-center">—</td>
+                    <td class="py-2 pr-2 text-on-surface">Team profiles + owner block</td>
+                    <td class="py-2 px-1 text-center text-primary">✓</td>
                     <td class="py-2 pl-1 text-center text-primary">✓</td>
                   </tr>
                   <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">Owner can block a member</td>
-                    <td class="py-2 px-1 text-center">—</td>
-                    <td class="py-2 pl-1 text-center text-primary">✓</td>
+                    <td class="py-2 pr-2 text-on-surface">Buy alone</td>
+                    <td class="py-2 px-1 text-center text-primary text-[11px] leading-snug">Up to {{ TEAM_BUSINESS_ALONE_MAX }}</td>
+                    <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">Min {{ TEAM_PACKAGE_MIN }}</td>
                   </tr>
                   <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">Mix Business &amp; Executive</td>
-                    <td class="py-2 px-1 text-center">—</td>
-                    <td class="py-2 pl-1 text-center text-primary">✓</td>
+                    <td class="py-2 pr-2 text-on-surface">Scale past {{ TEAM_SCALE_THRESHOLD }}</td>
+                    <td class="py-2 px-1 text-center text-[11px] leading-snug">Needs Executive mix</td>
+                    <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">1 Exec / +5 cards<br>(11→1, 15→2, 20→3)</td>
                   </tr>
                   <tr>
-                    <td class="py-2 pr-2 text-on-surface">Subdomain (e.g. cards.company.com)</td>
+                    <td class="py-2 pr-2 text-on-surface">Custom subdomain</td>
                     <td class="py-2 px-1 text-center">—</td>
-                    <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">Optional at 10+ cards</td>
+                    <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">From {{ TEAM_EXEC_SUBDOMAIN_MIN }} Executive</td>
                   </tr>
                 </tbody>
               </table>
+              <p v-if="minExecutiveNeeded > 0" class="text-[11px] text-on-surface-variant leading-snug">
+                This mix needs at least <span class="text-on-surface font-medium">{{ minExecutiveNeeded }} Executive</span>
+                for {{ teamTotal }} cards.
+                <span v-if="!teamMixCheck.ok" class="text-red-600"> {{ teamMixCheck.error }}</span>
+              </p>
               <label v-if="subdomainEligible" class="flex flex-col gap-2 pt-1 border-t border-border-subtle">
                 <span class="font-label-caps text-[10px] uppercase tracking-widest text-primary">Optional custom subdomain</span>
                 <input
@@ -397,7 +424,7 @@ async function requestQuote() {
                 >
               </label>
               <p v-else class="font-label-caps text-[10px] uppercase tracking-widest text-ink-muted pt-1 border-t border-border-subtle">
-                Optional subdomain from {{ TEAM_SUBDOMAIN_THRESHOLD }}+ cards
+                Optional subdomain from {{ TEAM_EXEC_SUBDOMAIN_MIN }}+ Executive cards
               </p>
             </div>
           </template>

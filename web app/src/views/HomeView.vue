@@ -382,7 +382,7 @@ onUnmounted(() => {
               </h2>
               <div class="h-1 w-12 bg-primary" />
               <p class="text-on-surface-variant text-sm mt-1">
-                Business &amp; Executive in one package — mix freely (min 5). Logos print white. 10+ cards unlock an optional custom subdomain.
+                Business &amp; Executive in one package (min 5). Business alone max 10. Past 10 needs Executive (11→1, 15→2, 20→3). Subdomain from 5 Executive.
               </p>
             </div>
             <span class="font-label-caps text-label-caps text-ink-muted shrink-0">{{ teamCards.length }} ITEMS</span>
@@ -456,68 +456,75 @@ onUnmounted(() => {
             </h2>
             <div class="h-1 w-12 bg-primary" />
             <p class="text-on-surface-variant text-sm mt-1">
-              Quick comparison of Connect Solo and Connect Team.
+              Solo vs Connect Team finishes — Business and Executive differences.
             </p>
           </div>
           <div class="overflow-x-auto -mx-1 px-1">
-            <table class="w-full min-w-[420px] text-left text-sm border-collapse">
+            <table class="w-full min-w-[560px] text-left text-sm border-collapse">
               <thead>
                 <tr class="border-b border-border-subtle">
                   <th class="py-3 pr-4 font-label-caps text-[10px] uppercase tracking-widest text-ink-muted font-medium">
                     Feature
                   </th>
-                  <th class="py-3 px-3 font-label-caps text-[10px] uppercase tracking-widest text-ink-muted font-medium text-center">
-                    Connect Solo
+                  <th class="py-3 px-2 font-label-caps text-[10px] uppercase tracking-widest text-ink-muted font-medium text-center">
+                    Solo
                   </th>
-                  <th class="py-3 pl-3 font-label-caps text-[10px] uppercase tracking-widest text-ink-muted font-medium text-center">
-                    Connect Team
+                  <th class="py-3 px-2 font-label-caps text-[10px] uppercase tracking-widest text-ink-muted font-medium text-center">
+                    Business
+                  </th>
+                  <th class="py-3 pl-2 font-label-caps text-[10px] uppercase tracking-widest text-ink-muted font-medium text-center">
+                    Executive
                   </th>
                 </tr>
               </thead>
               <tbody class="text-on-surface-variant">
                 <tr class="border-b border-border-subtle/70">
                   <td class="py-3 pr-4 text-on-surface">NFC + QR → live profile</td>
-                  <td class="py-3 px-3 text-center text-primary">✓</td>
-                  <td class="py-3 pl-3 text-center text-primary">✓</td>
+                  <td class="py-3 px-2 text-center text-primary">✓</td>
+                  <td class="py-3 px-2 text-center text-primary">✓</td>
+                  <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
                 <tr class="border-b border-border-subtle/70">
                   <td class="py-3 pr-4 text-on-surface">Once-off (no monthly fee)</td>
-                  <td class="py-3 px-3 text-center text-primary">✓</td>
-                  <td class="py-3 pl-3 text-center text-primary">✓</td>
+                  <td class="py-3 px-2 text-center text-primary">✓</td>
+                  <td class="py-3 px-2 text-center text-primary">✓</td>
+                  <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
                 <tr class="border-b border-border-subtle/70">
                   <td class="py-3 pr-4 text-on-surface">Catalogue &amp; book meeting</td>
-                  <td class="py-3 px-3 text-center text-primary">✓</td>
-                  <td class="py-3 pl-3 text-center text-primary">✓</td>
+                  <td class="py-3 px-2 text-center text-primary">✓</td>
+                  <td class="py-3 px-2 text-center text-primary">✓</td>
+                  <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
                 <tr class="border-b border-border-subtle/70">
                   <td class="py-3 pr-4 text-on-surface">Custom logo on card</td>
-                  <td class="py-3 px-3 text-center">—</td>
-                  <td class="py-3 pl-3 text-center text-primary text-xs leading-snug">
-                    Black &amp; White
-                  </td>
+                  <td class="py-3 px-2 text-center">—</td>
+                  <td class="py-3 px-2 text-center text-primary text-xs">B&amp;W</td>
+                  <td class="py-3 pl-2 text-center text-primary text-xs">Colour</td>
                 </tr>
                 <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Team profiles</td>
-                  <td class="py-3 px-3 text-center">—</td>
-                  <td class="py-3 pl-3 text-center text-primary">✓</td>
+                  <td class="py-3 pr-4 text-on-surface">Team profiles + owner block</td>
+                  <td class="py-3 px-2 text-center">—</td>
+                  <td class="py-3 px-2 text-center text-primary">✓</td>
+                  <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
                 <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Owner can block a member</td>
-                  <td class="py-3 px-3 text-center">—</td>
-                  <td class="py-3 pl-3 text-center text-primary">✓</td>
+                  <td class="py-3 pr-4 text-on-surface">Buy alone</td>
+                  <td class="py-3 px-2 text-center text-xs">From 1</td>
+                  <td class="py-3 px-2 text-center text-xs leading-snug">Up to 10</td>
+                  <td class="py-3 pl-2 text-center text-xs leading-snug">Min 5</td>
                 </tr>
                 <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Mix Business &amp; Executive</td>
-                  <td class="py-3 px-3 text-center">—</td>
-                  <td class="py-3 pl-3 text-center text-primary">✓</td>
+                  <td class="py-3 pr-4 text-on-surface">Scale past 10</td>
+                  <td class="py-3 px-2 text-center">—</td>
+                  <td class="py-3 px-2 text-center text-xs leading-snug">Needs Executive mix</td>
+                  <td class="py-3 pl-2 text-center text-xs leading-snug">1 Exec / +5<br>(11→1, 15→2, 20→3)</td>
                 </tr>
                 <tr>
-                  <td class="py-3 pr-4 text-on-surface">Subdomain (e.g. cards.company.com)</td>
-                  <td class="py-3 px-3 text-center">—</td>
-                  <td class="py-3 pl-3 text-center text-primary text-xs leading-snug">
-                    Optional at 10+ cards
-                  </td>
+                  <td class="py-3 pr-4 text-on-surface">Custom subdomain</td>
+                  <td class="py-3 px-2 text-center">—</td>
+                  <td class="py-3 px-2 text-center">—</td>
+                  <td class="py-3 pl-2 text-center text-primary text-xs leading-snug">From 5 Executive</td>
                 </tr>
               </tbody>
             </table>

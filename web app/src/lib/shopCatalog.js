@@ -146,10 +146,59 @@ export const BUSINESS_CARD_ID = 'black-card'
 export const EXECUTIVE_CARD_ID = 'black-card-front'
 export const TEAM_CARD_IDS = new Set([BUSINESS_CARD_ID, EXECUTIVE_CARD_ID])
 export const TEAM_PACKAGE_MIN = 5
-export const TEAM_SUBDOMAIN_THRESHOLD = 10
+/** Business alone (0 Executive) cannot exceed this. */
+export const TEAM_BUSINESS_ALONE_MAX = 10
+/** Total size at which Executive cards become required to scale further. */
+export const TEAM_SCALE_THRESHOLD = 10
+/** Executive cards required to unlock optional custom subdomain. */
+export const TEAM_EXEC_SUBDOMAIN_MIN = 5
+/** @deprecated use TEAM_EXEC_SUBDOMAIN_MIN / isTeamSubdomainEligible */
+export const TEAM_SUBDOMAIN_THRESHOLD = TEAM_EXEC_SUBDOMAIN_MIN
 
 export function isTeamCard(productId) {
   return TEAM_CARD_IDS.has(String(productId || ''))
+}
+
+/**
+ * Min Executive cards for a team total.
+ * <=10: 0 required (Business alone allowed up to 10).
+ * 11→1, 15→2, 20→3: floor((total - 10) / 5) + 1
+ */
+export function minExecutiveForTeamTotal(total) {
+  const t = Math.max(0, Math.floor(Number(total) || 0))
+  if (t <= TEAM_SCALE_THRESHOLD) return 0
+  return Math.floor((t - TEAM_SCALE_THRESHOLD) / 5) + 1
+}
+
+export function isTeamSubdomainEligible(executiveQty) {
+  return Math.max(0, Math.floor(Number(executiveQty) || 0)) >= TEAM_EXEC_SUBDOMAIN_MIN
+}
+
+/** Validate a Business + Executive mix. Returns { ok, error }. */
+export function validateTeamMix(businessQty, executiveQty) {
+  const business = Math.max(0, Math.floor(Number(businessQty) || 0))
+  const executive = Math.max(0, Math.floor(Number(executiveQty) || 0))
+  const total = business + executive
+  if (total < TEAM_PACKAGE_MIN) {
+    return {
+      ok: false,
+      error: `Team packages need at least ${TEAM_PACKAGE_MIN} cards total.`
+    }
+  }
+  if (executive === 0 && business > TEAM_BUSINESS_ALONE_MAX) {
+    return {
+      ok: false,
+      error: `Business Class alone is limited to ${TEAM_BUSINESS_ALONE_MAX} cards. Add Executive cards to go beyond 10.`
+    }
+  }
+  const needed = minExecutiveForTeamTotal(total)
+  if (executive < needed) {
+    return {
+      ok: false,
+      error: `Teams of ${total} need at least ${needed} Executive card${needed === 1 ? '' : 's'} (1 Executive per 5 cards past 10).`
+    }
+  }
+  return { ok: true, error: '', total, business, executive, needed }
 }
 
 /** Per-line min. Team lines may be 0 inside a mix; package total is enforced separately. */

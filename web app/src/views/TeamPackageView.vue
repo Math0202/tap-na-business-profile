@@ -7,12 +7,16 @@ import ConnectPackageDialog from '../components/ConnectPackageDialog.vue'
 import {
   BUSINESS_CARD_ID,
   EXECUTIVE_CARD_ID,
+  TEAM_BUSINESS_ALONE_MAX,
+  TEAM_EXEC_SUBDOMAIN_MIN,
   TEAM_PACKAGE_MIN,
-  TEAM_SUBDOMAIN_THRESHOLD,
+  TEAM_SCALE_THRESHOLD,
   formatPrice,
   getProduct,
   initialTeamMix,
-  loadShopProducts
+  isTeamSubdomainEligible,
+  loadShopProducts,
+  validateTeamMix
 } from '../lib/shopCatalog'
 import { setPageSeo } from '../lib/seo'
 
@@ -32,7 +36,7 @@ let toastTimer = null
 const businessProduct = computed(() => getProduct(BUSINESS_CARD_ID))
 const executiveProduct = computed(() => getProduct(EXECUTIVE_CARD_ID))
 const teamTotal = computed(() => businessQty.value + executiveQty.value)
-const subdomainEligible = computed(() => teamTotal.value >= TEAM_SUBDOMAIN_THRESHOLD)
+const subdomainEligible = computed(() => isTeamSubdomainEligible(executiveQty.value))
 const subtotal = computed(
   () =>
     (businessProduct.value?.price || 0) * businessQty.value +
@@ -101,19 +105,32 @@ function showToast(msg) {
 }
 
 function bumpBusiness(delta) {
-  businessQty.value = Math.min(99, Math.max(0, businessQty.value + delta))
+  const next = Math.min(99, Math.max(0, businessQty.value + delta))
+  const check = validateTeamMix(next, executiveQty.value)
+  if (!check.ok) {
+    error.value = check.error
+    return
+  }
+  businessQty.value = next
   error.value = ''
 }
 
 function bumpExecutive(delta) {
-  executiveQty.value = Math.min(99, Math.max(0, executiveQty.value + delta))
+  const next = Math.min(99, Math.max(0, executiveQty.value + delta))
+  const check = validateTeamMix(businessQty.value, next)
+  if (!check.ok) {
+    error.value = check.error
+    return
+  }
+  executiveQty.value = next
   error.value = ''
 }
 
 function openCheckout() {
   error.value = ''
-  if (teamTotal.value < TEAM_PACKAGE_MIN) {
-    error.value = `Team packages need at least ${TEAM_PACKAGE_MIN} cards total (any mix).`
+  const check = validateTeamMix(businessQty.value, executiveQty.value)
+  if (!check.ok) {
+    error.value = check.error
     return
   }
   checkoutOpen.value = true
@@ -136,7 +153,7 @@ async function refresh() {
   setPageSeo({
     title: 'Connect Team package — tap-na',
     description:
-      'Combine Business and Executive Connect cards in one team package. Minimum 5 cards total. Optional custom subdomain from 10+.',
+      'Combine Business and Executive Connect cards. Business alone max 10. Scale past 10 with Executive cards. Subdomain from 5 Executive.',
     path: '/package/team'
   })
   await nextTick()
@@ -190,8 +207,9 @@ onUnmounted(() => {
           </h1>
           <div class="h-1 w-12 bg-primary" />
           <p class="text-on-surface-variant text-sm mt-1">
-            Business and Executive in one mixable pack. Minimum {{ TEAM_PACKAGE_MIN }} cards combined.
-            Logos print white. Optional custom subdomain from {{ TEAM_SUBDOMAIN_THRESHOLD }}+ cards.
+            Business and Executive in one mixable pack. Min {{ TEAM_PACKAGE_MIN }} combined.
+            Business alone max {{ TEAM_BUSINESS_ALONE_MAX }}. Past {{ TEAM_SCALE_THRESHOLD }} needs Executive
+            (11→1, 15→2, 20→3). Subdomain from {{ TEAM_EXEC_SUBDOMAIN_MIN }} Executive.
           </p>
         </div>
 
@@ -305,7 +323,8 @@ onUnmounted(() => {
             <div class="flex flex-col gap-1">
               <h2 class="font-label-caps text-label-caps uppercase tracking-widest">Build your mix</h2>
               <p class="text-on-surface-variant text-sm">
-                Combine freely (e.g. 2:3, 1:4, 0:12). Total must be at least {{ TEAM_PACKAGE_MIN }}.
+                Mix freely. Business alone max {{ TEAM_BUSINESS_ALONE_MAX }}. Total min {{ TEAM_PACKAGE_MIN }}.
+                Past {{ TEAM_SCALE_THRESHOLD }} requires Executive cards to scale.
               </p>
             </div>
 
@@ -362,7 +381,7 @@ onUnmounted(() => {
             </div>
 
             <p v-if="!subdomainEligible" class="font-label-caps text-[10px] uppercase tracking-widest text-ink-muted">
-              Optional custom subdomain from {{ TEAM_SUBDOMAIN_THRESHOLD }}+ cards
+              Optional custom subdomain from {{ TEAM_EXEC_SUBDOMAIN_MIN }}+ Executive cards
             </p>
             <label v-else class="flex flex-col gap-2">
               <span class="font-label-caps text-[10px] uppercase tracking-widest text-primary">Optional custom subdomain</span>
@@ -383,7 +402,7 @@ onUnmounted(() => {
                 class="flex-1 bg-primary text-on-primary py-4 font-button-text uppercase tracking-widest hover:opacity-90"
                 @click="openCheckout"
               >
-                Request quote
+                Place order
               </button>
               <RouterLink
                 to="/cart"
