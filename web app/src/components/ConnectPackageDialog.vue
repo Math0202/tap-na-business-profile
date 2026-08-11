@@ -50,6 +50,19 @@ const businessProduct = computed(() => getProduct(BUSINESS_CARD_ID))
 const executiveProduct = computed(() => getProduct(EXECUTIVE_CARD_ID))
 const teamTotal = computed(() => businessQty.value + executiveQty.value)
 const teamMixCheck = computed(() => validateTeamMix(businessQty.value, executiveQty.value))
+const teamMixTips = computed(() => {
+  const tips = [
+    `Team packages need at least ${TEAM_PACKAGE_MIN} cards total.`,
+    `Business Class alone is limited to ${TEAM_BUSINESS_ALONE_MAX} cards. Add Executive cards to go beyond 10.`
+  ]
+  if (minExecutiveForTeamTotal(teamTotal.value) > 0) {
+    tips.push(
+      `Teams over ${TEAM_SCALE_THRESHOLD} need at least ${TEAM_EXEC_SCALE_MIN} Executive cards.`
+    )
+  }
+  return tips
+})
+const teamMixAlert = computed(() => (teamMixCheck.value.ok ? '' : teamMixCheck.value.error))
 const minExecutiveNeeded = computed(() => minExecutiveForTeamTotal(teamTotal.value))
 const subdomainEligible = computed(() => isTeamSubdomainEligible(executiveQty.value))
 const soloSubtotal = computed(() => (soloProduct.value?.price || 0) * soloQty.value)
@@ -134,23 +147,11 @@ function switchToTeam() {
   emit('switch-to-team')
 }
 function bumpBusiness(delta) {
-  const next = Math.min(99, Math.max(0, businessQty.value + delta))
-  const check = validateTeamMix(next, executiveQty.value)
-  if (!check.ok) {
-    error.value = check.error
-    return
-  }
-  businessQty.value = next
+  businessQty.value = Math.min(99, Math.max(0, businessQty.value + delta))
   error.value = ''
 }
 function bumpExecutive(delta) {
-  const next = Math.min(99, Math.max(0, executiveQty.value + delta))
-  const check = validateTeamMix(businessQty.value, next)
-  if (!check.ok) {
-    error.value = check.error
-    return
-  }
-  executiveQty.value = next
+  executiveQty.value = Math.min(99, Math.max(0, executiveQty.value + delta))
   error.value = ''
 }
 function close() {
@@ -432,6 +433,16 @@ async function requestQuote() {
                 </div>
               </li>
             </ul>
+            <div
+              v-if="teamMixAlert || teamMixTips.length"
+              class="rounded-xl border px-4 py-3 flex flex-col gap-1.5 text-[12px] leading-snug"
+              :class="teamMixAlert ? 'border-red-300 bg-red-50 text-red-700' : 'border-border-subtle bg-surface-container text-on-surface-variant'"
+            >
+              <p v-if="teamMixAlert" class="font-medium text-red-700">{{ teamMixAlert }}</p>
+              <p v-for="(tip, i) in teamMixTips" :key="i" :class="teamMixAlert && tip === teamMixAlert ? 'hidden' : ''">
+                {{ tip }}
+              </p>
+            </div>
             <div class="bg-surface-container rounded-xl p-4 flex flex-col gap-3">
               <div class="flex items-baseline justify-between gap-3">
                 <h3 class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">Summary</h3>
@@ -488,11 +499,6 @@ async function requestQuote() {
                   </tr>
                 </tbody>
               </table>
-              <p v-if="minExecutiveNeeded > 0" class="text-[11px] text-on-surface-variant leading-snug">
-                This mix needs at least <span class="text-on-surface font-medium">{{ minExecutiveNeeded }} Executive</span>
-                for {{ teamTotal }} cards.
-                <span v-if="!teamMixCheck.ok" class="text-red-600"> {{ teamMixCheck.error }}</span>
-              </p>
               <label v-if="subdomainEligible" class="flex flex-col gap-2 pt-1 border-t border-border-subtle">
                 <span class="font-label-caps text-[10px] uppercase tracking-widest text-primary">Optional custom subdomain</span>
                 <input
