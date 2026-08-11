@@ -9,6 +9,7 @@ import {
   EXECUTIVE_CARD_ID,
   TEAM_BUSINESS_ALONE_MAX,
   TEAM_EXEC_SUBDOMAIN_MIN,
+  TEAM_EXEC_SCALE_MIN,
   TEAM_PACKAGE_MIN,
   TEAM_SCALE_THRESHOLD,
   formatPrice,
@@ -153,7 +154,7 @@ async function refresh() {
   setPageSeo({
     title: 'Connect Team package — tap-na',
     description:
-      'Combine Business and Executive Connect cards. Business alone max 10. Scale past 10 with Executive cards. Subdomain from 5 Executive.',
+      'Combine Business and Executive Connect cards. Business alone max 10. Past 10 needs 5 Executive. Subdomain from 5 Executive.',
     path: '/package/team'
   })
   await nextTick()
@@ -208,8 +209,7 @@ onUnmounted(() => {
           <div class="h-1 w-12 bg-primary" />
           <p class="text-on-surface-variant text-sm mt-1">
             Business and Executive in one mixable pack. Min {{ TEAM_PACKAGE_MIN }} combined.
-            Business alone max {{ TEAM_BUSINESS_ALONE_MAX }}. Past {{ TEAM_SCALE_THRESHOLD }} needs Executive
-            (11→1, 15→2, 20→3). Subdomain from {{ TEAM_EXEC_SUBDOMAIN_MIN }} Executive.
+            Business alone max {{ TEAM_BUSINESS_ALONE_MAX }}. Past {{ TEAM_SCALE_THRESHOLD }} needs {{ TEAM_EXEC_SCALE_MIN }} Executive. Subdomain from {{ TEAM_EXEC_SUBDOMAIN_MIN }} Executive.
           </p>
         </div>
 
@@ -324,7 +324,7 @@ onUnmounted(() => {
               <h2 class="font-label-caps text-label-caps uppercase tracking-widest">Build your mix</h2>
               <p class="text-on-surface-variant text-sm">
                 Mix freely. Business alone max {{ TEAM_BUSINESS_ALONE_MAX }}. Total min {{ TEAM_PACKAGE_MIN }}.
-                Past {{ TEAM_SCALE_THRESHOLD }} requires Executive cards to scale.
+                Past {{ TEAM_SCALE_THRESHOLD }} needs {{ TEAM_EXEC_SCALE_MIN }} Executive cards.
               </p>
             </div>
 

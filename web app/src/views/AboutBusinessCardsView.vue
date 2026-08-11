@@ -364,8 +364,8 @@ onUnmounted(() => {
                 <tr class="border-b border-border-subtle/70">
                   <td class="py-3 pr-4 text-on-surface">Scale past 10</td>
                   <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center text-xs leading-snug">Needs Executive mix</td>
-                  <td class="py-3 pl-2 text-center text-xs leading-snug">1 Exec / +5<br>(11→1, 15→2, 20→3)</td>
+                  <td class="py-3 px-2 text-center text-xs leading-snug">Needs 5 Executive in the mix</td>
+                  <td class="py-3 pl-2 text-center text-primary text-xs leading-snug">5 Executive unlocks 11+</td>
                 </tr>
                 <tr>
                   <td class="py-3 pr-4 text-on-surface">Custom subdomain</td>

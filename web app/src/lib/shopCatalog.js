@@ -152,6 +152,8 @@ export const TEAM_BUSINESS_ALONE_MAX = 10
 export const TEAM_SCALE_THRESHOLD = 10
 /** Executive cards required to unlock optional custom subdomain. */
 export const TEAM_EXEC_SUBDOMAIN_MIN = 5
+/** Executive cards required to scale a team past TEAM_SCALE_THRESHOLD. */
+export const TEAM_EXEC_SCALE_MIN = 5
 /** @deprecated use TEAM_EXEC_SUBDOMAIN_MIN / isTeamSubdomainEligible */
 export const TEAM_SUBDOMAIN_THRESHOLD = TEAM_EXEC_SUBDOMAIN_MIN
 
@@ -162,12 +164,12 @@ export function isTeamCard(productId) {
 /**
  * Min Executive cards for a team total.
  * <=10: 0 required (Business alone allowed up to 10).
- * 11→1, 15→2, 20→3: floor((total - 10) / 5) + 1
+ * >10: need TEAM_EXEC_SCALE_MIN Executive cards in the mix.
  */
 export function minExecutiveForTeamTotal(total) {
   const t = Math.max(0, Math.floor(Number(total) || 0))
   if (t <= TEAM_SCALE_THRESHOLD) return 0
-  return Math.floor((t - TEAM_SCALE_THRESHOLD) / 5) + 1
+  return TEAM_EXEC_SCALE_MIN
 }
 
 export function isTeamSubdomainEligible(executiveQty) {
@@ -195,7 +197,7 @@ export function validateTeamMix(businessQty, executiveQty) {
   if (executive < needed) {
     return {
       ok: false,
-      error: `Teams of ${total} need at least ${needed} Executive card${needed === 1 ? '' : 's'} (1 Executive per 5 cards past 10).`
+      error: `Teams over ${TEAM_SCALE_THRESHOLD} need at least ${needed} Executive cards (you have ${executive}).`
     }
   }
   return { ok: true, error: '', total, business, executive, needed }

@@ -6,6 +6,7 @@ import {
   TEAM_BUSINESS_ALONE_MAX,
   TEAM_EXEC_SUBDOMAIN_MIN,
   TEAM_PACKAGE_MIN,
+  TEAM_EXEC_SCALE_MIN,
   TEAM_SCALE_THRESHOLD,
   formatPrice,
   getProduct,
@@ -399,8 +400,8 @@ async function requestQuote() {
                   </tr>
                   <tr class="border-b border-border-subtle/60">
                     <td class="py-2 pr-2 text-on-surface">Scale past {{ TEAM_SCALE_THRESHOLD }}</td>
-                    <td class="py-2 px-1 text-center text-[11px] leading-snug">Needs Executive mix</td>
-                    <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">1 Exec / +5 cards<br>(11→1, 15→2, 20→3)</td>
+                    <td class="py-2 px-1 text-center text-[11px] leading-snug">Needs {{ TEAM_EXEC_SCALE_MIN }} Executive in the mix</td>
+                    <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">{{ TEAM_EXEC_SCALE_MIN }} Executive unlocks 11+</td>
                   </tr>
                   <tr>
                     <td class="py-2 pr-2 text-on-surface">Custom subdomain</td>

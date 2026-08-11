@@ -235,8 +235,8 @@ onUnmounted(() => {
                     class="w-full h-auto block pointer-events-none"
                     decoding="async"
                   >
-                </button>
-              </div>
+          </button>
+        </div>
             </div>
 
             <div class="relative z-10 order-2 md:order-1 flex flex-col gap-4 max-w-xl px-8 pb-10 pt-2 md:p-14 md:pr-8 md:pb-14 md:w-[48%]">
@@ -366,8 +366,8 @@ onUnmounted(() => {
                 View package
               </button>
             </article>
-          </div>
-        </section>
+        </div>
+      </section>
 
         <!-- Connect Team -->
         <section
@@ -382,7 +382,7 @@ onUnmounted(() => {
               </h2>
               <div class="h-1 w-12 bg-primary" />
               <p class="text-on-surface-variant text-sm mt-1">
-                Business &amp; Executive in one package (min 5). Business alone max 10. Past 10 needs Executive (11→1, 15→2, 20→3). Subdomain from 5 Executive.
+                Business &amp; Executive in one package (min 5). Business alone max 10. Past 10 needs 5 Executive. Subdomain from 5 Executive.
               </p>
             </div>
             <span class="font-label-caps text-label-caps text-ink-muted shrink-0">{{ teamCards.length }} ITEMS</span>
@@ -517,8 +517,8 @@ onUnmounted(() => {
                 <tr class="border-b border-border-subtle/70">
                   <td class="py-3 pr-4 text-on-surface">Scale past 10</td>
                   <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center text-xs leading-snug">Needs Executive mix</td>
-                  <td class="py-3 pl-2 text-center text-xs leading-snug">1 Exec / +5<br>(11→1, 15→2, 20→3)</td>
+                  <td class="py-3 px-2 text-center text-xs leading-snug">Needs 5 Executive in the mix</td>
+                  <td class="py-3 pl-2 text-center text-primary text-xs leading-snug">5 Executive unlocks 11+</td>
                 </tr>
                 <tr>
                   <td class="py-3 pr-4 text-on-surface">Custom subdomain</td>
@@ -620,14 +620,14 @@ onUnmounted(() => {
                 autocomplete="email"
                 @keydown.enter.prevent="handleSubscribe"
               >
-              <button
-                type="button"
+          <button
+            type="button"
                 class="bg-primary text-on-primary py-4 font-button-text uppercase tracking-widest text-sm hover:opacity-90 transition-opacity"
                 @click="handleSubscribe"
               >
                 Lets Connect
-              </button>
-            </div>
+          </button>
+        </div>
             <div v-else class="flex flex-col items-center gap-2 py-4">
               <span class="material-symbols-outlined text-primary text-[48px]">check_circle</span>
               <span class="font-label-caps text-label-caps">Welcome to the future.</span>
