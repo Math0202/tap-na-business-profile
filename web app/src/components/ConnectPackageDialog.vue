@@ -331,12 +331,63 @@ async function requestQuote() {
                 </div>
               </li>
             </ul>
-            <div class="bg-surface-container rounded-xl p-4 flex flex-col gap-2 text-sm">
-              <div class="flex justify-between">
-                <span class="text-on-surface-variant">Package total</span>
-                <span class="font-label-caps text-label-caps">{{ teamTotal }} cards · {{ businessQty }}:{{ executiveQty }}</span>
+            <div class="bg-surface-container rounded-xl p-4 flex flex-col gap-3">
+              <div class="flex items-baseline justify-between gap-3">
+                <h3 class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">Summary</h3>
+                <span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface">{{ teamTotal }} cards · {{ businessQty }}:{{ executiveQty }}</span>
               </div>
-              <label v-if="subdomainEligible" class="flex flex-col gap-2 mt-1">
+              <table class="w-full text-left text-[12px] border-collapse">
+                <thead>
+                  <tr class="border-b border-border-subtle">
+                    <th class="py-2 pr-2 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium">Feature</th>
+                    <th class="py-2 px-1 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium text-center whitespace-nowrap">Solo</th>
+                    <th class="py-2 pl-1 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium text-center whitespace-nowrap">Team</th>
+                  </tr>
+                </thead>
+                <tbody class="text-on-surface-variant">
+                  <tr class="border-b border-border-subtle/60">
+                    <td class="py-2 pr-2 text-on-surface">NFC + QR → live profile</td>
+                    <td class="py-2 px-1 text-center text-primary">✓</td>
+                    <td class="py-2 pl-1 text-center text-primary">✓</td>
+                  </tr>
+                  <tr class="border-b border-border-subtle/60">
+                    <td class="py-2 pr-2 text-on-surface">Once-off (no monthly fee)</td>
+                    <td class="py-2 px-1 text-center text-primary">✓</td>
+                    <td class="py-2 pl-1 text-center text-primary">✓</td>
+                  </tr>
+                  <tr class="border-b border-border-subtle/60">
+                    <td class="py-2 pr-2 text-on-surface">Catalogue &amp; book meeting</td>
+                    <td class="py-2 px-1 text-center text-primary">✓</td>
+                    <td class="py-2 pl-1 text-center text-primary">✓</td>
+                  </tr>
+                  <tr class="border-b border-border-subtle/60">
+                    <td class="py-2 pr-2 text-on-surface">Custom logo on card</td>
+                    <td class="py-2 px-1 text-center">—</td>
+                    <td class="py-2 pl-1 text-center text-primary">Black &amp; White</td>
+                  </tr>
+                  <tr class="border-b border-border-subtle/60">
+                    <td class="py-2 pr-2 text-on-surface">Team profiles</td>
+                    <td class="py-2 px-1 text-center">—</td>
+                    <td class="py-2 pl-1 text-center text-primary">✓</td>
+                  </tr>
+                  <tr class="border-b border-border-subtle/60">
+                    <td class="py-2 pr-2 text-on-surface">Owner can block a member</td>
+                    <td class="py-2 px-1 text-center">—</td>
+                    <td class="py-2 pl-1 text-center text-primary">✓</td>
+                  </tr>
+                  <tr class="border-b border-border-subtle/60">
+                    <td class="py-2 pr-2 text-on-surface">Mix Business &amp; Executive</td>
+                    <td class="py-2 px-1 text-center">—</td>
+                    <td class="py-2 pl-1 text-center text-primary">✓</td>
+                  </tr>
+                  <tr>
+                    <td class="py-2 pr-2 text-on-surface">Subdomain (e.g. cards.company.com)</td>
+                    <td class="py-2 px-1 text-center">—</td>
+                    <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">Optional at 10+ cards</td>
+                  </tr>
+                </tbody>
+              </table>
+              <label v-if="subdomainEligible" class="flex flex-col gap-2 pt-1 border-t border-border-subtle">
                 <span class="font-label-caps text-[10px] uppercase tracking-widest text-primary">Optional custom subdomain</span>
                 <input
                   v-model="subdomain"
@@ -345,7 +396,7 @@ async function requestQuote() {
                   placeholder="cards.yourcompany.com"
                 >
               </label>
-              <p v-else class="font-label-caps text-[10px] uppercase tracking-widest text-ink-muted">
+              <p v-else class="font-label-caps text-[10px] uppercase tracking-widest text-ink-muted pt-1 border-t border-border-subtle">
                 Optional subdomain from {{ TEAM_SUBDOMAIN_THRESHOLD }}+ cards
               </p>
             </div>

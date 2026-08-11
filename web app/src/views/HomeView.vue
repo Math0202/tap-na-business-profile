@@ -456,7 +456,7 @@ onUnmounted(() => {
             </h2>
             <div class="h-1 w-12 bg-primary" />
             <p class="text-on-surface-variant text-sm mt-1">
-              Connect Solo is one Professional card. Connect Team is one mixable package — Business and Executive finishes in any ratio.
+              Quick comparison of Connect Solo and Connect Team.
             </p>
           </div>
           <div class="overflow-x-auto -mx-1 px-1">
@@ -494,8 +494,7 @@ onUnmounted(() => {
                   <td class="py-3 pr-4 text-on-surface">Custom logo on card</td>
                   <td class="py-3 px-3 text-center">—</td>
                   <td class="py-3 pl-3 text-center text-primary text-xs leading-snug">
-                    Business: B&amp;W<br>
-                    Executive: Colour
+                    Black &amp; White
                   </td>
                 </tr>
                 <tr class="border-b border-border-subtle/70">
@@ -513,19 +512,11 @@ onUnmounted(() => {
                   <td class="py-3 px-3 text-center">—</td>
                   <td class="py-3 pl-3 text-center text-primary">✓</td>
                 </tr>
-                <tr class="border-b border-border-subtle/70">
+                <tr>
                   <td class="py-3 pr-4 text-on-surface">Subdomain (e.g. cards.company.com)</td>
                   <td class="py-3 px-3 text-center">—</td>
                   <td class="py-3 pl-3 text-center text-primary text-xs leading-snug">
                     Optional at 10+ cards
-                  </td>
-                </tr>
-                <tr>
-                  <td class="py-3 pr-4 text-on-surface">Suggested size</td>
-                  <td class="py-3 px-3 text-center text-xs leading-snug">From 1</td>
-                  <td class="py-3 pl-3 text-center text-xs leading-snug">
-                    Min 5 combined<br>
-                    Unlimited max
                   </td>
                 </tr>
               </tbody>
