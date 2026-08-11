@@ -388,7 +388,7 @@ async function requestQuote() {
                 <tr class="border-b border-border-subtle/60">
                   <td class="py-2 pr-2 text-on-surface">Custom logo on card</td>
                   <td class="py-2 px-1 text-center">—</td>
-                  <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">B&amp;W / Colour</td>
+                  <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">Black &amp; White</td>
                 </tr>
                 <tr class="border-b border-border-subtle/60">
                   <td class="py-2 pr-2 text-on-surface">Team profiles + owner block</td>
@@ -496,8 +496,8 @@ async function requestQuote() {
                   </tr>
                   <tr class="border-b border-border-subtle/60">
                     <td class="py-2 pr-2 text-on-surface">Custom logo on card</td>
-                    <td class="py-2 px-1 text-center text-primary text-[11px]">B&amp;W</td>
-                    <td class="py-2 pl-1 text-center text-primary text-[11px]">Colour</td>
+                    <td class="py-2 px-1 text-center text-primary text-[11px]">Black &amp; White</td>
+                    <td class="py-2 pl-1 text-center text-primary text-[11px]">Black &amp; White</td>
                   </tr>
                   <tr class="border-b border-border-subtle/60">
                     <td class="py-2 pr-2 text-on-surface">Team profiles + owner block</td>

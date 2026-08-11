@@ -290,7 +290,7 @@ onUnmounted(() => {
                 <span class="font-label-caps text-[10px] uppercase tracking-widest bg-surface-charcoal text-on-primary px-2 py-1">Executive</span>
               </div>
               <p class="text-sm text-on-surface-variant leading-relaxed">
-                Matte black flagship for leaders and larger teams (5–20+). B/W company logo, fuller team tools, and a company subdomain
+                Matte black flagship for leaders and larger teams (5–20+). black &amp; white company logo, fuller team tools, and a company subdomain
                 such as <strong class="text-on-surface">cards.company.com</strong>. Business Class cards on the same team can also load onto that subdomain.
               </p>
             </article>
@@ -346,8 +346,8 @@ onUnmounted(() => {
                 <tr class="border-b border-border-subtle/70">
                   <td class="py-3 pr-4 text-on-surface">Custom logo on card</td>
                   <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center text-primary text-xs">B&amp;W</td>
-                  <td class="py-3 pl-2 text-center text-primary text-xs">Colour</td>
+                  <td class="py-3 px-2 text-center text-primary text-xs">Black &amp; White</td>
+                  <td class="py-3 pl-2 text-center text-primary text-xs">Black &amp; White</td>
                 </tr>
                 <tr class="border-b border-border-subtle/70">
                   <td class="py-3 pr-4 text-on-surface">Team profiles + owner block</td>
