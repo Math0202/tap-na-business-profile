@@ -10,8 +10,10 @@ import {
   TEAM_BUSINESS_ALONE_MAX,
   TEAM_EXEC_SUBDOMAIN_MIN,
   TEAM_EXEC_SCALE_MIN,
+  TEAM_FREE_MIX_AFTER,
   TEAM_PACKAGE_MIN,
   TEAM_SCALE_THRESHOLD,
+  isTeamExecutiveBridge,
   formatPrice,
   getProduct,
   initialTeamMix,
@@ -106,6 +108,11 @@ function showToast(msg, ms = 4500) {
 }
 
 function bumpBusiness(delta) {
+  if (delta > 0 && isTeamExecutiveBridge(teamTotal.value)) {
+    showToast(`Cards 11–${TEAM_FREE_MIX_AFTER} must be Executive. Adding Executive instead.`)
+    bumpExecutive(1)
+    return
+  }
   const next = Math.min(99, Math.max(0, businessQty.value + delta))
   const check = validateTeamMix(next, executiveQty.value)
   if (!check.ok) {
@@ -157,7 +164,7 @@ async function refresh() {
   setPageSeo({
     title: 'Connect Team package — tap-na',
     description:
-      'Combine Business and Executive Connect cards. Business alone max 10. Past 10 needs 5 Executive. Subdomain from 5 Executive.',
+      'Combine Business and Executive Connect cards. Business alone max 10. Free mix to 10. Cards 11–15 must be Executive, then mix freely. Subdomain from 5 Executive.',
     path: '/package/team'
   })
   await nextTick()
@@ -212,7 +219,7 @@ onUnmounted(() => {
           <div class="h-1 w-12 bg-primary" />
           <p class="text-on-surface-variant text-sm mt-1">
             Business and Executive in one mixable pack. Min {{ TEAM_PACKAGE_MIN }} combined.
-            Business alone max {{ TEAM_BUSINESS_ALONE_MAX }}. Past {{ TEAM_SCALE_THRESHOLD }} needs {{ TEAM_EXEC_SCALE_MIN }} Executive. Subdomain from {{ TEAM_EXEC_SUBDOMAIN_MIN }} Executive.
+            Business alone max {{ TEAM_BUSINESS_ALONE_MAX }}. Cards 11–{{ TEAM_FREE_MIX_AFTER }} must be Executive, then free mix. Subdomain from {{ TEAM_EXEC_SUBDOMAIN_MIN }} Executive.
           </p>
         </div>
 
@@ -327,7 +334,7 @@ onUnmounted(() => {
               <h2 class="font-label-caps text-label-caps uppercase tracking-widest">Build your mix</h2>
               <p class="text-on-surface-variant text-sm">
                 Mix freely. Business alone max {{ TEAM_BUSINESS_ALONE_MAX }}. Total min {{ TEAM_PACKAGE_MIN }}.
-                Past {{ TEAM_SCALE_THRESHOLD }} needs {{ TEAM_EXEC_SCALE_MIN }} Executive cards.
+                Cards 11–{{ TEAM_FREE_MIX_AFTER }} must be Executive; after that mix freely.
               </p>
             </div>
 

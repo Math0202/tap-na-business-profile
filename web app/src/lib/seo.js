@@ -87,7 +87,7 @@ export const ROUTE_SEO = {
   'team-package': {
     title: 'Connect Team package — tap-na',
     description:
-      'Combine Business and Executive Connect cards. Business alone max 10. Past 10 needs 5 Executive. Subdomain from 5 Executive.'
+      'Combine Business and Executive Connect cards. Business alone max 10. Cards 11–15 must be Executive, then free mix. Subdomain from 5 Executive.'
   },
   cart: {
     title: 'Cart — tap-na',

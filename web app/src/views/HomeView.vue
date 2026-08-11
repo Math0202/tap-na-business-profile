@@ -382,7 +382,7 @@ onUnmounted(() => {
               </h2>
               <div class="h-1 w-12 bg-primary" />
               <p class="text-on-surface-variant text-sm mt-1">
-                Business &amp; Executive in one package (min 5). Business alone max 10. Past 10 needs 5 Executive. Subdomain from 5 Executive.
+                Business &amp; Executive in one package (min 5). Business alone max 10. Cards 11–15 must be Executive, then free mix. Subdomain from 5 Executive.
               </p>
             </div>
             <span class="font-label-caps text-label-caps text-ink-muted shrink-0">{{ teamCards.length }} ITEMS</span>
@@ -517,8 +517,8 @@ onUnmounted(() => {
                 <tr class="border-b border-border-subtle/70">
                   <td class="py-3 pr-4 text-on-surface">Scale past 10</td>
                   <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center text-xs leading-snug">Needs 5 Executive in the mix</td>
-                  <td class="py-3 pl-2 text-center text-primary text-xs leading-snug">5 Executive unlocks 11+</td>
+                  <td class="py-3 px-2 text-center text-xs leading-snug">Free mix to 10</td>
+                  <td class="py-3 pl-2 text-center text-primary text-xs leading-snug">11–15 Executive only,<br>then free mix</td>
                 </tr>
                 <tr>
                   <td class="py-3 pr-4 text-on-surface">Custom subdomain</td>

@@ -8,7 +8,9 @@ import {
   TEAM_PACKAGE_MIN,
   SOLO_PACKAGE_MAX,
   TEAM_EXEC_SCALE_MIN,
+  TEAM_FREE_MIX_AFTER,
   TEAM_SCALE_THRESHOLD,
+  isTeamExecutiveBridge,
   formatPrice,
   getProduct,
   initialTeamMix,
@@ -149,6 +151,12 @@ function switchToTeam() {
   emit('switch-to-team')
 }
 function bumpBusiness(delta) {
+  // Cards 11–15 must be Executive, regardless of which + the user taps.
+  if (delta > 0 && isTeamExecutiveBridge(teamTotal.value)) {
+    showNotice(`Cards 11–${TEAM_FREE_MIX_AFTER} must be Executive. Adding Executive instead.`)
+    bumpExecutive(1)
+    return
+  }
   const next = Math.min(99, Math.max(0, businessQty.value + delta))
   const check = validateTeamMix(next, executiveQty.value)
   if (!check.ok) {
@@ -500,8 +508,8 @@ async function requestQuote() {
                   </tr>
                   <tr class="border-b border-border-subtle/60">
                     <td class="py-2 pr-2 text-on-surface">Scale past {{ TEAM_SCALE_THRESHOLD }}</td>
-                    <td class="py-2 px-1 text-center text-[11px] leading-snug">Needs {{ TEAM_EXEC_SCALE_MIN }} Executive in the mix</td>
-                    <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">{{ TEAM_EXEC_SCALE_MIN }} Executive unlocks 11+</td>
+                    <td class="py-2 px-1 text-center text-[11px] leading-snug">Free mix to 10</td>
+                    <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">11–{{ TEAM_FREE_MIX_AFTER }} Executive only, then free mix</td>
                   </tr>
                   <tr>
                     <td class="py-2 pr-2 text-on-surface">Custom subdomain</td>
@@ -510,8 +518,13 @@ async function requestQuote() {
                   </tr>
                 </tbody>
               </table>
-              <p v-if="minExecutiveNeeded > 0" class="text-[11px] text-on-surface-variant leading-snug">
-                This mix needs at least <span class="text-on-surface font-medium">{{ minExecutiveNeeded }} Executive</span>
+              <p v-if="teamTotal >= TEAM_SCALE_THRESHOLD && teamTotal < TEAM_FREE_MIX_AFTER" class="text-[11px] text-on-surface-variant leading-snug">
+                Cards 11–{{ TEAM_FREE_MIX_AFTER }} must be Executive
+                ({{ minExecutiveNeeded }} needed · you have {{ executiveQty }}).
+                After {{ TEAM_FREE_MIX_AFTER }}, mix Business or Executive freely.
+              </p>
+              <p v-else-if="minExecutiveNeeded > 0" class="text-[11px] text-on-surface-variant leading-snug">
+                Keep at least <span class="text-on-surface font-medium">{{ minExecutiveNeeded }} Executive</span>
                 for {{ teamTotal }} cards.
                 <span v-if="!teamMixCheck.ok" class="text-red-600"> {{ teamMixCheck.error }}</span>
               </p>

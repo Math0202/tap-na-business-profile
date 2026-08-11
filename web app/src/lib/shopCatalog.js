@@ -150,11 +150,13 @@ export const TEAM_PACKAGE_MIN = 5
 export const SOLO_PACKAGE_MAX = 4
 /** Business alone (0 Executive) cannot exceed this. */
 export const TEAM_BUSINESS_ALONE_MAX = 10
-/** Total size at which Executive cards become required to scale further. */
+/** Total size at which further growth must be Executive until TEAM_FREE_MIX_AFTER. */
 export const TEAM_SCALE_THRESHOLD = 10
+/** After this total, Business and Executive can mix freely again. */
+export const TEAM_FREE_MIX_AFTER = 15
 /** Executive cards required to unlock optional custom subdomain. */
 export const TEAM_EXEC_SUBDOMAIN_MIN = 5
-/** Executive cards required to scale a team past TEAM_SCALE_THRESHOLD. */
+/** Executive cards required to finish the 11–15 growth bridge. */
 export const TEAM_EXEC_SCALE_MIN = 5
 /** @deprecated use TEAM_EXEC_SUBDOMAIN_MIN / isTeamSubdomainEligible */
 export const TEAM_SUBDOMAIN_THRESHOLD = TEAM_EXEC_SUBDOMAIN_MIN
@@ -163,14 +165,22 @@ export function isTeamCard(productId) {
   return TEAM_CARD_IDS.has(String(productId || ''))
 }
 
+/** True while total is in the 10→15 Executive-only growth bridge. */
+export function isTeamExecutiveBridge(total) {
+  const t = Math.max(0, Math.floor(Number(total) || 0))
+  return t >= TEAM_SCALE_THRESHOLD && t < TEAM_FREE_MIX_AFTER
+}
+
 /**
  * Min Executive cards for a team total.
- * <=10: 0 required (Business alone allowed up to 10).
- * >10: need TEAM_EXEC_SCALE_MIN Executive cards in the mix.
+ * <=10: 0 (Business alone allowed up to 10; free mix).
+ * 11–15: cards past 10 must be Executive (11→1 … 15→5).
+ * >15: at least 5 Executive; Business or Executive may grow freely.
  */
 export function minExecutiveForTeamTotal(total) {
   const t = Math.max(0, Math.floor(Number(total) || 0))
   if (t <= TEAM_SCALE_THRESHOLD) return 0
+  if (t <= TEAM_FREE_MIX_AFTER) return t - TEAM_SCALE_THRESHOLD
   return TEAM_EXEC_SCALE_MIN
 }
 
@@ -195,11 +205,20 @@ export function validateTeamMix(businessQty, executiveQty) {
       error: `Business Class alone is limited to ${TEAM_BUSINESS_ALONE_MAX} cards. Add Executive cards to go beyond 10.`
     }
   }
+  if (total > TEAM_SCALE_THRESHOLD && total <= TEAM_FREE_MIX_AFTER && business > TEAM_BUSINESS_ALONE_MAX) {
+    return {
+      ok: false,
+      error: `Cards 11–${TEAM_FREE_MIX_AFTER} must be Executive. Mix Business again after ${TEAM_FREE_MIX_AFTER} cards.`
+    }
+  }
   const needed = minExecutiveForTeamTotal(total)
   if (executive < needed) {
     return {
       ok: false,
-      error: `Teams over ${TEAM_SCALE_THRESHOLD} need at least ${needed} Executive cards (you have ${executive}).`
+      error:
+        total <= TEAM_FREE_MIX_AFTER
+          ? `Cards 11–${TEAM_FREE_MIX_AFTER} must be Executive (need ${needed} Executive for ${total} cards; you have ${executive}).`
+          : `Teams over ${TEAM_SCALE_THRESHOLD} need at least ${needed} Executive cards (you have ${executive}).`
     }
   }
   return { ok: true, error: '', total, business, executive, needed }
