@@ -6,6 +6,7 @@ import {
   TEAM_BUSINESS_ALONE_MAX,
   TEAM_EXEC_SUBDOMAIN_MIN,
   TEAM_PACKAGE_MIN,
+  SOLO_PACKAGE_MAX,
   TEAM_EXEC_SCALE_MIN,
   TEAM_SCALE_THRESHOLD,
   formatPrice,
@@ -29,7 +30,7 @@ const props = defineProps({
   initialSoloQty: { type: Number, default: 1 }
 })
 
-const emit = defineEmits(['close', 'ordered'])
+const emit = defineEmits(['close', 'ordered', 'switch-to-team'])
 
 const soloQty = ref(1)
 const businessQty = ref(2)
@@ -107,7 +108,7 @@ watch(
         props.initialExecutiveQty != null ? Math.max(0, Math.floor(props.initialExecutiveQty)) : mix.executiveQty
       subdomain.value = String(props.initialSubdomain || '').trim()
     } else {
-      soloQty.value = Math.max(1, Math.floor(Number(props.initialSoloQty) || 1))
+      soloQty.value = Math.min(SOLO_PACKAGE_MAX, Math.max(1, Math.floor(Number(props.initialSoloQty) || 1)))
     }
     const profile = loadProfile()
     const name = String(profile?.name || '').trim()
@@ -121,7 +122,16 @@ watch(
 )
 
 function bumpSolo(delta) {
-  soloQty.value = Math.min(99, Math.max(1, soloQty.value + delta))
+  const next = Math.min(SOLO_PACKAGE_MAX, Math.max(1, soloQty.value + delta))
+  if (delta > 0 && soloQty.value >= SOLO_PACKAGE_MAX) {
+    error.value = `Connect Solo is limited to ${SOLO_PACKAGE_MAX} cards. For 5+ cards or a team, choose Connect Team.`
+    return
+  }
+  soloQty.value = next
+  error.value = ''
+}
+function switchToTeam() {
+  emit('switch-to-team')
 }
 function bumpBusiness(delta) {
   const next = Math.min(99, Math.max(0, businessQty.value + delta))
@@ -181,6 +191,9 @@ async function requestQuote() {
       error.value = check.error
       return
     }
+  } else if (soloQty.value > SOLO_PACKAGE_MAX) {
+    error.value = `Connect Solo is limited to ${SOLO_PACKAGE_MAX} cards. For 5+ cards or a team, choose Connect Team.`
+    return
   }
   const name = customerName.value.trim()
   const company = customerCompany.value.trim()
@@ -272,7 +285,7 @@ async function requestQuote() {
           <div class="min-w-0">
             <h2 class="font-headline-lg-mobile text-[22px] font-medium uppercase tracking-tight">{{ title }}</h2>
             <p class="text-on-surface-variant text-sm mt-1">
-              {{ isTeam ? `Business & Executive · min ${TEAM_PACKAGE_MIN} · Business alone max ${TEAM_BUSINESS_ALONE_MAX}` : 'Professional Class · from 1 card' }}
+              {{ isTeam ? `Business & Executive · min ${TEAM_PACKAGE_MIN} · Business alone max ${TEAM_BUSINESS_ALONE_MAX}` : `Professional Class · 1–${SOLO_PACKAGE_MAX} cards` }}
             </p>
           </div>
           <button
@@ -302,12 +315,77 @@ async function requestQuote() {
                     <span class="material-symbols-outlined text-[18px]">remove</span>
                   </button>
                   <span class="w-10 text-center font-label-caps text-[12px]">{{ soloQty }}</span>
-                  <button type="button" class="w-10 h-10 flex items-center justify-center" aria-label="Increase" @click="bumpSolo(1)">
+                  <button type="button" class="w-10 h-10 flex items-center justify-center disabled:opacity-40" aria-label="Increase" :disabled="soloQty >= SOLO_PACKAGE_MAX" @click="bumpSolo(1)">
                     <span class="material-symbols-outlined text-[18px]">add</span>
                   </button>
                 </div>
               </div>
             </div>
+
+          <!-- Solo summary -->
+          <div v-if="!isTeam" class="bg-surface-container rounded-xl p-4 flex flex-col gap-3">
+            <div class="flex items-baseline justify-between gap-3">
+              <h3 class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">Summary</h3>
+              <span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface">{{ soloQty }} / {{ SOLO_PACKAGE_MAX }} cards</span>
+            </div>
+            <table class="w-full text-left text-[12px] border-collapse">
+              <thead>
+                <tr class="border-b border-border-subtle">
+                  <th class="py-2 pr-2 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium">Feature</th>
+                  <th class="py-2 px-1 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium text-center whitespace-nowrap">Solo</th>
+                  <th class="py-2 pl-1 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium text-center whitespace-nowrap">Connect Team</th>
+                </tr>
+              </thead>
+              <tbody class="text-on-surface-variant">
+                <tr class="border-b border-border-subtle/60">
+                  <td class="py-2 pr-2 text-on-surface">NFC + QR → live profile</td>
+                  <td class="py-2 px-1 text-center text-primary">✓</td>
+                  <td class="py-2 pl-1 text-center text-primary">✓</td>
+                </tr>
+                <tr class="border-b border-border-subtle/60">
+                  <td class="py-2 pr-2 text-on-surface">Once-off (no monthly fee)</td>
+                  <td class="py-2 px-1 text-center text-primary">✓</td>
+                  <td class="py-2 pl-1 text-center text-primary">✓</td>
+                </tr>
+                <tr class="border-b border-border-subtle/60">
+                  <td class="py-2 pr-2 text-on-surface">Catalogue &amp; book meeting</td>
+                  <td class="py-2 px-1 text-center text-primary">✓</td>
+                  <td class="py-2 pl-1 text-center text-primary">✓</td>
+                </tr>
+                <tr class="border-b border-border-subtle/60">
+                  <td class="py-2 pr-2 text-on-surface">Custom logo on card</td>
+                  <td class="py-2 px-1 text-center">—</td>
+                  <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">B&amp;W / Colour</td>
+                </tr>
+                <tr class="border-b border-border-subtle/60">
+                  <td class="py-2 pr-2 text-on-surface">Team profiles + owner block</td>
+                  <td class="py-2 px-1 text-center">—</td>
+                  <td class="py-2 pl-1 text-center text-primary">✓</td>
+                </tr>
+                <tr class="border-b border-border-subtle/60">
+                  <td class="py-2 pr-2 text-on-surface">Quantity</td>
+                  <td class="py-2 px-1 text-center text-primary text-[11px] leading-snug">Up to {{ SOLO_PACKAGE_MAX }}</td>
+                  <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">Min {{ TEAM_PACKAGE_MIN }}</td>
+                </tr>
+                <tr>
+                  <td class="py-2 pr-2 text-on-surface">Custom subdomain</td>
+                  <td class="py-2 px-1 text-center">—</td>
+                  <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">From {{ TEAM_EXEC_SUBDOMAIN_MIN }} Executive</td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="text-[11px] text-on-surface-variant leading-snug">
+              Need {{ TEAM_PACKAGE_MIN }}+ cards or a shared team? Choose Connect Team (Business package).
+            </p>
+            <button
+              type="button"
+              class="w-full border border-primary text-primary py-3 font-button-text text-[11px] uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-colors"
+              @click="switchToTeam"
+            >
+              View Connect Team
+            </button>
+          </div>
+
           </template>
 
           <!-- Team lines -->

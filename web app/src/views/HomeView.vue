@@ -312,7 +312,7 @@ onUnmounted(() => {
               </h2>
               <div class="h-1 w-12 bg-primary" />
               <p class="text-on-surface-variant text-sm mt-1">
-                Professional Class — one card type. Buy from 1 to unlimited.
+                Professional Class — one card type. Buy 1–4. For 5+ cards, choose Connect Team.
               </p>
             </div>
             <span class="font-label-caps text-label-caps text-ink-muted shrink-0">{{ soloCards.length }} ITEMS</span>
@@ -510,7 +510,7 @@ onUnmounted(() => {
                 </tr>
                 <tr class="border-b border-border-subtle/70">
                   <td class="py-3 pr-4 text-on-surface">Buy alone</td>
-                  <td class="py-3 px-2 text-center text-xs">From 1</td>
+                  <td class="py-3 px-2 text-center text-xs">Up to 4</td>
                   <td class="py-3 px-2 text-center text-xs leading-snug">Up to 10</td>
                   <td class="py-3 pl-2 text-center text-xs leading-snug">Min 5</td>
                 </tr>
@@ -701,6 +701,7 @@ onUnmounted(() => {
       :focus-id="packageFocusId"
       :solo-product-id="packageFocusId || 'blue-card'"
       @close="packageOpen = false"
+      @switch-to-team="openPackage('team', packageFocusId || 'black-card')"
       @ordered="onPackageOrdered"
     />
 

@@ -10,6 +10,7 @@ import {
   isTeamSubdomainEligible,
   validateTeamMix,
   getMinQty,
+  getMaxQty,
   getProduct,
   isTeamCard
 } from './shopCatalog'
@@ -24,7 +25,7 @@ function clampQty(productId, qty) {
   const min = getMinQty(productId)
   const n = Math.floor(Number(qty) || 0)
   if (n <= 0) return 0
-  return Math.min(99, Math.max(min, n))
+  return Math.min(getMaxQty(productId), Math.max(min, n))
 }
 
 function loadMeta() {

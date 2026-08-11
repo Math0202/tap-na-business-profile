@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import ShopHeader from '../components/ShopHeader.vue'
 import ShopBottomNav from '../components/ShopBottomNav.vue'
-import { formatPrice, getMinQty, getProduct, isTeamCard, loadShopProducts, TEAM_PACKAGE_MIN } from '../lib/shopCatalog'
+import { formatPrice, getMaxQty, getMinQty, getProduct, isTeamCard, loadShopProducts, SOLO_PACKAGE_MAX, TEAM_PACKAGE_MIN } from '../lib/shopCatalog'
 import { addToCart } from '../lib/cartStore'
 import { youtubeEmbedUrl } from '../lib/shareHelpers'
 import { setPageSeo } from '../lib/seo'
@@ -18,6 +18,7 @@ let toastTimer = null
 
 const productId = computed(() => String(route.params.id || '').trim())
 const minQty = computed(() => getMinQty(productId.value))
+const maxQty = computed(() => getMaxQty(productId.value))
 const teamPack = computed(() => isTeamCard(productId.value))
 const product = computed(() => {
   const id = productId.value

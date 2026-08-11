@@ -146,6 +146,8 @@ export const BUSINESS_CARD_ID = 'black-card'
 export const EXECUTIVE_CARD_ID = 'black-card-front'
 export const TEAM_CARD_IDS = new Set([BUSINESS_CARD_ID, EXECUTIVE_CARD_ID])
 export const TEAM_PACKAGE_MIN = 5
+/** Connect Solo max qty before recommending Connect Team. */
+export const SOLO_PACKAGE_MAX = 4
 /** Business alone (0 Executive) cannot exceed this. */
 export const TEAM_BUSINESS_ALONE_MAX = 10
 /** Total size at which Executive cards become required to scale further. */
@@ -206,6 +208,11 @@ export function validateTeamMix(businessQty, executiveQty) {
 /** Per-line min. Team lines may be 0 inside a mix; package total is enforced separately. */
 export function getMinQty(productId) {
   return isTeamCard(productId) ? 0 : 1
+}
+
+/** Per-line max. Solo is capped; team lines are open within validateTeamMix. */
+export function getMaxQty(productId) {
+  return isTeamCard(productId) ? 99 : SOLO_PACKAGE_MAX
 }
 
 export function initialTeamMix(focusId) {

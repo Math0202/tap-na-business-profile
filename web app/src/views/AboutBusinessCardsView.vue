@@ -357,7 +357,7 @@ onUnmounted(() => {
                 </tr>
                 <tr class="border-b border-border-subtle/70">
                   <td class="py-3 pr-4 text-on-surface">Buy alone</td>
-                  <td class="py-3 px-2 text-center text-xs">From 1</td>
+                  <td class="py-3 px-2 text-center text-xs">Up to 4</td>
                   <td class="py-3 px-2 text-center text-xs leading-snug">Up to 10</td>
                   <td class="py-3 pl-2 text-center text-xs leading-snug">Min 5</td>
                 </tr>
