@@ -40,6 +40,7 @@ const executiveQty = ref(3)
 const subdomain = ref('')
 const error = ref('')
 const notice = ref('')
+const soloLimitOpen = ref(false)
 let noticeTimer = null
 const submitting = ref(false)
 const customerName = ref('')
@@ -104,6 +105,7 @@ watch(
     if (!open) return
     error.value = ''
     notice.value = ''
+    soloLimitOpen.value = false
     subdomain.value = ''
     submitting.value = false
     if (props.mode === 'team') {
@@ -139,15 +141,18 @@ function showNotice(msg) {
 function bumpSolo(delta) {
   const next = Math.min(SOLO_PACKAGE_MAX, Math.max(1, soloQty.value + delta))
   if (delta > 0 && soloQty.value >= SOLO_PACKAGE_MAX) {
-    const msg = `Connect Solo is limited to ${SOLO_PACKAGE_MAX} cards. For 5+ cards or a team, choose Connect Team.`
-    error.value = msg
-    showNotice(msg)
+    soloLimitOpen.value = true
     return
   }
   soloQty.value = next
   error.value = ''
+  soloLimitOpen.value = false
+}
+function closeSoloLimit() {
+  soloLimitOpen.value = false
 }
 function switchToTeam() {
+  soloLimitOpen.value = false
   emit('switch-to-team')
 }
 function bumpBusiness(delta) {
@@ -220,9 +225,7 @@ async function requestQuote() {
       return
     }
   } else if (soloQty.value > SOLO_PACKAGE_MAX) {
-    const msg = `Connect Solo is limited to ${SOLO_PACKAGE_MAX} cards. For 5+ cards or a team, choose Connect Team.`
-    error.value = msg
-    showNotice(msg)
+    soloLimitOpen.value = true
     return
   }
   const name = customerName.value.trim()
@@ -345,7 +348,7 @@ async function requestQuote() {
                     <span class="material-symbols-outlined text-[18px]">remove</span>
                   </button>
                   <span class="w-10 text-center font-label-caps text-[12px]">{{ soloQty }}</span>
-                  <button type="button" class="w-10 h-10 flex items-center justify-center disabled:opacity-40" aria-label="Increase" :disabled="soloQty >= SOLO_PACKAGE_MAX" @click="bumpSolo(1)">
+                  <button type="button" class="w-10 h-10 flex items-center justify-center" aria-label="Increase" @click="bumpSolo(1)">
                     <span class="material-symbols-outlined text-[18px]">add</span>
                   </button>
                 </div>
@@ -615,6 +618,53 @@ async function requestQuote() {
             @click="requestQuote"
           >
             {{ submitting ? 'Sending quote…' : 'Place order' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Solo limit dialog -->
+    <div
+      v-if="open && soloLimitOpen"
+      class="fixed inset-0 z-[130] flex items-center justify-center p-5"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="solo-limit-title"
+    >
+      <button
+        type="button"
+        class="absolute inset-0 bg-black/55 border-0 cursor-pointer"
+        aria-label="Dismiss"
+        @click="closeSoloLimit"
+      />
+      <div class="relative w-full max-w-sm bg-surface text-on-surface rounded-2xl shadow-2xl p-6 flex flex-col gap-4">
+        <div class="flex items-start gap-3">
+          <span class="material-symbols-outlined text-primary text-[28px] shrink-0" aria-hidden="true">groups</span>
+          <div class="min-w-0 flex flex-col gap-2">
+            <h3 id="solo-limit-title" class="font-headline-lg-mobile text-[18px] font-medium">
+              Need {{ TEAM_PACKAGE_MIN }}+ cards?
+            </h3>
+            <p class="text-sm text-on-surface-variant leading-relaxed">
+              Connect Solo is limited to {{ SOLO_PACKAGE_MAX }} cards.
+              For {{ TEAM_PACKAGE_MIN }} or more cards — or a shared team — view the Connect Team package instead.
+            </p>
+          </div>
+        </div>
+        <div class="flex flex-col gap-2 pt-1">
+          <button
+            type="button"
+            class="w-full bg-primary text-on-primary py-3.5 font-button-text text-[12px] uppercase tracking-widest hover:opacity-90"
+            @click="switchToTeam"
+          >
+            View Connect Team
+          </button>
+          <button
+            type="button"
+            class="w-full border border-border-subtle text-on-surface py-3.5 font-button-text text-[12px] uppercase tracking-widest hover:bg-surface-container"
+            @click="closeSoloLimit"
+          >
+            Stay on Solo
           </button>
         </div>
       </div>
