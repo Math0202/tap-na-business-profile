@@ -127,9 +127,6 @@ onUnmounted(() => {
         <RouterLink to="/support" :class="linkClass(route.path === '/support')">
           Support
         </RouterLink>
-        <RouterLink to="/cart" :class="linkClass(route.path === '/cart')">
-          Cart{{ count > 0 ? ` (${count})` : '' }}
-        </RouterLink>
         <RouterLink
           :to="authTo"
           :class="linkClass(route.path === '/login' || route.path === '/profile')"
@@ -202,13 +199,6 @@ onUnmounted(() => {
         @click="emit('close-menu')"
       >
         Support
-      </RouterLink>
-      <RouterLink
-        to="/cart"
-        class="font-label-caps text-[12px] uppercase tracking-widest py-2 no-underline text-inherit"
-        @click="emit('close-menu')"
-      >
-        Cart{{ count > 0 ? ` (${count})` : '' }}
       </RouterLink>
       <RouterLink
         :to="authTo"
