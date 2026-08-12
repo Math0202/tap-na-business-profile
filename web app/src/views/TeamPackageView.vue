@@ -226,6 +226,11 @@ function openCheckout() {
 }
 
 function onPackageOrdered(payload) {
+  if (payload?.addedToCart) {
+    showToast('Added to cart')
+    router.push('/cart')
+    return
+  }
   showToast(
     payload?.quoteRef
       ? `Quote ${payload.quoteRef} emailed`

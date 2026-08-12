@@ -19,8 +19,7 @@ import {
   isTeamMixOrderReady,
   validateTeamMix
 } from '../lib/shopCatalog'
-import { apiShopOrderQuote } from '../lib/api'
-import { loadProfile } from '../lib/profileStore'
+import { addToCart, removeFromCart, setTeamPackage } from '../lib/cartStore'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -33,7 +32,7 @@ const props = defineProps({
   initialSoloQty: { type: Number, default: 1 }
 })
 
-const emit = defineEmits(['close', 'ordered', 'switch-to-team'])
+const emit = defineEmits(['close', 'ordered', 'added-to-cart', 'switch-to-team'])
 
 const soloQty = ref(1)
 const businessQty = ref(2)
@@ -44,11 +43,6 @@ const notice = ref('')
 const soloLimitOpen = ref(false)
 let noticeTimer = null
 const submitting = ref(false)
-const customerName = ref('')
-const customerCompany = ref('')
-const customerEmail = ref('')
-const customerPhone = ref('')
-const customerTown = ref('')
 
 const isTeam = computed(() => props.mode === 'team')
 const soloProduct = computed(() => getProduct(props.soloProductId || props.focusId || 'blue-card'))
@@ -130,13 +124,13 @@ const placeOrderDisabled = computed(() => {
   return false
 })
 const placeOrderLabel = computed(() => {
-  if (submitting.value) return 'Sending quote…'
+  if (submitting.value) return 'Adding…'
   if (isTeam.value && teamTotal.value < TEAM_PACKAGE_MIN) {
     const n = cardsNeededForMin.value
-    return `Add ${n} more card${n === 1 ? '' : 's'} to order`
+    return `Add ${n} more card${n === 1 ? '' : 's'} to cart`
   }
-  if (isTeam.value && !teamOrderReady.value) return 'Fix mix to order'
-  return 'Place order'
+  if (isTeam.value && !teamOrderReady.value) return 'Fix mix to add'
+  return 'Add to cart'
 })
 const compareOpen = ref(false)
 
@@ -192,14 +186,6 @@ watch(
     } else {
       soloQty.value = Math.min(SOLO_PACKAGE_MAX, Math.max(1, Math.floor(Number(props.initialSoloQty) || 1)))
     }
-    const profile = loadProfile()
-    const name = String(profile?.name || '').trim()
-    const company = String(profile?.company || '').trim()
-    // Skip profile defaults that are only placeholder copy.
-    if (name && name !== 'Name and Surname' && !customerName.value) customerName.value = name
-    if (company && company !== 'Company Name' && !customerCompany.value) customerCompany.value = company
-    if (profile?.email && !customerEmail.value) customerEmail.value = profile.email
-    if (profile?.phone && !customerPhone.value) customerPhone.value = profile.phone
   }
 )
 
@@ -277,33 +263,7 @@ function close() {
   emit('close')
 }
 
-function buildItems() {
-  if (isTeam.value) {
-    const items = []
-    if (businessQty.value > 0 && businessProduct.value) {
-      items.push({
-        id: businessProduct.value.id,
-        name: businessProduct.value.name,
-        qty: businessQty.value,
-        price: businessProduct.value.price
-      })
-    }
-    if (executiveQty.value > 0 && executiveProduct.value) {
-      items.push({
-        id: executiveProduct.value.id,
-        name: executiveProduct.value.name,
-        qty: executiveQty.value,
-        price: executiveProduct.value.price
-      })
-    }
-    return items
-  }
-  const p = soloProduct.value
-  if (!p) return []
-  return [{ id: p.id, name: p.name, qty: soloQty.value, price: p.price }]
-}
-
-async function requestQuote() {
+async function addPackageToCart() {
   error.value = ''
   if (isTeam.value) {
     const check = validateTeamMix(businessQty.value, executiveQty.value)
@@ -316,68 +276,39 @@ async function requestQuote() {
     soloLimitOpen.value = true
     return
   }
-  const name = customerName.value.trim()
-  const company = customerCompany.value.trim()
-  const email = customerEmail.value.trim()
-  const phone = customerPhone.value.trim()
-  const town = customerTown.value.trim()
-  if (!name) {
-    error.value = 'Please enter your full name.'
-    return
-  }
-  if (!company) {
-    error.value = 'Please enter your company name.'
-    return
-  }
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    error.value = 'Please enter a valid email address.'
-    return
-  }
-  if (!phone || phone.replace(/\D/g, '').length < 7) {
-    error.value = 'Please enter a valid cellphone number.'
-    return
-  }
-  if (!town) {
-    error.value = 'Please enter your town.'
-    return
-  }
-  const items = buildItems()
-  if (!items.length) {
-    error.value = 'Add at least one card to continue.'
-    return
-  }
-
-  const noteParts = [
-    `Company: ${company}`,
-    isTeam.value
-      ? `Team mix ${businessQty.value}:${executiveQty.value} (${teamTotal.value} cards)`
-      : `Solo package × ${soloQty.value}`,
-    subdomainEligible.value && subdomain.value.trim()
-      ? `Custom subdomain request: ${subdomain.value.trim()}`
-      : isTeam.value && subdomainEligible.value
-        ? 'Executive 5+ (subdomain optional — not specified)'
-        : ''
-  ].filter(Boolean)
 
   submitting.value = true
   try {
-    const res = await apiShopOrderQuote({
-      name,
-      company,
-      email,
-      phone,
-      town,
-      note: noteParts.join('\n'),
-      items
-    })
-    if (!res.ok) {
-      error.value = res.error || 'Could not send quote. Please try again.'
+    let ok = false
+    if (isTeam.value) {
+      ok = setTeamPackage({
+        businessQty: businessQty.value,
+        executiveQty: executiveQty.value,
+        subdomain: subdomainEligible.value ? subdomain.value.trim() : ''
+      })
+    } else {
+      const id = soloProduct.value?.id
+      if (!id) {
+        error.value = 'Product unavailable.'
+        return
+      }
+      removeFromCart(id)
+      ok = addToCart(id, soloQty.value)
+    }
+    if (!ok) {
+      error.value = 'Could not add to cart. Check quantities and try again.'
+      showNotice(error.value)
       return
     }
+    emit('added-to-cart', {
+      mode: isTeam.value ? 'team' : 'solo',
+      total: itemCount.value
+    })
+    // Keep ordered for older listeners
     emit('ordered', {
       mode: isTeam.value ? 'team' : 'solo',
       total: itemCount.value,
-      quoteRef: res.quoteRef || ''
+      addedToCart: true
     })
     close()
   } finally {
@@ -419,7 +350,7 @@ async function requestQuote() {
           </button>
         </div>
 
-        <form class="px-5 py-5 flex flex-col gap-5 overflow-y-auto flex-1 min-h-0" @submit.prevent="requestQuote">
+        <form class="px-5 py-5 flex flex-col gap-5 overflow-y-auto flex-1 min-h-0" @submit.prevent="addPackageToCart">
           <!-- Solo line -->
           <template v-if="!isTeam && soloProduct">
             <div class="flex gap-4 py-1">
@@ -744,62 +675,9 @@ async function requestQuote() {
             </div>
           </template>
 
-          <!-- Contact details (always shown) -->
-          <div class="flex flex-col gap-3 border-t border-border-subtle pt-5">
-            <h3 class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">Your details</h3>
-            <label class="flex flex-col gap-1.5">
-              <span class="font-label-caps text-[10px] uppercase tracking-[0.2em] text-ink-muted">Full name</span>
-              <input
-                v-model="customerName"
-                type="text"
-                autocomplete="name"
-                required
-                class="w-full bg-surface-container-lowest border border-border-subtle rounded-lg px-3 py-3 text-sm focus:outline-none focus:border-primary"
-              >
-            </label>
-            <label class="flex flex-col gap-1.5">
-              <span class="font-label-caps text-[10px] uppercase tracking-[0.2em] text-ink-muted">Company name</span>
-              <input
-                v-model="customerCompany"
-                type="text"
-                autocomplete="organization"
-                required
-                class="w-full bg-surface-container-lowest border border-border-subtle rounded-lg px-3 py-3 text-sm focus:outline-none focus:border-primary"
-              >
-            </label>
-            <label class="flex flex-col gap-1.5">
-              <span class="font-label-caps text-[10px] uppercase tracking-[0.2em] text-ink-muted">Email</span>
-              <input
-                v-model="customerEmail"
-                type="email"
-                autocomplete="email"
-                required
-                class="w-full bg-surface-container-lowest border border-border-subtle rounded-lg px-3 py-3 text-sm focus:outline-none focus:border-primary"
-                placeholder="you@example.com"
-              >
-            </label>
-            <label class="flex flex-col gap-1.5">
-              <span class="font-label-caps text-[10px] uppercase tracking-[0.2em] text-ink-muted">Cellphone number</span>
-              <input
-                v-model="customerPhone"
-                type="tel"
-                autocomplete="tel"
-                required
-                class="w-full bg-surface-container-lowest border border-border-subtle rounded-lg px-3 py-3 text-sm focus:outline-none focus:border-primary"
-                placeholder="+264 81 000 0000"
-              >
-            </label>
-            <label class="flex flex-col gap-1.5">
-              <span class="font-label-caps text-[10px] uppercase tracking-[0.2em] text-ink-muted">Town</span>
-              <input
-                v-model="customerTown"
-                type="text"
-                autocomplete="address-level2"
-                required
-                class="w-full bg-surface-container-lowest border border-border-subtle rounded-lg px-3 py-3 text-sm focus:outline-none focus:border-primary"
-              >
-            </label>
-          </div>
+          <p class="text-sm text-on-surface-variant leading-snug">
+            Review quantities here, then check out from Cart with your delivery details.
+          </p>
 
           <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
         </form>
@@ -816,7 +694,7 @@ async function requestQuote() {
             type="button"
             class="w-full bg-primary text-on-primary py-4 font-button-text uppercase tracking-widest hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             :disabled="placeOrderDisabled"
-            @click="requestQuote"
+            @click="addPackageToCart"
           >
             {{ placeOrderLabel }}
           </button>
