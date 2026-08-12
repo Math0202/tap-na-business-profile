@@ -55,6 +55,11 @@ const HERO_CARDS = [
   }
 ]
 
+const HOME_REVIEWS = [
+  { quote: '""', initials: '--', name: '......', role: '-----' },
+  { quote: '""', initials: '--', name: '......', role: '-----' }
+]
+
 const soloCards = computed(() => {
   catalogTick.value
   return connectSoloCards()
@@ -536,30 +541,36 @@ onUnmounted(() => {
           </div>
         </section>
 
-        <!-- Testimonial -->
+        <!-- Testimonials -->
         <section :ref="setSectionRef" class="px-margin-mobile md:px-margin-desktop pt-stack-lg">
-          <div class="bg-surface-container p-10 md:p-14 rounded-xl relative overflow-hidden max-w-3xl">
-            <span
-              class="material-symbols-outlined absolute top-4 left-4 text-surface-variant text-[64px] opacity-30"
-              aria-hidden="true"
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 max-w-6xl">
+            <div
+              v-for="(review, idx) in HOME_REVIEWS"
+              :key="idx"
+              class="bg-surface-container p-8 md:p-10 rounded-xl relative overflow-hidden"
             >
-              
-            </span>
-            <div class="relative z-10 flex flex-col gap-6">
-              <p class="font-body-md text-headline-lg-mobile italic text-on-surface-variant leading-relaxed">
-                ""
-              </p>
-              <div class="flex items-center gap-4">
-                <div
-                  class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center font-label-caps"
-                >
-                  --
-                </div>
-                <div class="flex flex-col">
-                  <span class="font-label-caps text-[12px] uppercase font-bold">......</span>
-                  <span class="text-[10px] text-ink-muted uppercase tracking-widest">
-                    -----
-                  </span>
+              <span
+                class="material-symbols-outlined absolute top-4 left-4 text-surface-variant text-[64px] opacity-30"
+                aria-hidden="true"
+              >
+                format_quote
+              </span>
+              <div class="relative z-10 flex flex-col gap-6">
+                <p class="font-body-md text-headline-lg-mobile italic text-on-surface-variant leading-relaxed">
+                  {{ review.quote }}
+                </p>
+                <div class="flex items-center gap-4">
+                  <div
+                    class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center font-label-caps"
+                  >
+                    {{ review.initials }}
+                  </div>
+                  <div class="flex flex-col">
+                    <span class="font-label-caps text-[12px] uppercase font-bold">{{ review.name }}</span>
+                    <span class="text-[10px] text-ink-muted uppercase tracking-widest">
+                      {{ review.role }}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
