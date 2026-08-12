@@ -255,7 +255,7 @@ onUnmounted(() => {
                 Tap. Connect. <br> Share.
               </h1>
               <p class="text-on-tertiary-container max-w-[90%] md:max-w-md text-body-md">
-                Premium NFC Connect cards that open your digital profile with one tap — for professionals, founders, and teams.
+                One tap — for professionals, founders, and teams.
               </p>
               <div class="mt-4 flex flex-wrap gap-3">
                 <button
@@ -263,7 +263,7 @@ onUnmounted(() => {
                   class="bg-surface-container-lowest text-primary font-button-text text-button-text px-8 py-4 rounded-full uppercase tracking-widest hover:bg-primary-fixed transition-all active:scale-95"
                   @click="scrollToShop"
                 >
-                  Shop cards
+                  Packages
                 </button>
                 <RouterLink
                   to="/about/business-cards"
@@ -272,15 +272,7 @@ onUnmounted(() => {
                   How it works
                 </RouterLink>
               </div>
-              <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] uppercase tracking-[0.16em] text-on-primary/55">
-                <button type="button" class="hover:text-on-primary transition-colors bg-transparent border-0 p-0 text-inherit uppercase tracking-[0.16em] cursor-pointer" @click="scrollToShop">
-                  Connect Solo
-                </button>
-                <span aria-hidden="true">·</span>
-                <button type="button" class="hover:text-on-primary transition-colors bg-transparent border-0 p-0 text-inherit uppercase tracking-[0.16em] cursor-pointer" @click="scrollToTeam">
-                  Connect Team
-                </button>
-              </div>
+              
             </div>
           </div>
         </section>
@@ -303,11 +295,15 @@ onUnmounted(() => {
           </div>
         </section>
 
+        <!-- Connect packages: Solo + Team side-by-side on desktop -->
+        <div
+          class="px-margin-mobile md:px-margin-desktop pt-stack-lg grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-10 lg:gap-14 items-start"
+        >
         <!-- Connect Solo -->
         <section
           id="connect-solo"
           :ref="setSectionRef"
-          class="px-margin-mobile md:px-margin-desktop pt-stack-lg flex flex-col gap-8 scroll-mt-20"
+          class="flex flex-col gap-8 scroll-mt-20"
         >
           <div class="flex justify-between items-end gap-4">
             <div class="flex flex-col gap-1 min-w-0">
@@ -316,13 +312,13 @@ onUnmounted(() => {
               </h2>
               <div class="h-1 w-12 bg-primary" />
               <p class="text-on-surface-variant text-sm mt-1">
-                Professional Class — one card type. Buy 1–4. For 5+ cards, choose Connect Team.
+                Professional
               </p>
             </div>
             <span class="font-label-caps text-label-caps text-ink-muted shrink-0">{{ soloCards.length }} ITEMS</span>
           </div>
 
-          <div class="flex flex-col gap-0 divide-y divide-border-subtle border-y border-border-subtle md:border-0 md:divide-y-0 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-x-8 md:gap-y-12">
+          <div class="flex flex-col gap-0 divide-y divide-border-subtle border-y border-border-subtle md:border-0 md:divide-y-0 md:gap-8">
             <article
               v-for="product in soloCards"
               :key="product.id"
@@ -333,7 +329,7 @@ onUnmounted(() => {
                 class="text-left no-underline text-inherit flex flex-col gap-4 bg-transparent border-0 p-0 cursor-pointer w-full"
                 @click="openProductInfo(product.id)"
               >
-                <div class="w-full aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4">
+                <div class="w-full aspect-[3/4] max-h-[28rem] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4">
                   <img
                     v-if="product.image"
                     :alt="product.alt"
@@ -377,7 +373,7 @@ onUnmounted(() => {
         <section
           id="connect-team"
           :ref="setSectionRef"
-          class="px-margin-mobile md:px-margin-desktop pt-stack-lg flex flex-col gap-8 scroll-mt-20"
+          class="flex flex-col gap-8 scroll-mt-20"
         >
           <div class="flex justify-between items-end gap-4">
             <div class="flex flex-col gap-1 min-w-0">
@@ -386,13 +382,13 @@ onUnmounted(() => {
               </h2>
               <div class="h-1 w-12 bg-primary" />
               <p class="text-on-surface-variant text-sm mt-1">
-                Business &amp; Executive in one package (min 5). Business alone max 10. Cards 11–15 must be Executive, then free mix. Subdomain from 5 Executive.
+                Business &amp; Executive in one package (min 5).
               </p>
             </div>
             <span class="font-label-caps text-label-caps text-ink-muted shrink-0">{{ teamCards.length }} ITEMS</span>
           </div>
 
-          <div class="flex flex-col gap-0 divide-y divide-border-subtle border-y border-border-subtle md:border-0 md:divide-y-0 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-x-8 md:gap-y-12">
+          <div class="flex flex-col gap-0 divide-y divide-border-subtle border-y border-border-subtle md:border-0 md:divide-y-0 md:gap-8">
             <article
               v-for="product in teamCards"
               :key="product.id"
@@ -403,7 +399,7 @@ onUnmounted(() => {
                 class="text-left no-underline text-inherit flex flex-col gap-4 bg-transparent border-0 p-0 cursor-pointer w-full"
                 @click="openProductInfo(product.id)"
               >
-                <div class="w-full aspect-[3/4] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4">
+                <div class="w-full aspect-[3/4] max-h-[28rem] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4">
                   <img
                     v-if="product.image"
                     :alt="product.alt"
@@ -448,6 +444,7 @@ onUnmounted(() => {
             </article>
           </div>
         </section>
+        </div>
 
         <!-- Feature matrix -->
         <section
@@ -483,7 +480,7 @@ onUnmounted(() => {
               </thead>
               <tbody class="text-on-surface-variant">
                 <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">NFC + QR → live profile</td>
+                  <td class="py-3 pr-4 text-on-surface">NFC + QR → live digital profile</td>
                   <td class="py-3 px-2 text-center text-primary">✓</td>
                   <td class="py-3 px-2 text-center text-primary">✓</td>
                   <td class="py-3 pl-2 text-center text-primary">✓</td>
@@ -503,32 +500,26 @@ onUnmounted(() => {
                 <tr class="border-b border-border-subtle/70">
                   <td class="py-3 pr-4 text-on-surface">Custom logo on card</td>
                   <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center text-primary text-xs">Black &amp; White</td>
-                  <td class="py-3 pl-2 text-center text-primary text-xs">Black &amp; White</td>
+                  <td class="py-3 px-2 text-center text-primary text-xs">✓</td>
+                  <td class="py-3 pl-2 text-center text-primary text-xs">✓</td>
                 </tr>
                 <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Team profiles + owner block</td>
+                  <td class="py-3 pr-4 text-on-surface">Team profiles </td>
                   <td class="py-3 px-2 text-center">—</td>
                   <td class="py-3 px-2 text-center text-primary">✓</td>
                   <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
                 <tr class="border-b border-border-subtle/70">
                   <td class="py-3 pr-4 text-on-surface">Buy alone</td>
-                  <td class="py-3 px-2 text-center text-xs">Up to 4</td>
-                  <td class="py-3 px-2 text-center text-xs leading-snug">Up to 10</td>
-                  <td class="py-3 pl-2 text-center text-xs leading-snug">Min 5</td>
-                </tr>
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Scale past 10</td>
-                  <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center text-xs leading-snug">Free mix to 10</td>
-                  <td class="py-3 pl-2 text-center text-primary text-xs leading-snug">11–15 Executive only,<br>then free mix</td>
+                  <td class="py-3 px-2 text-center text-xs">✓</td>
+                  <td class="py-3 px-2 text-center text-xs leading-snug">-</td>
+                  <td class="py-3 pl-2 text-center text-xs leading-snug">-</td>
                 </tr>
                 <tr>
                   <td class="py-3 pr-4 text-on-surface">Custom subdomain</td>
                   <td class="py-3 px-2 text-center">—</td>
                   <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 pl-2 text-center text-primary text-xs leading-snug">From 5 Executive</td>
+                  <td class="py-3 pl-2 text-center text-primary text-xs leading-snug">From 5</td>
                 </tr>
               </tbody>
             </table>
