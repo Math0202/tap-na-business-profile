@@ -22,7 +22,7 @@ const productsWrap = ref(null)
 
 const productLinks = [
   { to: '/', label: 'Digital Business Cards' },
-  { to: '/table-top', label: 'Table Tops' }
+  { to: '/venue-display', label: 'Venue Display' }
 ]
 
 function linkClass(active) {
@@ -38,7 +38,7 @@ function isCardsActive() {
 
 function isTableActive() {
   const p = route.path
-  return p === '/table-top' || p.startsWith('/table')
+  return p === '/venue-display' || p.startsWith('/table')
 }
 
 function isProductsActive() {

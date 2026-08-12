@@ -291,7 +291,7 @@ onUnmounted(() => {
                   <td class="py-3 pl-2 text-center text-primary text-xs leading-snug">✓</td>
                 </tr>
                 <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Custom logo on card</td>
+                  <td class="py-3 pr-4 text-on-surface">Custom Logo(B&W)</td>
                   <td class="py-3 px-2 text-center">—</td>
                   <td class="py-3 px-2 text-center text-primary text-xs">✓</td>
                   <td class="py-3 pl-2 text-center text-primary text-xs">✓</td>
