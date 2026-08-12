@@ -36,7 +36,6 @@ const emit = defineEmits(['close', 'ordered', 'added-to-cart', 'switch-to-team']
 const soloQty = ref(1)
 const businessQty = ref(2)
 const executiveQty = ref(3)
-const subdomain = ref('')
 const error = ref('')
 const notice = ref('')
 const soloLimitOpen = ref(false)
@@ -168,7 +167,6 @@ watch(
     notice.value = ''
     soloLimitOpen.value = false
     compareOpen.value = false
-    subdomain.value = ''
     submitting.value = false
     if (props.mode === 'team') {
       const mix = initialTeamMix(props.focusId)
