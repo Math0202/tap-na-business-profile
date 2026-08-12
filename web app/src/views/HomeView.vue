@@ -448,6 +448,17 @@ onUnmounted(() => {
                 View package | Order now
               </button>
             </article>
+
+            <figure class="pt-2 md:pt-4 m-0">
+              <img
+                src="/profile_image.png"
+                alt="Connect Business digital profile on phone with NFC Connect cards"
+                class="w-full h-auto rounded-xl object-cover"
+                loading="lazy"
+                width="1254"
+                height="1254"
+              >
+            </figure>
         </div>
       </section>
         </div>

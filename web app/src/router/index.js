@@ -28,10 +28,10 @@ const routes = [
     meta: { seoKey: 'cart' }
   },
   {
-    path: '/table-top',
-    name: 'table-top-shop',
+    path: '/venue-display',
+    name: 'venue-display-shop',
     component: () => import('../views/TableTopShopView.vue'),
-    meta: { seoKey: 'table-top' }
+    meta: { seoKey: 'venue-display' }
   },
   {
     path: '/product/:id',
@@ -260,6 +260,7 @@ router.afterEach((to) => {
     title: preset.title,
     description: preset.description,
     path: to.path,
+    image: preset.image,
     noindex: !!preset.noindex
   })
 })

@@ -6,7 +6,7 @@ const SITE_NAME = 'tap-na'
 const DEFAULT_TITLE = 'tap-na — NFC business cards & digital profiles'
 const DEFAULT_DESCRIPTION =
   'NFC Connect business cards for professionals and teams. Tap once to share your live digital profile, catalogue, and meeting booking. Once-off purchase. Free delivery in Windhoek.'
-const DEFAULT_IMAGE = 'https://tapnam.com/images/tap-na_logo.png'
+const DEFAULT_IMAGE = 'https://tapnam.com/profile_image.png'
 const DEFAULT_ORIGIN = 'https://tapnam.com'
 
 function ensureMeta(attr, key, content) {
@@ -66,6 +66,8 @@ export function setPageSeo(opts = {}) {
   ensureMeta('property', 'og:description', description)
   ensureMeta('property', 'og:url', url)
   ensureMeta('property', 'og:image', image)
+  ensureMeta('property', 'og:image:secure_url', image)
+  ensureMeta('property', 'og:image:alt', title)
   ensureMeta('name', 'twitter:card', 'summary_large_image')
   ensureMeta('name', 'twitter:title', title)
   ensureMeta('name', 'twitter:description', description)
@@ -77,9 +79,10 @@ export const ROUTE_SEO = {
   home: {
     title: 'tap-na — NFC Connect business cards',
     description:
-      'Shop NFC Connect business cards for professionals and teams. Professional, Business, and Executive classes. Once-off purchase. Free delivery in Windhoek in 1-3 working days.'
+      'Shop NFC Connect business cards for professionals and teams. Professional, Business, and Executive classes. Once-off purchase. Free delivery in Windhoek in 1-3 working days.',
+    image: '/profile_image.png'
   },
-  'table-top': {
+  'venue-display': {
     title: 'Venue Display — tap-na',
     description:
       'NFC Venue Display cards for restaurants and businesses. Menus, reviews, Wi-Fi, and guest check-in — tap once at the table.'
