@@ -13,7 +13,8 @@
   "vars": {
     "SUPABASE_URL": "https://mjfkthjxqvedqhpemxmt.supabase.co",
     "CLOUDFLARE_ACCOUNT_ID": "90cfcc1f7ec6362997f8b063c094c308",
-    "EMAIL_FROM": "tap-na <welcome@tapnam.com>"
+    "EMAIL_FROM": "tap-na <welcome@mail.tapnam.com>",
+    "EMAIL_REPLY_TO": "welcome@tapnam.com"
   },
   "send_email": [
     {

@@ -1765,7 +1765,11 @@ function escapeHtml(s) {
 }
 
 function defaultEmailFrom(env) {
-  return String(env.EMAIL_FROM || env.RESEND_FROM || 'tap-na <welcome@tapnam.com>').trim()
+  return String(env.EMAIL_FROM || env.RESEND_FROM || 'tap-na <welcome@mail.tapnam.com>').trim()
+}
+
+function defaultEmailReplyTo(env) {
+  return String(env.EMAIL_REPLY_TO || '').trim()
 }
 
 /** Parse "Name <addr@domain>" or plain address into CF Email Sending shapes. */
@@ -1938,7 +1942,7 @@ async function sendCloudflareEmail(env, opts = {}) {
   if (!html && !text) throw new Error('html or text is required')
 
   const fromParsed = parseEmailFrom(opts.from || defaultEmailFrom(env))
-  const replyToRaw = opts.replyTo || opts.reply_to || ''
+  const replyToRaw = opts.replyTo || opts.reply_to || defaultEmailReplyTo(env)
   const attachments = normalizeAttachmentList(opts.attachments)
 
   // 1) Workers binding

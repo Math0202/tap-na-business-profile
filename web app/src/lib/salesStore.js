@@ -42,7 +42,7 @@ export const COMPANY = {
   currency: 'NAD',
   fromName: 'tap-na',
   /** Cloudflare Email Sending (tapnam.com) */
-  mailFrom: 'tap-na <welcome@tapnam.com>'
+  mailFrom: 'tap-na <welcome@mail.tapnam.com>'
 }
 
 /** Bank details for EFT on quotes and unpaid invoices */
@@ -1141,7 +1141,7 @@ function escapeHtml(value) {
 function companyFromAddress() {
   return (
     COMPANY.mailFrom ||
-    `${COMPANY.fromName || COMPANY.name} <welcome@tapnam.com>`
+    `${COMPANY.fromName || COMPANY.name} <welcome@mail.tapnam.com>`
   )
 }
 
