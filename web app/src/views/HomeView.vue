@@ -295,80 +295,10 @@ onUnmounted(() => {
           </div>
         </section>
 
-        <!-- Connect packages: Solo + Team side-by-side on desktop -->
+        <!-- Connect packages: Team first, then Solo (side-by-side on desktop) -->
         <div
           class="px-margin-mobile md:px-margin-desktop pt-stack-lg grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-10 lg:gap-14 items-start"
         >
-        <!-- Connect Solo -->
-        <section
-          id="connect-solo"
-          :ref="setSectionRef"
-          class="flex flex-col gap-8 scroll-mt-20"
-        >
-          <div class="flex justify-between items-end gap-4">
-            <div class="flex flex-col gap-1 min-w-0">
-              <h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg uppercase">
-                Connect Solo
-              </h2>
-              <div class="h-1 w-12 bg-primary" />
-              <p class="text-on-surface-variant text-sm mt-1">
-                Professional
-              </p>
-            </div>
-            <span class="font-label-caps text-label-caps text-ink-muted shrink-0">{{ soloCards.length }} ITEMS</span>
-          </div>
-
-          <div class="flex flex-col gap-0 divide-y divide-border-subtle border-y border-border-subtle md:border-0 md:divide-y-0 md:gap-8">
-            <article
-              v-for="product in soloCards"
-              :key="product.id"
-              class="flex flex-col gap-3 py-5 md:py-0 md:gap-4 group"
-            >
-              <button
-                type="button"
-                class="text-left no-underline text-inherit flex flex-col gap-4 bg-transparent border-0 p-0 cursor-pointer w-full"
-                @click="openProductInfo(product.id)"
-              >
-                <div class="w-full aspect-[3/4] max-h-[28rem] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4">
-                  <img
-                    v-if="product.image"
-                    :alt="product.alt"
-                    class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
-                    :src="product.image"
-                  >
-                  <span
-                    v-else
-                    class="material-symbols-outlined text-on-surface-variant text-[48px] opacity-40"
-                    aria-hidden="true"
-                  >image</span>
-                </div>
-                <div class="flex flex-1 min-w-0 flex-col gap-1">
-                  <div class="flex justify-between items-start gap-3">
-                    <h3 class="font-headline-lg-mobile text-[18px] md:text-[20px] font-medium">{{ product.name }}</h3>
-                    <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(product.price) }}</span>
-                  </div>
-                  <p
-                    v-if="product.label"
-                    class="font-label-caps text-[11px] uppercase tracking-widest text-primary"
-                  >
-                    {{ product.label }}
-                  </p>
-                  <p class="text-on-surface-variant text-sm line-clamp-2 md:line-clamp-2">
-                    {{ product.desc }}
-                  </p>
-                </div>
-              </button>
-              <button
-                type="button"
-                class="w-full border border-primary text-primary py-3 md:py-4 font-button-text uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-colors"
-                @click="openPackage('solo', product.id)"
-              >
-                View package | Order now
-              </button>
-            </article>
-        </div>
-      </section>
-
         <!-- Connect Team -->
         <section
           id="connect-team"
@@ -444,6 +374,76 @@ onUnmounted(() => {
             </article>
           </div>
         </section>
+
+        <!-- Connect Solo -->
+        <section
+          id="connect-solo"
+          :ref="setSectionRef"
+          class="flex flex-col gap-8 scroll-mt-20"
+        >
+          <div class="flex justify-between items-end gap-4">
+            <div class="flex flex-col gap-1 min-w-0">
+              <h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg uppercase">
+                Connect Solo
+              </h2>
+              <div class="h-1 w-12 bg-primary" />
+              <p class="text-on-surface-variant text-sm mt-1">
+                Professional
+              </p>
+            </div>
+            <span class="font-label-caps text-label-caps text-ink-muted shrink-0">{{ soloCards.length }} ITEMS</span>
+          </div>
+
+          <div class="flex flex-col gap-0 divide-y divide-border-subtle border-y border-border-subtle md:border-0 md:divide-y-0 md:gap-8">
+            <article
+              v-for="product in soloCards"
+              :key="product.id"
+              class="flex flex-col gap-3 py-5 md:py-0 md:gap-4 group"
+            >
+              <button
+                type="button"
+                class="text-left no-underline text-inherit flex flex-col gap-4 bg-transparent border-0 p-0 cursor-pointer w-full"
+                @click="openProductInfo(product.id)"
+              >
+                <div class="w-full aspect-[3/4] max-h-[28rem] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4">
+                  <img
+                    v-if="product.image"
+                    :alt="product.alt"
+                    class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
+                    :src="product.image"
+                  >
+                  <span
+                    v-else
+                    class="material-symbols-outlined text-on-surface-variant text-[48px] opacity-40"
+                    aria-hidden="true"
+                  >image</span>
+                </div>
+                <div class="flex flex-1 min-w-0 flex-col gap-1">
+                  <div class="flex justify-between items-start gap-3">
+                    <h3 class="font-headline-lg-mobile text-[18px] md:text-[20px] font-medium">{{ product.name }}</h3>
+                    <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(product.price) }}</span>
+                  </div>
+                  <p
+                    v-if="product.label"
+                    class="font-label-caps text-[11px] uppercase tracking-widest text-primary"
+                  >
+                    {{ product.label }}
+                  </p>
+                  <p class="text-on-surface-variant text-sm line-clamp-2 md:line-clamp-2">
+                    {{ product.desc }}
+                  </p>
+                </div>
+              </button>
+              <button
+                type="button"
+                class="w-full border border-primary text-primary py-3 md:py-4 font-button-text uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-colors"
+                @click="openPackage('solo', product.id)"
+              >
+                View package | Order now
+              </button>
+            </article>
+        </div>
+      </section>
         </div>
 
         <!-- Feature matrix -->
