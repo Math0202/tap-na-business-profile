@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { cartCount } from '../lib/cartStore'
 import { isLoggedIn } from '../lib/profileStore'
@@ -16,6 +16,15 @@ const loggedIn = computed(() => isLoggedIn())
 const authTo = computed(() => (loggedIn.value ? '/profile' : '/login'))
 const authLabel = computed(() => (loggedIn.value ? 'Account' : 'Login'))
 
+const productsOpen = ref(false)
+const mobileProductsOpen = ref(false)
+const productsWrap = ref(null)
+
+const productLinks = [
+  { to: '/', label: 'Digital Business Cards' },
+  { to: '/table-top', label: 'Table Tops' }
+]
+
 function linkClass(active) {
   return active
     ? 'font-label-caps text-[11px] uppercase tracking-widest text-primary transition-colors no-underline'
@@ -26,6 +35,44 @@ function isCardsActive() {
   const p = route.path
   return p === '/' || p.startsWith('/product/') || p.startsWith('/package/') || p.startsWith('/about/business-cards')
 }
+
+function isTableActive() {
+  const p = route.path
+  return p === '/table-top' || p.startsWith('/table')
+}
+
+function isProductsActive() {
+  return isCardsActive() || isTableActive()
+}
+
+function closeProducts() {
+  productsOpen.value = false
+}
+
+function toggleProducts() {
+  productsOpen.value = !productsOpen.value
+}
+
+function onDocClick(e) {
+  if (!productsOpen.value) return
+  if (productsWrap.value && !productsWrap.value.contains(e.target)) {
+    closeProducts()
+  }
+}
+
+function onKey(e) {
+  if (e.key === 'Escape') closeProducts()
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocClick)
+  document.addEventListener('keydown', onKey)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', onDocClick)
+  document.removeEventListener('keydown', onKey)
+})
 </script>
 
 <template>
@@ -35,7 +82,7 @@ function isCardsActive() {
     <div
       class="h-16 px-margin-mobile md:px-margin-desktop max-w-6xl mx-auto flex items-center justify-between"
     >
-      <RouterLink to="/" class="flex items-center gap-4 no-underline" @click="emit('close-menu')">
+      <RouterLink to="/" class="flex items-center gap-4 no-underline" @click="emit('close-menu'); closeProducts()">
         <img
           src="/images/tap-na_logo.png"
           alt="tap-na"
@@ -44,15 +91,39 @@ function isCardsActive() {
         >
       </RouterLink>
       <nav class="hidden md:flex items-center gap-8">
-        <RouterLink to="/" :class="linkClass(isCardsActive())">
-          Cards
-        </RouterLink>
-        <RouterLink
-          to="/table-top"
-          :class="linkClass(route.path === '/table-top' || route.path.startsWith('/table'))"
-        >
-          Table Top
-        </RouterLink>
+        <div ref="productsWrap" class="relative">
+          <button
+            type="button"
+            class="inline-flex items-center gap-1 bg-transparent border-0 p-0 cursor-pointer"
+            :class="linkClass(isProductsActive())"
+            :aria-expanded="productsOpen.toString()"
+            aria-haspopup="true"
+            @click.stop="toggleProducts"
+          >
+            Products
+            <span
+              class="material-symbols-outlined text-[16px] transition-transform"
+              :class="productsOpen ? 'rotate-180' : ''"
+              aria-hidden="true"
+            >expand_more</span>
+          </button>
+          <div
+            v-if="productsOpen"
+            class="absolute left-0 top-full mt-3 min-w-[15rem] rounded-xl border border-border-subtle bg-surface shadow-lg py-2"
+            role="menu"
+          >
+            <RouterLink
+              v-for="item in productLinks"
+              :key="item.to"
+              :to="item.to"
+              role="menuitem"
+              class="block px-4 py-2.5 font-label-caps text-[11px] uppercase tracking-widest no-underline text-on-surface hover:bg-surface-container hover:text-primary transition-colors"
+              @click="closeProducts"
+            >
+              {{ item.label }}
+            </RouterLink>
+          </div>
+        </div>
         <RouterLink to="/support" :class="linkClass(route.path === '/support')">
           Support
         </RouterLink>
@@ -99,22 +170,32 @@ function isCardsActive() {
     </div>
     <div
       v-if="menuOpen"
-      class="md:hidden border-t border-border-subtle bg-surface px-margin-mobile py-4 flex flex-col gap-3"
+      class="md:hidden border-t border-border-subtle bg-surface px-margin-mobile py-4 flex flex-col gap-1"
     >
-      <RouterLink
-        to="/"
-        class="font-label-caps text-[12px] uppercase tracking-widest py-2 no-underline text-inherit"
-        @click="emit('close-menu')"
+      <button
+        type="button"
+        class="w-full flex items-center justify-between font-label-caps text-[12px] uppercase tracking-widest py-2 bg-transparent border-0 text-left cursor-pointer text-inherit"
+        :aria-expanded="mobileProductsOpen.toString()"
+        @click="mobileProductsOpen = !mobileProductsOpen"
       >
-        Cards
-      </RouterLink>
-      <RouterLink
-        to="/table-top"
-        class="font-label-caps text-[12px] uppercase tracking-widest py-2 no-underline text-inherit"
-        @click="emit('close-menu')"
-      >
-        Table Top
-      </RouterLink>
+        Products
+        <span
+          class="material-symbols-outlined text-[18px] transition-transform"
+          :class="mobileProductsOpen ? 'rotate-180' : ''"
+          aria-hidden="true"
+        >expand_more</span>
+      </button>
+      <div v-if="mobileProductsOpen" class="flex flex-col pl-3 border-l border-border-subtle ml-1 mb-1">
+        <RouterLink
+          v-for="item in productLinks"
+          :key="item.to"
+          :to="item.to"
+          class="font-label-caps text-[12px] uppercase tracking-widest py-2.5 no-underline text-on-surface-variant"
+          @click="emit('close-menu'); mobileProductsOpen = false"
+        >
+          {{ item.label }}
+        </RouterLink>
+      </div>
       <RouterLink
         to="/support"
         class="font-label-caps text-[12px] uppercase tracking-widest py-2 no-underline text-inherit"
