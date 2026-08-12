@@ -38,11 +38,10 @@ onUnmounted(() => {
             Tap-Na Connect
           </p>
           <h1 class="font-headline-lg-mobile md:font-headline-lg text-[36px] md:text-[48px] leading-[1.1] font-semibold tracking-[-0.02em]">
-            The only business card you’ll ever need.
+            Digital Business Cards
           </h1>
           <p class="text-on-surface-variant text-base leading-relaxed max-w-2xl">
-            At Tap-Na we believe every professional should carry one smart card. Tap once — your live
-            digital profile opens. No app for visitors. No monthly fees. Once-off purchase.
+            <strong class="text-on-surface font-semibold">Tap - Share:</strong> Phone, email, website, Social Links, Products &amp; Services, Get Meeting booking.
           </p>
           <div class="flex flex-wrap gap-3 mt-2">
             <button
@@ -56,7 +55,7 @@ onUnmounted(() => {
               href="#how-to-claim"
               class="border border-primary text-primary px-8 py-4 font-button-text uppercase tracking-widest no-underline hover:bg-primary hover:text-on-primary transition-colors"
             >
-              How to claim
+              On-boarding
             </a>
           </div>
         </header>
