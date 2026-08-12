@@ -48,7 +48,7 @@ const mixStatusLabel = computed(() => {
     return `Add ${n} more card${n === 1 ? '' : 's'} to reach the ${TEAM_PACKAGE_MIN}-card minimum`
   }
   if (!teamOrderReady.value) return 'Adjust the mix to continue'
-  return `Minimum ${TEAM_PACKAGE_MIN} cards · ready to order`
+  return `Minimum order ${TEAM_PACKAGE_MIN} cards (Mix)`
 })
 const mixHint = computed(() => {
   if (teamTotal.value < TEAM_PACKAGE_MIN) {
