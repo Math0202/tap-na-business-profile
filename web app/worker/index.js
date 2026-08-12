@@ -2298,7 +2298,12 @@ function shopProductFallbackImage(productId, origin) {
   const map = {
     'black-card': '/images/business_charcoal.png',
     'blue-card': '/images/professional_cobalt_blue.png',
-    'black-card-front': '/images/executive_black.png'
+    'black-card-front': '/images/executive_black.png',
+    'table-info': '/images/table/NFC%20business%20info%20card.png',
+    'table-menu': '/images/table/NFC%20-%20Menu.png',
+    'table-review': '/images/table/NFC%20business%20review%20card.png',
+    'table-wifi': '/images/table/NFC%20wifi%20and%20conact%20card.png',
+    'table-custom': '/images/table/NFC%20custom%20menu%20card.png'
   }
   return absolutePublicUrl(origin, map[id] || '/images/tap-na_logo.png')
 }
@@ -5613,7 +5618,46 @@ async function handleApi(request, env, url) {
     const quoteRef = `SQ-${Date.now().toString(36).toUpperCase()}`
     const salesCopyTo = 'sales@tapnam.com'
     const from = defaultEmailFrom(env)
-    const subject = `Order quote ${quoteRef} — ${name}`
+    const subject = `Quote ${quoteRef} — ${name}`
+    const issued = new Date().toLocaleDateString('en-GB', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })
+    const origin = 'https://tapnam.com'
+    const logoUrl = `${origin}/images/tap-na_logo.png`
+    const banking = {
+      accountHolder: 'Tangeni Matheus',
+      accountType: 'FUTURE FORWARD',
+      accountNumber: '62272845812',
+      branchCode: '280873',
+      swiftCode: 'FIRNNANX'
+    }
+
+    const uniqueIds = []
+    for (const l of lines) {
+      if (l.id && !uniqueIds.includes(l.id)) uniqueIds.push(l.id)
+    }
+    const imageUrls = []
+    for (const id of uniqueIds.slice(0, 6)) {
+      let src = ''
+      try {
+        const product = await loadShopProductOg(env, id)
+        const first = Array.isArray(product?.images) ? product.images.find(Boolean) : ''
+        src = absolutePublicUrl(origin, first || '') || shopProductFallbackImage(id, origin)
+      } catch {
+        src = shopProductFallbackImage(id, origin)
+      }
+      if (src) imageUrls.push(src)
+    }
+    const imagesHtml = imageUrls.length
+      ? `<div style="margin:0 0 16px;line-height:0;">${imageUrls
+          .map(
+            (src) =>
+              `<img src="${escapeHtml(src)}" alt="" width="72" height="72" style="display:inline-block;width:72px;height:72px;object-fit:cover;margin:0 8px 0 0;border:1px solid #eee;vertical-align:top;" />`
+          )
+          .join('')}</div>`
+      : ''
 
     const rowsHtml = lines
       .map(
@@ -5627,23 +5671,37 @@ async function handleApi(request, env, url) {
       )
       .join('')
 
+    const billToAddress = [company, town].filter(Boolean).join(', ') || town
+    const bankingHtml = `
+  <div style="margin:16px 0 0;font-size:13px;line-height:1.6;">
+    <div><span style="color:#777;">Account Holder</span> ${escapeHtml(banking.accountHolder)}</div>
+    <div><span style="color:#777;">Account Type</span> ${escapeHtml(banking.accountType)}</div>
+    <div><span style="color:#777;">Account Number</span> ${escapeHtml(banking.accountNumber)}</div>
+    <div><span style="color:#777;">Branch Code</span> ${escapeHtml(banking.branchCode)}</div>
+    <div><span style="color:#777;">Swift Code</span> ${escapeHtml(banking.swiftCode)}</div>
+  </div>`.trim()
+
     const html = `
 <!DOCTYPE html>
 <html>
 <body style="font-family:Arial,sans-serif;color:#111;line-height:1.5;max-width:560px;margin:0 auto;padding:24px;">
-  <h1 style="font-size:20px;margin:0 0 4px;">tap-na</h1>
-  <p style="margin:0 0 4px;color:#555;font-size:13px;">Auckmund Investment CC</p>
-  <p style="margin:0 0 20px;color:#555;font-size:13px;">Erf: 62, Hosea Kutako Drive, Windhoek North<br>+264 85 811 7337 · welcome@tapnam.com</p>
-  <h2 style="font-size:18px;margin:0 0 8px;">Order quote ${escapeHtml(quoteRef)}</h2>
-  <p style="margin:0 0 16px;color:#555;font-size:13px;">Requested from the online shop</p>
-  <p style="margin:0 0 4px;"><strong>Customer</strong></p>
+  <div style="text-align:right;margin:0 0 28px;">
+    <img src="${escapeHtml(logoUrl)}" alt="tap-na" width="96" style="display:inline-block;max-width:96px;height:auto;margin:0 0 8px;" />
+    <div style="font-size:13px;color:#555;line-height:1.45;">
+      Auckmund Investment CC<br>
+      Erf: 62, Hosea Kutako Drive, Windhoek North<br>
+      +264 85 811 7337 | welcome@tapnam.com
+    </div>
+  </div>
+  <h2 style="font-size:18px;margin:0 0 4px;font-weight:700;">Quote ${escapeHtml(quoteRef)}</h2>
+  <p style="margin:0 0 16px;color:#555;font-size:13px;">Issued ${escapeHtml(issued)}</p>
+  <p style="margin:0 0 4px;"><strong>Bill to</strong></p>
   <p style="margin:0 0 16px;">
     ${escapeHtml(name)}<br>
-    ${company ? `${escapeHtml(company)}<br>` : ''}
     ${escapeHtml(email)}<br>
-    ${escapeHtml(phone)}<br>
-    ${escapeHtml(town)}
+    ${escapeHtml(billToAddress)}
   </p>
+  ${imagesHtml}
   <table style="width:100%;border-collapse:collapse;margin:0 0 16px;font-size:14px;">
     <thead>
       <tr style="border-bottom:1px solid #ddd;text-align:left;">
@@ -5655,32 +5713,38 @@ async function handleApi(request, env, url) {
     </thead>
     <tbody>${rowsHtml}</tbody>
   </table>
-  <p style="font-size:16px;font-weight:700;margin:0 0 16px;">Quoted total: ${escapeHtml(money(subtotal))}</p>
-  ${note ? `<p style="font-size:13px;color:#555;margin:0 0 16px;"><strong>Notes:</strong> ${escapeHtml(note)}</p>` : ''}
-  <p style="font-size:12px;color:#777;margin:0 0 8px;">A PDF copy of this quote is attached.</p>
-  <p style="font-size:12px;color:#777;margin:0;">This is a quote request from the tap-na shop. Reply to confirm stock, delivery, and payment.</p>
+  <p style="font-size:15px;font-weight:700;margin:0 0 6px;">Amount due: ${escapeHtml(money(subtotal))}</p>
+  <p style="font-size:13px;margin:0 0 16px;">Payment method: eft</p>
+  ${bankingHtml}
 </body>
 </html>`.trim()
 
     const text = [
-      `tap-na — Order quote ${quoteRef}`,
+      'tap-na',
       'Auckmund Investment CC',
+      'Erf: 62, Hosea Kutako Drive, Windhoek North',
+      '+264 85 811 7337 | welcome@tapnam.com',
       '',
-      `Customer: ${name}`,
-      company ? `Company: ${company}` : '',
-      `Email: ${email}`,
-      `Phone: ${phone}`,
-      `Town: ${town}`,
+      `Quote ${quoteRef}`,
+      `Issued ${issued}`,
+      '',
+      'Bill to',
+      name,
+      email,
+      billToAddress,
       '',
       ...lines.map((l) => `${l.name} × ${l.qty} @ ${money(l.price)} = ${money(l.lineTotal)}`),
       '',
-      `Quoted total: ${money(subtotal)}`,
-      note ? `Notes: ${note}` : '',
+      `Amount due: ${money(subtotal)}`,
+      'Payment method: eft',
       '',
-      'A PDF copy of this quote is attached.',
-      'This is a quote request from the tap-na shop.'
+      `Account Holder ${banking.accountHolder}`,
+      `Account Type ${banking.accountType}`,
+      `Account Number ${banking.accountNumber}`,
+      `Branch Code ${banking.branchCode}`,
+      `Swift Code ${banking.swiftCode}`
     ]
-      .filter(Boolean)
+      .filter((line, i, arr) => line !== '' || arr[i - 1] !== '')
       .join('\n')
 
     const pdfLines = [
@@ -5688,20 +5752,29 @@ async function handleApi(request, env, url) {
       'Erf: 62, Hosea Kutako Drive, Windhoek North',
       '+264 85 811 7337 | welcome@tapnam.com',
       '',
-      `Customer: ${name}`,
-      company ? `Company: ${company}` : '',
-      `Email: ${email}`,
-      `Phone: ${phone}`,
-      `Town: ${town}`,
+      `Quote ${quoteRef}`,
+      `Issued ${issued}`,
       '',
-      ...lines.map((l) => `${l.name} x ${l.qty} @ ${money(l.price)} = ${money(l.lineTotal)}`),
+      'Bill to',
+      name,
+      email,
+      billToAddress,
       '',
-      `Quoted total: ${money(subtotal)}`,
-      note ? `Notes: ${note}` : ''
+      'Item / Qty / Unit / Total',
+      ...lines.map((l) => `${l.name}  ${l.qty}  ${money(l.price)}  ${money(l.lineTotal)}`),
+      '',
+      `Amount due: ${money(subtotal)}`,
+      'Payment method: eft',
+      '',
+      `Account Holder ${banking.accountHolder}`,
+      `Account Type ${banking.accountType}`,
+      `Account Number ${banking.accountNumber}`,
+      `Branch Code ${banking.branchCode}`,
+      `Swift Code ${banking.swiftCode}`
     ].filter(Boolean)
     const pdfAttachment = {
       filename: `${quoteRef}.pdf`,
-      content: buildSimplePdfBase64(`Order quote ${quoteRef}`, pdfLines),
+      content: buildSimplePdfBase64(`Quote ${quoteRef}`, pdfLines),
       type: 'application/pdf',
       contentType: 'application/pdf'
     }

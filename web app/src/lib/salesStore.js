@@ -1144,13 +1144,28 @@ function companyFromAddress() {
   )
 }
 
-function companyContactBlockHtml() {
+const COMPANY_LOGO_URL = 'https://tapnam.com/images/tap-na_logo.png'
+
+/** Shared minimal header (logo + company) — matches invoice PDF */
+function companyHeaderHtml() {
   return `
-  <p style="font-size:12px;color:#777;margin:20px 0 0;line-height:1.5;">
-    <strong>${escapeHtml(COMPANY.legalName)}</strong><br>
-    ${escapeHtml(COMPANY.address)}<br>
-    ${escapeHtml(COMPANY.phone)} · ${escapeHtml(COMPANY.email)}
-  </p>`.trim()
+  <div style="text-align:right;margin:0 0 28px;">
+    <img src="${COMPANY_LOGO_URL}" alt="tap-na" width="96" style="display:inline-block;max-width:96px;height:auto;margin:0 0 8px;" />
+    <div style="font-size:13px;color:#555;line-height:1.45;">
+      ${escapeHtml(COMPANY.legalName)}<br>
+      ${escapeHtml(COMPANY.address)}<br>
+      ${escapeHtml(COMPANY.phone)} | ${escapeHtml(COMPANY.email)}
+    </div>
+  </div>`.trim()
+}
+
+function companyHeaderText() {
+  return [
+    COMPANY.name,
+    COMPANY.legalName,
+    COMPANY.address,
+    `${COMPANY.phone} | ${COMPANY.email}`
+  ].join('\n')
 }
 
 function productImageHtml(productId, { size = 72 } = {}) {
@@ -1209,12 +1224,7 @@ export function buildInvoiceEmailPayload(invoice, { to } = {}) {
 <!DOCTYPE html>
 <html>
 <body style="font-family:Arial,sans-serif;color:#111;line-height:1.5;max-width:560px;margin:0 auto;padding:24px;">
-  <div style="text-align:right;margin:0 0 28px;">
-    <div style="font-size:18px;font-weight:700;margin:0 0 4px;">${escapeHtml(COMPANY.name)}</div>
-    <div style="font-size:13px;color:#555;">${escapeHtml(COMPANY.legalName)}</div>
-    <div style="font-size:13px;color:#555;">${escapeHtml(COMPANY.address)}</div>
-    <div style="font-size:13px;color:#555;">${escapeHtml(COMPANY.phone)} | ${escapeHtml(COMPANY.email)}</div>
-  </div>
+  ${companyHeaderHtml()}
   <h2 style="font-size:18px;margin:0 0 4px;font-weight:700;">Invoice ${escapeHtml(invoice.invoiceNumber)}</h2>
   <p style="margin:0 0 16px;color:#555;font-size:13px;">Issued ${escapeHtml(issued)}</p>
   <p style="margin:0 0 4px;"><strong>Bill to</strong></p>
@@ -1248,10 +1258,7 @@ export function buildInvoiceEmailPayload(invoice, { to } = {}) {
 </html>`.trim()
 
   const text = [
-    COMPANY.name,
-    COMPANY.legalName,
-    COMPANY.address,
-    `${COMPANY.phone} | ${COMPANY.email}`,
+    companyHeaderText(),
     '',
     `Invoice ${invoice.invoiceNumber}`,
     `Issued ${issued}`,
@@ -1290,23 +1297,29 @@ export function buildQuoteEmailPayload(quote, { to } = {}) {
         day: 'numeric'
       })
     : '—'
+  const issued = quote.createdAt
+    ? new Date(quote.createdAt).toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })
+    : ''
+  const paymentMethod = String(quote.paymentMethod || 'eft').trim() || 'eft'
   const html = `
 <!DOCTYPE html>
 <html>
 <body style="font-family:Arial,sans-serif;color:#111;line-height:1.5;max-width:560px;margin:0 auto;padding:24px;">
-  <h1 style="font-size:20px;margin:0 0 4px;">${escapeHtml(COMPANY.name)}</h1>
-  <p style="margin:0 0 4px;color:#555;font-size:13px;">${escapeHtml(COMPANY.legalName)}</p>
-  <p style="margin:0 0 20px;color:#555;font-size:13px;">${escapeHtml(COMPANY.address)}<br>${escapeHtml(COMPANY.phone)} · ${escapeHtml(COMPANY.email)}</p>
-  <h2 style="font-size:18px;margin:0 0 8px;">Quote ${escapeHtml(quote.quoteNumber)}</h2>
+  ${companyHeaderHtml()}
+  <h2 style="font-size:18px;margin:0 0 4px;font-weight:700;">Quote ${escapeHtml(quote.quoteNumber)}</h2>
+  <p style="margin:0 0 4px;color:#555;font-size:13px;">${issued ? `Issued ${escapeHtml(issued)}` : ''}</p>
   <p style="margin:0 0 16px;color:#555;font-size:13px;">Valid until ${escapeHtml(valid)}</p>
-  ${linesImageHtml(quote)}
-  <p style="margin:0 0 4px;"><strong>Prepared for</strong></p>
+  <p style="margin:0 0 4px;"><strong>Bill to</strong></p>
   <p style="margin:0 0 16px;">
     ${escapeHtml(quote.customerName)}<br>
     ${escapeHtml(quote.customerEmail || '')}<br>
-    ${escapeHtml(quote.customerPhone || '')}<br>
     ${escapeHtml(quote.customerAddress || '')}
   </p>
+  ${linesImageHtml(quote)}
   <table style="width:100%;border-collapse:collapse;margin:0 0 16px;font-size:14px;">
     <thead>
       <tr style="border-bottom:1px solid #ddd;text-align:left;">
@@ -1320,29 +1333,33 @@ export function buildQuoteEmailPayload(quote, { to } = {}) {
       ${linesTableRowsHtml(quote)}
     </tbody>
   </table>
-  <p style="font-size:16px;font-weight:700;margin:0 0 16px;">Quoted total: ${escapeHtml(formatMoney(quote.amount))}</p>
-  <p style="font-size:12px;color:#777;margin:0;">${quote.notes ? escapeHtml(quote.notes) : 'Reply to this email to accept or ask questions.'}</p>
+  <p style="font-size:15px;font-weight:700;margin:0 0 6px;">Quoted total: ${escapeHtml(formatMoney(quote.amount))}</p>
+  <p style="font-size:13px;margin:0 0 16px;">Payment method: ${escapeHtml(paymentMethod)}</p>
   ${bankingDetailsHtml(quote.quoteNumber, { kind: 'quote' })}
-  <p style="font-size:12px;color:#777;margin:12px 0 0;">A PDF copy of this quote is attached.</p>
-  ${companyContactBlockHtml()}
 </body>
 </html>`.trim()
 
   const text = [
-    `${COMPANY.name} — Quote ${quote.quoteNumber}`,
-    COMPANY.legalName,
-    COMPANY.address,
-    `${COMPANY.phone} · ${COMPANY.email}`,
+    companyHeaderText(),
     '',
-    `Prepared for: ${quote.customerName}`,
+    `Quote ${quote.quoteNumber}`,
+    issued ? `Issued ${issued}` : '',
+    `Valid until ${valid}`,
+    '',
+    'Bill to',
+    quote.customerName,
+    quote.customerEmail || '',
+    quote.customerAddress || '',
+    '',
     linesTextBlock(quote),
-    `Total: ${formatMoney(quote.amount)}`,
-    `Valid until: ${valid}`,
     '',
-    bankingDetailsText(quote.quoteNumber, { kind: 'quote' }),
+    `Quoted total: ${formatMoney(quote.amount)}`,
+    `Payment method: ${paymentMethod}`,
     '',
-    'A PDF copy of this quote is attached.'
-  ].join('\n')
+    bankingDetailsText(quote.quoteNumber, { kind: 'quote' })
+  ]
+    .filter((line, i, arr) => line !== '' || arr[i - 1] !== '')
+    .join('\n')
 
   return {
     from: companyFromAddress(),
