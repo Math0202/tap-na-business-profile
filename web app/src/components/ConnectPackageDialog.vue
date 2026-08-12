@@ -474,7 +474,7 @@ async function addPackageToCart() {
                       </div>
                     </div>
                     <div class="flex items-center justify-between gap-3">
-                      <span class="text-[12px] text-on-surface-variant">How many?</span>
+                      <span class="text-[12px] text-on-surface-variant">Number of cards</span>
                       <div class="inline-flex items-center border border-border-subtle rounded-full overflow-hidden bg-surface">
                         <button
                           type="button"
@@ -520,7 +520,7 @@ async function addPackageToCart() {
                       </div>
                     </div>
                     <div class="flex items-center justify-between gap-3">
-                      <span class="text-[12px] text-on-surface-variant">How many?</span>
+                      <span class="text-[12px] text-on-surface-variant">Number of cards</span>
                       <div
                         class="inline-flex items-center border rounded-full overflow-hidden bg-surface"
                         :class="inExecutiveBridge ? 'border-primary' : 'border-border-subtle'"

@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import ShopHeader from '../components/ShopHeader.vue'
 import ConnectPackageDialog from '../components/ConnectPackageDialog.vue'
 import {
@@ -433,7 +433,7 @@ onUnmounted(() => {
                   </div>
                 </div>
                 <div class="flex items-center justify-between gap-3">
-                  <span class="text-[12px] text-on-surface-variant">How many?</span>
+                  <span class="text-[12px] text-on-surface-variant">Number of cards</span>
                   <div class="inline-flex items-center border border-border-subtle rounded-full overflow-hidden bg-surface-container">
                     <button
                       type="button"
@@ -475,7 +475,7 @@ onUnmounted(() => {
                   </div>
                 </div>
                 <div class="flex items-center justify-between gap-3">
-                  <span class="text-[12px] text-on-surface-variant">How many?</span>
+                  <span class="text-[12px] text-on-surface-variant">Number of cards</span>
                   <div
                     class="inline-flex items-center border rounded-full overflow-hidden bg-surface-container"
                     :class="inExecutiveBridge ? 'border-primary' : 'border-border-subtle'"
@@ -542,18 +542,12 @@ onUnmounted(() => {
             <div class="flex flex-col sm:flex-row gap-3">
               <button
                 type="button"
-                class="flex-1 bg-primary text-on-primary py-4 font-button-text uppercase tracking-widest hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="w-full bg-primary text-on-primary py-4 font-button-text uppercase tracking-widest hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                 :disabled="!teamOrderReady"
                 @click="openCheckout"
               >
                 {{ placeOrderLabel }}
               </button>
-              <RouterLink
-                to="/cart"
-                class="flex-1 text-center border border-primary text-primary py-4 font-button-text uppercase tracking-widest no-underline hover:bg-primary hover:text-on-primary transition-colors"
-              >
-                View cart
-              </RouterLink>
             </div>
           </section>
         </template>

@@ -233,17 +233,11 @@ onUnmounted(() => {
               <div class="flex flex-col sm:flex-row gap-3 mt-2">
               <button
                 type="button"
-                class="flex-1 bg-primary text-on-primary py-4 font-button-text uppercase tracking-widest hover:opacity-90 transition-opacity"
+                class="w-full bg-primary text-on-primary py-4 font-button-text uppercase tracking-widest hover:opacity-90 transition-opacity"
                 @click="addProduct"
               >
                 {{ teamPack ? ('Add ' + minQty + ' to cart') : 'Add to cart' }}
               </button>
-              <RouterLink
-                to="/cart"
-                class="flex-1 border border-primary text-primary py-4 font-button-text uppercase tracking-widest text-center no-underline hover:bg-primary hover:text-on-primary transition-colors"
-              >
-                View cart
-              </RouterLink>
             </div>
           </div>
         </div>
