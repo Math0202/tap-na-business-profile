@@ -123,10 +123,15 @@ function onPackageOrdered(payload) {
     router.push('/cart')
     return
   }
+  const emailedTo = String(payload?.email || payload?.to?.[0] || '').trim()
   showToast(
     payload?.quoteRef
-      ? `Quote ${payload.quoteRef} emailed`
-      : 'Quote emailed to you and welcome@tapnam.com'
+      ? emailedTo
+        ? `Quote ${payload.quoteRef} emailed to ${emailedTo}`
+        : `Quote ${payload.quoteRef} emailed`
+      : emailedTo
+        ? `Quote emailed to ${emailedTo}`
+        : 'Quote emailed'
   )
 }
 
@@ -314,7 +319,7 @@ onUnmounted(() => {
           <div class="flex justify-between items-end gap-4">
             <div class="flex flex-col gap-1 min-w-0">
               <h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg uppercase">
-                Connect Teamss
+                Connect Teams
               </h2>
               <div class="h-1 w-12 bg-primary" />
               <p class="text-on-surface-variant text-sm mt-1">
@@ -542,7 +547,7 @@ onUnmounted(() => {
                   <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
                 <tr>
-                  <td class="py-3 pr-4 text-on-surface">Custom logo on card</td>
+                  <td class="py-3 pr-4 text-on-surface">Custom Logo(B&W)</td>
                   <td class="py-3 px-2 text-center">—</td>
                   <td class="py-3 px-2 text-center text-primary">✓</td>
                   <td class="py-3 pl-2 text-center text-primary">✓</td>

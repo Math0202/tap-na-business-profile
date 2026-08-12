@@ -5611,7 +5611,7 @@ async function handleApi(request, env, url) {
       'N$ ' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 
     const quoteRef = `SQ-${Date.now().toString(36).toUpperCase()}`
-    const companyTo = 'welcome@tapnam.com'
+    const salesCopyTo = 'sales@tapnam.com'
     const from = defaultEmailFrom(env)
     const subject = `Order quote ${quoteRef} — ${name}`
 
@@ -5706,7 +5706,7 @@ async function handleApi(request, env, url) {
       contentType: 'application/pdf'
     }
 
-    const toList = [companyTo, email].filter((v, i, arr) => arr.indexOf(v) === i)
+    const recipients = [email, salesCopyTo].filter((v, i, arr) => arr.indexOf(v) === i)
     let provisionedTeam = null
     try {
       provisionedTeam = await provisionTeamFromShopQuote(env, {
@@ -5729,7 +5729,7 @@ async function handleApi(request, env, url) {
     try {
       const sent = await sendCloudflareEmail(env, {
         from,
-        to: toList,
+        to: recipients,
         replyTo: email,
         subject,
         html,
@@ -5740,7 +5740,9 @@ async function handleApi(request, env, url) {
         ok: true,
         id: sent.id || '',
         quoteRef,
-        to: toList,
+        // Client-facing only — sales@ is also notified but not shown in the UI
+        to: [email],
+        email,
         provider: sent.provider,
         pdfAttached: true,
         team: provisionedTeam

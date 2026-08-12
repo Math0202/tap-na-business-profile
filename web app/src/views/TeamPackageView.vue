@@ -222,10 +222,15 @@ function onPackageOrdered(payload) {
     router.push('/cart')
     return
   }
+  const emailedTo = String(payload?.email || payload?.to?.[0] || '').trim()
   showToast(
     payload?.quoteRef
-      ? `Quote ${payload.quoteRef} emailed`
-      : 'Quote emailed to you and welcome@tapnam.com'
+      ? emailedTo
+        ? `Quote ${payload.quoteRef} emailed to ${emailedTo}`
+        : `Quote ${payload.quoteRef} emailed`
+      : emailedTo
+        ? `Quote emailed to ${emailedTo}`
+        : 'Quote emailed'
   )
 }
 

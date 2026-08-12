@@ -171,7 +171,7 @@ async function placeOrder() {
     clearCart()
     checkoutOpen.value = false
     checkoutNote.value = ''
-    showToast('Quote emailed to you and welcome@tapnam.com')
+    showToast(`Quote emailed to ${email}`)
   } finally {
     submitting.value = false
   }
