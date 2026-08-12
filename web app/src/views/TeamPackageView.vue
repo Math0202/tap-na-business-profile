@@ -52,7 +52,7 @@ const mixStatusLabel = computed(() => {
 })
 const mixHint = computed(() => {
   if (teamTotal.value < TEAM_PACKAGE_MIN) {
-    return `Team packages start at ${TEAM_PACKAGE_MIN} cards. Use +/− or a quick start below.`
+    return `Team packages start at ${TEAM_PACKAGE_MIN} cards.`
   }
   if (inExecutiveBridge.value) {
     return `Next cards through ${TEAM_FREE_MIX_AFTER} must be Executive. Business + is paused until then.`
@@ -60,11 +60,7 @@ const mixHint = computed(() => {
   if (executiveQty.value === 0 && businessQty.value >= TEAM_BUSINESS_ALONE_MAX) {
     return `Business alone tops out at ${TEAM_BUSINESS_ALONE_MAX}. Add Executive to grow further.`
   }
-  if (!subdomainEligible.value) {
-    const need = TEAM_EXEC_SUBDOMAIN_MIN - executiveQty.value
-    return `Add ${need} more Executive card${need === 1 ? '' : 's'} to unlock an optional company subdomain.`
-  }
-  return 'Optional company subdomain unlocked below.'
+  return ''
 })
 const canAddBusiness = computed(() => {
   if (inExecutiveBridge.value) return false
@@ -420,34 +416,7 @@ onUnmounted(() => {
               >
                 {{ mixStatusLabel }}
               </p>
-              <p class="text-on-surface-variant text-sm">{{ mixHint }}</p>
-            </div>
-
-            <div class="flex flex-wrap gap-2" role="group" aria-label="Quick start mixes">
-              <button
-                type="button"
-                class="px-3 py-2 rounded-full border text-[11px] font-medium transition-colors"
-                :class="businessQty === 5 && executiveQty === 0 ? 'border-primary bg-primary text-on-primary' : 'border-border-subtle bg-surface hover:border-primary'"
-                @click="setTeamMix(5, 0)"
-              >
-                5 Business
-              </button>
-              <button
-                type="button"
-                class="px-3 py-2 rounded-full border text-[11px] font-medium transition-colors"
-                :class="businessQty === 0 && executiveQty === 5 ? 'border-primary bg-primary text-on-primary' : 'border-border-subtle bg-surface hover:border-primary'"
-                @click="setTeamMix(0, 5)"
-              >
-                5 Executive
-              </button>
-              <button
-                type="button"
-                class="px-3 py-2 rounded-full border text-[11px] font-medium transition-colors"
-                :class="businessQty === 2 && executiveQty === 3 ? 'border-primary bg-primary text-on-primary' : 'border-border-subtle bg-surface hover:border-primary'"
-                @click="setTeamMix(2, 3)"
-              >
-                2 Business + 3 Executive
-              </button>
+              <p v-if="mixHint" class="text-on-surface-variant text-sm">{{ mixHint }}</p>
             </div>
 
             <div class="flex flex-col gap-3">
