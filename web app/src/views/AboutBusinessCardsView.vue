@@ -66,11 +66,7 @@ onUnmounted(() => {
             <h2 class="font-headline-lg-mobile text-[24px] uppercase font-semibold">Why Connect cards?</h2>
             <div class="h-1 w-12 bg-primary" />
           </div>
-          <p class="text-on-surface-variant leading-relaxed">
-            Paper cards get lost, go out of date, and keep costing you reprints. Connect cards are
-            durable like a bank card, update online anytime, and share more than a name — catalogue,
-            meetings, and your whole brand story.
-          </p>
+         
           <ul class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <li class="bg-surface-container rounded-xl p-4 flex gap-3">
               <span class="material-symbols-outlined text-primary shrink-0">payments</span>
@@ -82,7 +78,7 @@ onUnmounted(() => {
             <li class="bg-surface-container rounded-xl p-4 flex gap-3">
               <span class="material-symbols-outlined text-primary shrink-0">update</span>
               <div>
-                <p class="font-medium text-sm">Never reprint for updates</p>
+                <p class="font-medium text-sm">No reprint for updates</p>
                 <p class="text-xs text-on-surface-variant mt-1">Change title, number, or links online. Same plastic works.</p>
               </div>
             </li>
@@ -90,14 +86,21 @@ onUnmounted(() => {
               <span class="material-symbols-outlined text-primary shrink-0">local_shipping</span>
               <div>
                 <p class="font-medium text-sm">Free Windhoek delivery</p>
-                <p class="text-xs text-on-surface-variant mt-1">Order online. Made to order. Typically 1–3 working days.</p>
+                <p class="text-xs text-on-surface-variant mt-1">Order online. Made to order. Typically 1-4 working days.</p>
+              </div>
+            </li>
+            <li class="bg-surface-container rounded-xl p-4 flex gap-3">
+              <span class="material-symbols-outlined text-primary shrink-0">security</span>
+              <div>
+                <p class="font-medium text-sm">Dourable</p>
+                <p class="text-xs text-on-surface-variant mt-1">As durable as a bank card</p>
               </div>
             </li>
             <li class="bg-surface-container rounded-xl p-4 flex gap-3">
               <span class="material-symbols-outlined text-primary shrink-0">replay</span>
               <div>
-                <p class="font-medium text-sm">Lost a card?</p>
-                <p class="text-xs text-on-surface-variant mt-1">Order a replacement online and claim the new card.</p>
+                <p class="font-medium text-sm">Lost card?</p>
+                <p class="text-xs text-on-surface-variant mt-1">Order a replacement online.</p>
               </div>
             </li>
           </ul>
@@ -106,7 +109,7 @@ onUnmounted(() => {
         <!-- How it works -->
         <section class="flex flex-col gap-5">
           <div class="flex flex-col gap-1">
-            <h2 class="font-headline-lg-mobile text-[24px] uppercase font-semibold">How the cards work</h2>
+            <h2 class="font-headline-lg-mobile text-[24px] uppercase font-semibold">How connect cards works</h2>
             <div class="h-1 w-12 bg-primary" />
           </div>
           <ol class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 list-none p-0 m-0">
@@ -121,46 +124,14 @@ onUnmounted(() => {
               <span class="material-symbols-outlined text-primary text-[32px] sm:mx-auto" aria-hidden="true">link</span>
               <p class="font-label-caps text-[12px] uppercase tracking-[0.2em] text-on-surface">Connect</p>
               <p class="text-sm text-on-surface-variant leading-relaxed">
-                Their browser opens your live Tap-Na profile — always the latest version.
+                Their browser opens your live Tap-Na profile instantly — always the latest version.
               </p>
             </li>
             <li class="flex flex-col gap-3 sm:text-center bg-surface-container rounded-xl p-5">
               <span class="material-symbols-outlined text-primary text-[32px] sm:mx-auto" aria-hidden="true">ios_share</span>
               <p class="font-label-caps text-[12px] uppercase tracking-[0.2em] text-on-surface">Share</p>
               <p class="text-sm text-on-surface-variant leading-relaxed">
-                They save your contact, open links, browse your catalogue, or book a meeting.
-              </p>
-            </li>
-          </ol>
-        </section>
-
-        <!-- How to use -->
-        <section id="how-to-use" class="flex flex-col gap-5 scroll-mt-24">
-          <div class="flex flex-col gap-1">
-            <h2 class="font-headline-lg-mobile text-[24px] uppercase font-semibold">How to use your card</h2>
-            <div class="h-1 w-12 bg-primary" />
-          </div>
-          <ol class="space-y-4">
-            <li class="flex gap-4">
-              <span class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center font-label-caps text-xs shrink-0">1</span>
-              <p class="text-sm text-on-surface-variant leading-relaxed pt-1">Carry your Connect card — one is enough.</p>
-            </li>
-            <li class="flex gap-4">
-              <span class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center font-label-caps text-xs shrink-0">2</span>
-              <p class="text-sm text-on-surface-variant leading-relaxed pt-1">
-                Meet someone, smile, introduce yourself, then offer: <em>“Here’s my card — just tap it to your phone.”</em>
-              </p>
-            </li>
-            <li class="flex gap-4">
-              <span class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center font-label-caps text-xs shrink-0">3</span>
-              <p class="text-sm text-on-surface-variant leading-relaxed pt-1">
-                Hold the card near the top or back of their phone (NFC). No NFC? Let them scan the QR.
-              </p>
-            </li>
-            <li class="flex gap-4">
-              <span class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center font-label-caps text-xs shrink-0">4</span>
-              <p class="text-sm text-on-surface-variant leading-relaxed pt-1">
-                Their phone opens your profile. They can save your contact, open links, browse your catalogue, or book a meeting.
+                They save your digital card, open links, browse your catalogue, or book a meeting.
               </p>
             </li>
           </ol>
@@ -169,17 +140,14 @@ onUnmounted(() => {
         <!-- How to claim -->
         <section id="how-to-claim" class="flex flex-col gap-5 scroll-mt-24">
           <div class="flex flex-col gap-1">
-            <h2 class="font-headline-lg-mobile text-[24px] uppercase font-semibold">How to claim a card</h2>
+            <h2 class="font-headline-lg-mobile text-[24px] uppercase font-semibold">On-board your digital card</h2>
             <div class="h-1 w-12 bg-primary" />
           </div>
-          <p class="text-sm text-on-surface-variant leading-relaxed">
-            New cards arrive unclaimed. Claiming links that physical card to your account and profile.
-          </p>
           <ol class="space-y-4">
             <li class="flex gap-4">
               <span class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-caps text-xs shrink-0">1</span>
               <p class="text-sm text-on-surface-variant leading-relaxed pt-1">
-                Order online. We deliver free in Windhoek in about <strong class="text-on-surface">1–3 working days</strong>.
+                Order online. Delivery free in Windhoek within <strong class="text-on-surface">1–4 working days. Couriered nationwide</strong>.
               </p>
             </li>
             <li class="flex gap-4">
@@ -191,7 +159,7 @@ onUnmounted(() => {
             <li class="flex gap-4">
               <span class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-caps text-xs shrink-0">3</span>
               <p class="text-sm text-on-surface-variant leading-relaxed pt-1">
-                You’ll see the <strong class="text-on-surface">claim</strong> screen for that unique card code.
+                You’ll see the <strong class="text-on-surface">On-boarding</strong> screen for your unique card.
               </p>
             </li>
             <li class="flex gap-4">
@@ -208,61 +176,10 @@ onUnmounted(() => {
             </li>
           </ol>
         </section>
-
-        <!-- What it can hold -->
-        <section class="flex flex-col gap-5">
-          <div class="flex flex-col gap-1">
-            <h2 class="font-headline-lg-mobile text-[24px] uppercase font-semibold">What your card can hold</h2>
-            <div class="h-1 w-12 bg-primary" />
-          </div>
-          <p class="text-sm text-on-surface-variant leading-relaxed">
-            The plastic only points to your profile. The profile can hold a full professional presence:
-          </p>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div class="bg-surface-container rounded-xl p-4">
-              <p class="font-label-caps text-[10px] uppercase tracking-widest text-ink-muted mb-2">Identity</p>
-              <ul class="text-sm text-on-surface-variant space-y-1.5">
-                <li>Name &amp; photo</li>
-                <li>Job title / role</li>
-                <li>Company name</li>
-                <li>Profile video (optional)</li>
-              </ul>
-            </div>
-            <div class="bg-surface-container rounded-xl p-4">
-              <p class="font-label-caps text-[10px] uppercase tracking-widest text-ink-muted mb-2">Contact</p>
-              <ul class="text-sm text-on-surface-variant space-y-1.5">
-                <li>Phone &amp; email</li>
-                <li>WhatsApp</li>
-                <li>LinkedIn</li>
-                <li>Instagram, TikTok, website</li>
-              </ul>
-            </div>
-            <div class="bg-surface-container rounded-xl p-4">
-              <p class="font-label-caps text-[10px] uppercase tracking-widest text-ink-muted mb-2">Business tools</p>
-              <ul class="text-sm text-on-surface-variant space-y-1.5">
-                <li>Products &amp; services catalogue</li>
-                <li>Prices, images, PDFs &amp; links</li>
-                <li>Book a meeting</li>
-                <li>Share profile / QR</li>
-                <li>Save contact (vCard)</li>
-              </ul>
-            </div>
-            <div class="bg-surface-container rounded-xl p-4">
-              <p class="font-label-caps text-[10px] uppercase tracking-widest text-ink-muted mb-2">Team (Business &amp; Executive)</p>
-              <ul class="text-sm text-on-surface-variant space-y-1.5">
-                <li>Team member profiles</li>
-                <li>Shared catalogue</li>
-                <li>Owner can block a member’s card</li>
-                <li>Company branding / subdomain (Executive)</li>
-              </ul>
-            </div>
-          </div>
-        </section>
-
         <!-- Classes -->
         <section class="flex flex-col gap-5">
           <div class="flex flex-col gap-1">
-            <h2 class="font-headline-lg-mobile text-[24px] uppercase font-semibold">Three classes</h2>
+            <h2 class="font-headline-lg-mobile text-[24px] uppercase font-semibold">Packages</h2>
             <div class="h-1 w-12 bg-primary" />
           </div>
           <div class="flex flex-col gap-4">
@@ -272,8 +189,7 @@ onUnmounted(() => {
                 <span class="font-label-caps text-[10px] uppercase tracking-widest bg-surface-container px-2 py-1">Solo</span>
               </div>
               <p class="text-sm text-on-surface-variant leading-relaxed">
-                For solopreneurs, consultants, and freelancers. Catalogue and meeting booking on a durable cobalt-blue card.
-                <strong class="text-on-surface"> Not customisable</strong> — standard Professional finish. Min 1.
+                For solopreneurs, consultants, and freelancers.
               </p>
             </article>
             <article class="border border-border-subtle rounded-xl p-5 flex flex-col gap-2">
@@ -282,7 +198,7 @@ onUnmounted(() => {
                 <span class="font-label-caps text-[10px] uppercase tracking-widest bg-primary text-on-primary px-2 py-1">Best Seller</span>
               </div>
               <p class="text-sm text-on-surface-variant leading-relaxed">
-                For teams of about 5–10. Meeting booking, shared catalogue, team profiles, and company logo in black &amp; white (charcoal card).
+                For teams. Meeting booking, share catalogue, team profiles, and company logo in black &amp; white (charcoal card).
               </p>
             </article>
             <article class="border border-border-subtle rounded-xl p-5 flex flex-col gap-2">
@@ -292,7 +208,7 @@ onUnmounted(() => {
               </div>
               <p class="text-sm text-on-surface-variant leading-relaxed">
                 Matte black flagship for leaders and larger teams (5–20+). black &amp; white company logo, fuller team tools, and a company subdomain
-                such as <strong class="text-on-surface">cards.company.com</strong>. Business cards on the same team can also load onto that subdomain.
+                such as <strong class="text-on-surface">cards.companyname.com</strong>.
               </p>
             </article>
           </div>
@@ -301,11 +217,9 @@ onUnmounted(() => {
         <!-- Feature matrix -->
         <section class="flex flex-col gap-5">
           <div class="flex flex-col gap-1">
-            <h2 class="font-headline-lg-mobile text-[24px] uppercase font-semibold">Feature matrix</h2>
+            <h2 class="font-headline-lg-mobile text-[24px] uppercase font-semibold">Features</h2>
             <div class="h-1 w-12 bg-primary" />
-            <p class="text-on-surface-variant text-sm mt-1">
-              Solo vs Connect Team finishes — Business and Executive differences.
-            </p>
+            
           </div>
           <div class="overflow-x-auto -mx-1 px-1">
             <table class="w-full min-w-[560px] text-left text-sm border-collapse">
@@ -333,94 +247,58 @@ onUnmounted(() => {
                   <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
                 <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Once-off (no monthly fee)</td>
+                  <td class="py-3 pr-4 text-on-surface">Contact Details</td>
                   <td class="py-3 px-2 text-center text-primary">✓</td>
                   <td class="py-3 px-2 text-center text-primary">✓</td>
                   <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
                 <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Catalogue &amp; book meeting</td>
+                  <td class="py-3 pr-4 text-on-surface">Products &amp; Services Catalogue </td>
                   <td class="py-3 px-2 text-center text-primary">✓</td>
                   <td class="py-3 px-2 text-center text-primary">✓</td>
                   <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
                 <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Custom logo on card</td>
-                  <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center text-primary text-xs">Black &amp; White</td>
-                  <td class="py-3 pl-2 text-center text-primary text-xs">Black &amp; White</td>
+                  <td class="py-3 pr-4 text-on-surface">Meeting Booking</td>
+                  <td class="py-3 px-2 text-center text-primary">✓</td>
+                  <td class="py-3 px-2 text-center text-primary">✓</td>
+                  <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
+                <tr class="border-b border-border-subtle/70">
+                  <td class="py-3 pr-4 text-on-surface">Profile Sharing</td>
+                  <td class="py-3 px-2 text-center text-primary">✓</td>
+                  <td class="py-3 px-2 text-center text-primary">✓</td>
+                  <td class="py-3 pl-2 text-center text-primary">✓</td>
+                </tr>
+                
                 <tr class="border-b border-border-subtle/70">
                   <td class="py-3 pr-4 text-on-surface">Team profiles </td>
                   <td class="py-3 px-2 text-center">—</td>
                   <td class="py-3 px-2 text-center text-primary">✓</td>
                   <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
+               
                 <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Buy alone</td>
-                  <td class="py-3 px-2 text-center text-xs">Up to 4</td>
-                  <td class="py-3 px-2 text-center text-xs leading-snug">Up to 10</td>
-                  <td class="py-3 pl-2 text-center text-xs leading-snug">Min 5</td>
-                </tr>
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Scale past 10</td>
+                  <td class="py-3 pr-4 text-on-surface">Customization</td>
                   <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center text-xs leading-snug">Free mix to 10</td>
-                  <td class="py-3 pl-2 text-center text-primary text-xs leading-snug">11–15 Executive only,<br>then free mix</td>
+                  <td class="py-3 px-2 text-center text-xs leading-snug">✓</td>
+                  <td class="py-3 pl-2 text-center text-primary text-xs leading-snug">✓</td>
                 </tr>
                 <tr>
                   <td class="py-3 pr-4 text-on-surface">Custom subdomain</td>
                   <td class="py-3 px-2 text-center">—</td>
                   <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 pl-2 text-center text-primary text-xs leading-snug">From 5 Executive</td>
+                  <td class="py-3 pl-2 text-center text-primary text-xs leading-snug">✓</td>
+                </tr>
+                <tr class="border-b border-border-subtle/70">
+                  <td class="py-3 pr-4 text-on-surface">Custom logo on card</td>
+                  <td class="py-3 px-2 text-center">—</td>
+                  <td class="py-3 px-2 text-center text-primary text-xs">✓</td>
+                  <td class="py-3 pl-2 text-center text-primary text-xs">✓</td>
                 </tr>
               </tbody>
             </table>
           </div>
-        </section>
-
-        <!-- Teams -->
-        <section class="flex flex-col gap-5">
-          <div class="flex flex-col gap-1">
-            <h2 class="font-headline-lg-mobile text-[24px] uppercase font-semibold">Teams</h2>
-            <div class="h-1 w-12 bg-primary" />
-          </div>
-          <p class="text-sm text-on-surface-variant leading-relaxed">
-            Business and Executive cards sit under one organisation. Each person claims their own card;
-            the <strong class="text-on-surface">team owner</strong> keeps control of the group.
-          </p>
-          <div class="bg-surface-container rounded-xl p-5 space-y-3">
-            <p class="font-medium text-sm">Owner can block a member’s card</p>
-            <p class="text-sm text-on-surface-variant leading-relaxed">
-              If someone leaves or shouldn’t represent the company, the owner can block that card so taps
-              no longer show an active company profile for them — without reprinting the rest of the team.
-            </p>
-          </div>
-          <div class="bg-surface-container rounded-xl p-5 space-y-3">
-            <p class="font-medium text-sm">Executive subdomain for the whole team</p>
-            <p class="text-sm text-on-surface-variant leading-relaxed">
-              Executive unlocks a branded host such as <strong class="text-on-surface">cards.company.com</strong>.
-              If the team also has Business cards, those profiles can load onto the same custom subdomain.
-            </p>
-          </div>
-        </section>
-
-        <!-- Money -->
-        <section class="flex flex-col gap-5">
-          <div class="flex flex-col gap-1">
-            <h2 class="font-headline-lg-mobile text-[24px] uppercase font-semibold">How you save money</h2>
-            <div class="h-1 w-12 bg-primary" />
-          </div>
-          <ul class="space-y-2 text-sm text-on-surface-variant leading-relaxed list-disc pl-5">
-            <li>Stop reprinting when titles, numbers, or branding change.</li>
-            <li>One durable card instead of stacks of paper that expire.</li>
-            <li>Once-off price — no monthly rent on the card itself.</li>
-            <li>Lost card? Replace that one — not a full print run.</li>
-            <li>Catalogue and meetings replace extra print flyers and “call me” follow-ups.</li>
-          </ul>
-          <p class="text-sm text-on-surface font-medium">
-            If you don’t switch, you keep investing money and time in printing traditional business cards.
-          </p>
         </section>
 
         <!-- Order -->
@@ -431,9 +309,9 @@ onUnmounted(() => {
           </div>
           <ul class="space-y-2 text-sm text-on-surface-variant leading-relaxed">
             <li>• Fully online store — order on tapnam.com</li>
-            <li>• Cards made to order</li>
-            <li>• Free delivery in Windhoek</li>
-            <li>• Typical delivery: 1–3 working days</li>
+            <li>• Solo Cards are readily available, Business & Executive Cards are made on order</li>
+            <li>• Free delivery in Windhoek; Couriered nationwide</li>
+            <li>• Typical delivery: 1–4 working days</li>
             <li>• Quote when you want to order; invoice after payment / delivery as agreed with sales</li>
           </ul>
         </section>
@@ -472,9 +350,9 @@ onUnmounted(() => {
 
         <!-- CTA -->
         <section class="bg-surface-charcoal text-on-primary rounded-xl p-8 flex flex-col gap-4">
-          <h2 class="text-2xl font-semibold leading-tight">Ready to carry only one card?</h2>
+          <h2 class="text-2xl font-semibold leading-tight">Ready for your digital business card?</h2>
           <p class="text-on-primary/70 text-sm leading-relaxed">
-            See the packages, pick your class, and order online.
+            See the packages, and order online.
           </p>
           <button
             type="button"

@@ -109,7 +109,7 @@ function orderCard(cardName, cardType) {
 
         <section class="space-y-3">
           <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-400">Personal tap cards</h2>
-          <p class="text-xs text-gray-500 -mt-1">Digital business cards for individuals</p>
+          <p class="text-xs text-gray-500 -mt-1">Digital Business Cards for individuals</p>
 
           <article
             v-for="card in personalCardOptions"

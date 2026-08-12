@@ -16,7 +16,7 @@ const BUCKET = 'shop'
 const PRODUCTS = [
   {
     id: 'blue-card',
-    name: 'Professional Class',
+    name: 'Professional',
     price: 49.99,
     description: 'Premium NFC business card in cobalt blue.',
     alt: 'Professional cobalt blue NFC business card',
@@ -29,7 +29,7 @@ const PRODUCTS = [
   },
   {
     id: 'black-card',
-    name: 'Business Class',
+    name: 'Business',
     price: 49.99,
     description: 'Charcoal gradient NFC business card.',
     alt: 'Business charcoal NFC business card',
@@ -42,7 +42,7 @@ const PRODUCTS = [
   },
   {
     id: 'black-card-front',
-    name: 'Executive Class',
+    name: 'Executive',
     price: 49.99,
     description: 'Matte black executive NFC business card.',
     alt: 'Executive black NFC business card',

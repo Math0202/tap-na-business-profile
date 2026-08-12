@@ -337,7 +337,7 @@ async function addPackageToCart() {
           <div class="min-w-0">
             <h2 class="font-headline-lg-mobile text-[22px] font-medium uppercase tracking-tight">{{ title }}</h2>
             <p class="text-on-surface-variant text-sm mt-1">
-              {{ isTeam ? 'Pick how many Business and Executive cards you need (min 5 total)' : `Professional Class · 1–${SOLO_PACKAGE_MAX} cards` }}
+              {{ isTeam ? 'Pick how many Business and Executive cards you need (min 5 total)' : `Professional · 1–${SOLO_PACKAGE_MAX} cards` }}
             </p>
           </div>
           <button
@@ -393,7 +393,7 @@ async function addPackageToCart() {
               </thead>
               <tbody class="text-on-surface-variant">
                 <tr class="border-b border-border-subtle/60">
-                  <td class="py-2 pr-2 text-on-surface">NFC + QR → live profile</td>
+                  <td class="py-2 pr-2 text-on-surface">NFC + QR → live digital profile</td>
                   <td class="py-2 px-1 text-center text-primary">✓</td>
                   <td class="py-2 pl-1 text-center text-primary">✓</td>
                 </tr>
@@ -413,7 +413,7 @@ async function addPackageToCart() {
                   <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">Black &amp; White</td>
                 </tr>
                 <tr class="border-b border-border-subtle/60">
-                  <td class="py-2 pr-2 text-on-surface">Team profiles + owner block</td>
+                  <td class="py-2 pr-2 text-on-surface">Team profiles </td>
                   <td class="py-2 px-1 text-center">—</td>
                   <td class="py-2 pl-1 text-center text-primary">✓</td>
                 </tr>
@@ -609,7 +609,7 @@ async function addPackageToCart() {
                 </thead>
                 <tbody class="text-on-surface-variant">
                   <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">NFC + QR → live profile</td>
+                    <td class="py-2 pr-2 text-on-surface">NFC + QR → live digital profile</td>
                     <td class="py-2 px-1 text-center text-primary">✓</td>
                     <td class="py-2 pl-1 text-center text-primary">✓</td>
                   </tr>
@@ -629,7 +629,7 @@ async function addPackageToCart() {
                     <td class="py-2 pl-1 text-center text-primary text-[11px]">Black &amp; White</td>
                   </tr>
                   <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">Team profiles + owner block</td>
+                    <td class="py-2 pr-2 text-on-surface">Team profiles </td>
                     <td class="py-2 px-1 text-center text-primary">✓</td>
                     <td class="py-2 pl-1 text-center text-primary">✓</td>
                   </tr>

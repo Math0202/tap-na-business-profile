@@ -329,7 +329,7 @@ onUnmounted(() => {
                 </p>
                 <div class="flex justify-between items-start gap-3">
                   <h2 class="font-headline-lg-mobile text-[28px] font-semibold">
-                    {{ businessProduct?.name || 'Business Class' }}
+                    {{ businessProduct?.name || 'Business' }}
                   </h2>
                   <span class="font-label-caps text-label-caps shrink-0">
                     {{ formatPrice(businessProduct?.price || 0) }}
@@ -379,7 +379,7 @@ onUnmounted(() => {
                 </p>
                 <div class="flex justify-between items-start gap-3">
                   <h2 class="font-headline-lg-mobile text-[28px] font-semibold">
-                    {{ executiveProduct?.name || 'Executive Class' }}
+                    {{ executiveProduct?.name || 'Executive' }}
                   </h2>
                   <span class="font-label-caps text-label-caps shrink-0">
                     {{ formatPrice(executiveProduct?.price || 0) }}
