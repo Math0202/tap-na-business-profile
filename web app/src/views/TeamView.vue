@@ -15,13 +15,14 @@ import {
   apiAddTeamMember,
   apiGetMyTeam,
   apiResolveCard,
+  apiTransferTeamOwnership,
   apiUpdateMyTeam,
   apiUpdateTeamMember,
   ensureApiSession,
   getApiToken
 } from '../lib/api'
 import { isLoggedIn, isTableBusiness, loadProfile } from '../lib/profileStore'
-import { useRouter } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 
 const router = useRouter()
 const loading = ref(true)
@@ -32,6 +33,8 @@ const members = ref([])
 const myRole = ref(DEFAULT_PERSONAL_TYPE)
 const ownerRole = ref(DEFAULT_PERSONAL_TYPE)
 const isOwner = ref(false)
+const canUseTeam = ref(true)
+const packageCeiling = ref('business')
 const pendingInvites = ref([])
 
 const teamName = ref('')
@@ -44,6 +47,7 @@ const showDeleted = ref(false)
 const tierGateOpen = ref(false)
 const tierGateTitle = ref('')
 const tierGateMessage = ref('')
+const transferConfirm = ref(null)
 
 function flash(msg) {
   toast.value = msg
@@ -66,9 +70,11 @@ function canInviteCardType(type) {
 }
 
 const roleOptions = computed(() => {
-  const byOwner = assignableRoles(ownerRole.value)
-  const byActor = assignableRoles(myRole.value)
-  return byOwner.filter((id) => byActor.includes(id)).map((id) => PERSONAL_TYPES[id])
+  const byPackage = assignableRoles(packageCeiling.value)
+  const byActor = isOwner.value
+    ? byPackage
+    : assignableRoles(myRole.value).filter((id) => byPackage.includes(id))
+  return byActor.map((id) => PERSONAL_TYPES[id]).filter(Boolean)
 })
 
 async function refresh() {
@@ -85,10 +91,19 @@ async function refresh() {
       flash(res.error || 'Could not load team')
       return
     }
+    canUseTeam.value = res.data.canUseTeam !== false
+    if (!canUseTeam.value) {
+      team.value = null
+      members.value = []
+      return
+    }
     team.value = res.data.team
     members.value = res.data.members || []
     myRole.value = normalizePersonalType(res.data.myRole || DEFAULT_PERSONAL_TYPE)
-    ownerRole.value = normalizePersonalType(res.data.ownerRole || res.data.myRole || DEFAULT_PERSONAL_TYPE)
+    packageCeiling.value = normalizePersonalType(
+      res.data.packageCeiling || res.data.ownerRole || DEFAULT_PERSONAL_TYPE
+    )
+    ownerRole.value = packageCeiling.value
     if (!roleOptions.value.find((r) => r.id === addRole.value) && roleOptions.value[0]) {
       addRole.value = roleOptions.value[0].id
     }
@@ -238,6 +253,29 @@ async function restoreMember(member) {
   await refresh()
 }
 
+async function transferOwnership(member) {
+  if (!isOwner.value || !member?.profileId) return
+  transferConfirm.value = member
+}
+
+async function confirmTransfer() {
+  const member = transferConfirm.value
+  if (!member?.id) return
+  saving.value = true
+  try {
+    const res = await apiTransferTeamOwnership(member.id)
+    if (!res.ok) {
+      flash(res.error || 'Could not transfer ownership')
+      return
+    }
+    transferConfirm.value = null
+    flash('Ownership transferred')
+    await refresh()
+  } finally {
+    saving.value = false
+  }
+}
+
 async function respondInvite(member, action) {
   const res = await apiUpdateTeamMember(member.id, { action })
   if (!res.ok) {
@@ -269,11 +307,24 @@ onMounted(() => {
         <BrandMark size="sm" class="mb-3" />
         <h1 class="text-2xl font-bold tracking-tight">Team</h1>
         <p class="text-gray-400 text-sm mt-1">
-          Manage members by card slug. Roles: Executive Exclusive, Business, Professional.
+          Connect Team seats, roles, and ownership. Members claim their cards to join.
         </p>
       </header>
 
       <p v-if="loading" class="text-sm text-gray-500 py-8 text-center">Loading…</p>
+
+      <div v-else-if="!canUseTeam" class="card-item-bg rounded-2xl p-5 space-y-3">
+        <h2 class="text-lg font-bold">Team is part of Connect Team</h2>
+        <p class="text-sm text-gray-400 leading-relaxed">
+          Professional (Connect Solo) cards are personal-only. Upgrade to Business or Executive for shared team profiles, catalog sharing, and ownership.
+        </p>
+        <RouterLink
+          to="/#connect-team"
+          class="inline-flex w-full items-center justify-center py-3 rounded-full bg-white text-black text-sm font-bold no-underline"
+        >
+          View Connect Team
+        </RouterLink>
+      </div>
 
       <template v-else>
         <div v-if="pendingInvites.length" class="space-y-3 mb-6">
@@ -339,6 +390,7 @@ onMounted(() => {
           <p class="text-xs text-gray-500">
             Your role: <span class="text-gray-300">{{ personalTypeLabel(myRole) }}</span>
             <template v-if="isOwner"> · Owner</template>
+            · Package: <span class="text-gray-300">{{ personalTypeLabel(packageCeiling) }}</span>
           </p>
         </div>
 
@@ -387,12 +439,29 @@ onMounted(() => {
               <select
                 class="field-input w-full bg-transparent text-sm"
                 :value="m.role"
-                :disabled="!canEditMember(m) || m.profileId === team?.ownerProfileId"
+                :disabled="!canEditMember(m)"
                 @change="changeRole(m, $event.target.value)"
               >
                 <option v-for="r in roleOptions" :key="r.id" :value="r.id">{{ r.label }}</option>
                 <option v-if="!roleOptions.find((x) => x.id === m.role)" :value="m.role">{{ personalTypeLabel(m.role) }}</option>
               </select>
+              <button
+                v-if="canEditMember(m) && m.profileId === team?.ownerProfileId"
+                type="button"
+                class="py-2 rounded-xl bg-zinc-800 text-sm text-gray-400"
+                disabled
+              >
+                Team owner
+              </button>
+              <button
+                v-else-if="isOwner && m.status === 'active' && m.profileId && m.profileId !== team?.ownerProfileId && !m.deleted"
+                type="button"
+                class="py-2 rounded-xl bg-zinc-800 text-sm text-sky-300"
+                :disabled="saving"
+                @click="transferOwnership(m)"
+              >
+                Make owner
+              </button>
               <button
                 v-if="canEditMember(m) && m.profileId !== team?.ownerProfileId"
                 type="button"
@@ -434,7 +503,7 @@ onMounted(() => {
             <p class="text-sm text-gray-400 mt-2 leading-relaxed">{{ tierGateMessage }}</p>
             <p class="text-xs text-gray-500 mt-3">
               Your role: {{ personalTypeLabel(myRole) }}
-              <template v-if="!isOwner"> · Team owner: {{ personalTypeLabel(ownerRole) }}</template>
+              · Package ceiling: {{ personalTypeLabel(packageCeiling) }}
             </p>
             <button
               type="button"
@@ -443,6 +512,41 @@ onMounted(() => {
             >
               Got it
             </button>
+          </div>
+        </div>
+      </Teleport>
+
+      <Teleport to="body">
+        <div
+          v-if="transferConfirm"
+          class="app-dialog-overlay fixed inset-0 z-[210] flex items-end sm:items-center justify-center p-4"
+          @click.self="transferConfirm = null"
+        >
+          <div class="w-full max-w-sm rounded-2xl bg-zinc-900 border border-zinc-700 p-5 shadow-xl">
+            <h2 class="text-lg font-bold tracking-tight">Transfer ownership?</h2>
+            <p class="text-sm text-gray-400 mt-2 leading-relaxed">
+              Make
+              <strong class="text-gray-200">{{ transferConfirm.memberName || transferConfirm.slug || 'this member' }}</strong>
+              the team owner. You’ll keep your seat as a normal member and lose owner controls.
+            </p>
+            <div class="mt-5 flex gap-2">
+              <button
+                type="button"
+                class="flex-1 py-3 rounded-full bg-zinc-800 text-sm font-semibold"
+                :disabled="saving"
+                @click="transferConfirm = null"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                class="flex-1 py-3 rounded-full bg-white text-black text-sm font-bold disabled:opacity-50"
+                :disabled="saving"
+                @click="confirmTransfer"
+              >
+                {{ saving ? 'Transferring…' : 'Transfer' }}
+              </button>
+            </div>
           </div>
         </div>
       </Teleport>

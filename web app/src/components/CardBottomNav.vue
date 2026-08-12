@@ -8,7 +8,7 @@ import {
   loadViewedProfile,
   logout
 } from '../lib/profileStore'
-import { setApiToken } from '../lib/api'
+import { apiGetMyTeam, setApiToken } from '../lib/api'
 import { anyCatalogCartCount, catalogCartCount } from '../lib/profileCatalogCart'
 import { hideFloatingChrome } from '../lib/uiChrome'
 
@@ -18,6 +18,20 @@ const loggedIn = ref(isLoggedIn())
 const isTableOwner = ref(isTableBusiness(loadProfile()))
 const viewedIsTable = ref(isTableBusiness(loadViewedProfile()))
 const guestCartCount = ref(anyCatalogCartCount())
+const canUseTeam = ref(false)
+
+async function refreshTeamAccess() {
+  if (!isLoggedIn() || isTableBusiness(loadProfile())) {
+    canUseTeam.value = false
+    return
+  }
+  try {
+    const res = await apiGetMyTeam()
+    canUseTeam.value = !!(res?.ok && res.data?.canUseTeam)
+  } catch {
+    canUseTeam.value = false
+  }
+}
 
 function refreshAuth() {
   loggedIn.value = isLoggedIn()
@@ -25,6 +39,26 @@ function refreshAuth() {
   viewedIsTable.value = isTableBusiness(loadViewedProfile())
   guestCartCount.value = anyCatalogCartCount()
 }
+
+watch(
+  () => route.fullPath,
+  () => {
+    refreshAuth()
+  }
+)
+
+watch(loggedIn, (v) => {
+  if (v) refreshTeamAccess()
+  else canUseTeam.value = false
+})
+
+onMounted(() => {
+  refreshAuth()
+  refreshTeamAccess()
+  window.addEventListener('tapna-view-profile-changed', refreshAuth)
+  window.addEventListener('tapna-profile-catalog-cart-changed', refreshAuth)
+  window.addEventListener('storage', refreshAuth)
+})
 
 /** Personal-card chrome — guests and owners. Never for business/table or claim UI. */
 const visible = computed(() => {
@@ -83,15 +117,17 @@ const navItems = computed(() => {
       icon: 'edit',
       match: (p) => p === '/profile'
     })
-    items.splice(3, 0, {
-      to: '/team',
-      label: 'Team',
-      icon: 'groups',
-      match: (p) => p === '/team'
-    })
+    if (canUseTeam.value) {
+      items.splice(3, 0, {
+        to: '/team',
+        label: 'Team',
+        icon: 'groups',
+        match: (p) => p === '/team'
+      })
+    }
   }
   if (showCartNav.value) {
-    const cartIndex = loggedIn.value ? 4 : 2
+    const cartIndex = loggedIn.value ? (canUseTeam.value ? 4 : 3) : 2
     items.splice(cartIndex, 0, {
       to: '/catalog-cart',
       label: 'Cart',
@@ -124,22 +160,9 @@ function onShare() {
 function onLogout() {
   logout()
   setApiToken('')
+  canUseTeam.value = false
   router.replace('/login')
 }
-
-watch(
-  () => route.fullPath,
-  () => {
-    refreshAuth()
-  }
-)
-
-onMounted(() => {
-  refreshAuth()
-  window.addEventListener('tapna-view-profile-changed', refreshAuth)
-  window.addEventListener('tapna-profile-catalog-cart-changed', refreshAuth)
-  window.addEventListener('storage', refreshAuth)
-})
 
 onUnmounted(() => {
   window.removeEventListener('tapna-view-profile-changed', refreshAuth)

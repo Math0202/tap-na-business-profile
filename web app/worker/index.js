@@ -1265,10 +1265,38 @@ function canManageTeamRole(actorRole, targetRole) {
   return personalTypeRank(actorRole) >= personalTypeRank(targetRole)
 }
 
-/** Roles allowed under an owner's card tier. */
-function assignableTeamRoles(ownerRole) {
-  const rank = personalTypeRank(ownerRole)
+/** Roles allowed under a package ceiling (highest seat on the team). */
+function assignableTeamRoles(packageCeiling) {
+  const rank = personalTypeRank(packageCeiling)
   return Object.keys(PERSONAL_TYPE_RANKS).filter((id) => personalTypeRank(id) <= rank)
+}
+
+function packageCeilingFromRoles(roles) {
+  let best = 'professional'
+  for (const role of roles || []) {
+    const id = normalizePersonalType(role, '')
+    if (!id) continue
+    if (personalTypeRank(id) > personalTypeRank(best)) best = id
+  }
+  return best
+}
+
+/** Effective package ceiling: stored value, raised by any higher seat role. */
+function resolveTeamPackageCeiling(team, memberRows = []) {
+  const stored = normalizePersonalType(team?.package_ceiling || '', '')
+  const fromSeats = packageCeilingFromRoles((memberRows || []).map((m) => m.role))
+  if (!stored) return fromSeats || 'business'
+  return personalTypeRank(fromSeats) > personalTypeRank(stored) ? fromSeats : stored
+}
+
+function canAccessTeamFeatures(personalType, { hasTeam = false } = {}) {
+  if (hasTeam) return true
+  return personalTypeRank(personalType) >= personalTypeRank('business')
+}
+
+const SHOP_TEAM_PRODUCT_ROLES = {
+  'black-card': 'business',
+  'black-card-front': 'executive_exclusive'
 }
 
 async function getProfilePersonalType(env, profileId) {
@@ -1321,7 +1349,10 @@ function mapTeamRow(row) {
   return {
     id: row.id,
     name: row.name || '',
-    ownerProfileId: row.owner_profile_id,
+    ownerProfileId: row.owner_profile_id || '',
+    ownerEmail: row.owner_email || '',
+    packageCeiling: normalizePersonalType(row.package_ceiling || 'business'),
+    shopQuoteRef: row.shop_quote_ref || '',
     shareCatalog: row.share_catalog === true,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -1373,12 +1404,19 @@ async function getOrCreateOwnedTeam(env, profile) {
   const now = new Date().toISOString()
   const name =
     String(profile.company || profile.name || 'My team').trim().slice(0, 120) || 'My team'
+  const packageCeiling =
+    personalTypeRank(ownerRole) >= personalTypeRank('business') ? ownerRole : 'business'
+  const ownerEmail = String(profile.login_email || profile.email || '')
+    .trim()
+    .toLowerCase()
   await sb(env, 'teams', {
     method: 'POST',
     body: {
       id,
       name,
       owner_profile_id: profile.id,
+      owner_email: ownerEmail,
+      package_ceiling: packageCeiling,
       created_at: now,
       updated_at: now
     },
@@ -1395,7 +1433,7 @@ async function getOrCreateOwnedTeam(env, profile) {
       slug: '',
       role: ownerRole,
       status: 'active',
-      invite_email: String(profile.login_email || profile.email || ''),
+      invite_email: ownerEmail,
       invited_by_profile_id: profile.id,
       invite_token: '',
       joined_at: now,
@@ -1406,6 +1444,172 @@ async function getOrCreateOwnedTeam(env, profile) {
   })
   const rows = await sb(env, `teams?id=eq.${encodeURIComponent(id)}&select=*`)
   return rows?.[0]
+}
+
+/** Link provisional shop teams (owner_email set, no owner yet) to this profile. */
+async function claimProvisionalTeamsForProfile(env, profile) {
+  const email = String(profile?.login_email || profile?.email || '')
+    .trim()
+    .toLowerCase()
+  if (!email || !email.includes('@')) return []
+  const rows = await sb(
+    env,
+    `teams?owner_email=ilike.${encodeURIComponent(email)}&owner_profile_id=is.null&deleted=eq.false&select=*`
+  )
+  if (!rows?.length) return []
+  const now = new Date().toISOString()
+  const claimed = []
+  for (const team of rows) {
+    await sb(env, `teams?id=eq.${encodeURIComponent(team.id)}`, {
+      method: 'PATCH',
+      body: {
+        owner_profile_id: profile.id,
+        updated_at: now
+      },
+      prefer: 'return=minimal'
+    })
+    const role = normalizePersonalType(team.package_ceiling || 'business')
+    const existingMem = await sb(
+      env,
+      `team_members?team_id=eq.${encodeURIComponent(team.id)}&profile_id=eq.${encodeURIComponent(profile.id)}&deleted=eq.false&select=id&limit=1`
+    )
+    if (!existingMem?.length) {
+      await sb(env, 'team_members', {
+        method: 'POST',
+        body: {
+          id: uid('tmem'),
+          team_id: team.id,
+          profile_id: profile.id,
+          card_id: null,
+          slug: '',
+          role,
+          status: 'active',
+          invite_email: email,
+          invited_by_profile_id: profile.id,
+          invite_token: '',
+          joined_at: now,
+          created_at: now,
+          updated_at: now
+        },
+        prefer: 'return=minimal'
+      })
+    }
+    claimed.push({ ...team, owner_profile_id: profile.id })
+  }
+  return claimed
+}
+
+async function provisionTeamFromShopQuote(env, {
+  name = '',
+  company = '',
+  email = '',
+  quoteRef = '',
+  lines = []
+} = {}) {
+  let businessQty = 0
+  let executiveQty = 0
+  for (const line of lines || []) {
+    const role = SHOP_TEAM_PRODUCT_ROLES[String(line?.id || '')]
+    if (!role) continue
+    const qty = Math.max(0, Math.floor(Number(line?.qty) || 0))
+    if (role === 'executive_exclusive') executiveQty += qty
+    else if (role === 'business') businessQty += qty
+  }
+  const totalSeats = businessQty + executiveQty
+  if (totalSeats <= 0) return null
+
+  const ownerEmail = String(email || '')
+    .trim()
+    .toLowerCase()
+  const packageCeiling = executiveQty > 0 ? 'executive_exclusive' : 'business'
+  const teamName =
+    String(company || name || 'Connect Team')
+      .trim()
+      .slice(0, 120) || 'Connect Team'
+  const id = uid('team')
+  const now = new Date().toISOString()
+
+  // Prefer attaching to an existing profile with this email
+  let ownerProfileId = null
+  if (ownerEmail) {
+    const profiles = await sb(
+      env,
+      `profiles?or=(login_email.ilike.${encodeURIComponent(ownerEmail)},email.ilike.${encodeURIComponent(ownerEmail)})&deleted=eq.false&select=id,card_type&limit=1`
+    )
+    const p = profiles?.[0]
+    if (p && p.card_type !== 'table') ownerProfileId = p.id
+  }
+
+  await sb(env, 'teams', {
+    method: 'POST',
+    body: {
+      id,
+      name: teamName,
+      owner_profile_id: ownerProfileId,
+      owner_email: ownerEmail,
+      package_ceiling: packageCeiling,
+      shop_quote_ref: String(quoteRef || '').slice(0, 64),
+      created_at: now,
+      updated_at: now
+    },
+    prefer: 'return=minimal'
+  })
+
+  const seatRoles = [
+    ...Array.from({ length: businessQty }, () => 'business'),
+    ...Array.from({ length: executiveQty }, () => 'executive_exclusive')
+  ]
+  for (const role of seatRoles) {
+    await sb(env, 'team_members', {
+      method: 'POST',
+      body: {
+        id: uid('tmem'),
+        team_id: id,
+        profile_id: null,
+        card_id: null,
+        slug: '',
+        role,
+        status: 'pending_claim',
+        invite_email: '',
+        invited_by_profile_id: ownerProfileId || '',
+        invite_token: uid('tinv'),
+        created_at: now,
+        updated_at: now
+      },
+      prefer: 'return=minimal'
+    })
+  }
+
+  if (ownerProfileId) {
+    await sb(env, 'team_members', {
+      method: 'POST',
+      body: {
+        id: uid('tmem'),
+        team_id: id,
+        profile_id: ownerProfileId,
+        card_id: null,
+        slug: '',
+        role: packageCeiling,
+        status: 'active',
+        invite_email: ownerEmail,
+        invited_by_profile_id: ownerProfileId,
+        invite_token: '',
+        joined_at: now,
+        created_at: now,
+        updated_at: now
+      },
+      prefer: 'return=minimal'
+    })
+  }
+
+  return {
+    teamId: id,
+    packageCeiling,
+    businessQty,
+    executiveQty,
+    ownerProfileId: ownerProfileId || '',
+    ownerEmail
+  }
 }
 
 async function getActorTeamMembership(env, profileId, teamId) {
@@ -2683,6 +2887,9 @@ async function handleApi(request, env, url) {
     if (!profile) return bad('Unauthorized', 401)
     if (profile.card_type === 'table') return bad('Teams are for personal cards only', 403)
 
+    const myCardType = await getProfilePersonalType(env, profile.id)
+    await claimProvisionalTeamsForProfile(env, profile)
+
     const memberships = await sb(
       env,
       `team_members?profile_id=eq.${encodeURIComponent(profile.id)}&deleted=eq.false&status=in.(active,invited,pending_claim)&select=*`
@@ -2696,6 +2903,26 @@ async function handleApi(request, env, url) {
       )
       team = (teams || []).find((t) => t.owner_profile_id === profile.id) || teams?.[0] || null
     }
+
+    const hasTeam = !!team
+    const canUseTeam = canAccessTeamFeatures(myCardType, { hasTeam })
+    if (!canUseTeam) {
+      return json({
+        ok: true,
+        team: null,
+        members: [],
+        myRole: myCardType,
+        ownerRole: '',
+        packageCeiling: '',
+        allowedRoles: [],
+        isOwner: false,
+        canManage: false,
+        canUseTeam: false,
+        pendingInvites: []
+      })
+    }
+
+    // Team-capable card holders without a team yet get a workspace (Business / Executive).
     if (!team) {
       team = await getOrCreateOwnedTeam(env, profile)
     }
@@ -2705,16 +2932,22 @@ async function handleApi(request, env, url) {
       ? `team_members?team_id=eq.${encodeURIComponent(team.id)}&select=*&order=created_at.asc`
       : `team_members?team_id=eq.${encodeURIComponent(team.id)}&deleted=eq.false&select=*&order=created_at.asc`
     const memberRows = await sb(env, memberQ)
+    const packageCeiling = resolveTeamPackageCeiling(team, memberRows || [])
+    if (normalizePersonalType(team.package_ceiling || '') !== packageCeiling) {
+      await sb(env, `teams?id=eq.${encodeURIComponent(team.id)}`, {
+        method: 'PATCH',
+        body: { package_ceiling: packageCeiling, updated_at: new Date().toISOString() },
+        prefer: 'return=minimal'
+      })
+      team = { ...team, package_ceiling: packageCeiling }
+    }
     const members = await enrichTeamMembers(env, memberRows || [])
     const myMembership =
       members.find((m) => m.profileId === profile.id && !m.deleted && m.status === 'active') ||
       members.find((m) => m.profileId === profile.id && !m.deleted) ||
       null
     const isOwner = team.owner_profile_id === profile.id
-    const ownerRole = await getProfilePersonalType(env, team.owner_profile_id)
-    const myRole = isOwner
-      ? ownerRole
-      : normalizePersonalType(myMembership?.role || 'business')
+    const myRole = normalizePersonalType(myMembership?.role || myCardType || 'business')
 
     const pendingInvites = (memberships || [])
       .filter((m) => m.status === 'invited' || m.status === 'pending_claim')
@@ -2725,10 +2958,12 @@ async function handleApi(request, env, url) {
       team: mapTeamRow(team),
       members,
       myRole,
-      ownerRole,
-      allowedRoles: assignableTeamRoles(ownerRole),
+      ownerRole: myRole,
+      packageCeiling,
+      allowedRoles: assignableTeamRoles(packageCeiling),
       isOwner,
       canManage: true,
+      canUseTeam: true,
       pendingInvites
     })
   }
@@ -2772,9 +3007,13 @@ async function handleApi(request, env, url) {
     const team = await getOrCreateOwnedTeam(env, profile)
     const isOwner = team.owner_profile_id === profile.id
     const actorMembership = await getActorTeamMembership(env, profile.id, team.id)
-    const ownerRole = await getProfilePersonalType(env, team.owner_profile_id)
+    const memberRows = await sb(
+      env,
+      `team_members?team_id=eq.${encodeURIComponent(team.id)}&deleted=eq.false&select=role`
+    )
+    const packageCeiling = resolveTeamPackageCeiling(team, memberRows || [])
     const actorRole = isOwner
-      ? ownerRole
+      ? normalizePersonalType(actorMembership?.role || packageCeiling)
       : normalizePersonalType(actorMembership?.role || '')
     if (!isOwner && !actorMembership) return bad('You are not an active team member', 403)
 
@@ -2795,14 +3034,14 @@ async function handleApi(request, env, url) {
     const defaultRole = normalizePersonalType(
       body?.role || card.personal_type || 'business'
     )
-    // Cap by team owner's card type AND actor's manage rights
-    if (!assignableTeamRoles(ownerRole).includes(defaultRole)) {
+    // Cap by Connect Team package ceiling (highest seat), not current owner's card
+    if (!assignableTeamRoles(packageCeiling).includes(defaultRole)) {
       return bad(
-        `This team can only include ${assignableTeamRoles(ownerRole).join(', ')} roles based on the owner's card`,
+        `This team package only includes ${assignableTeamRoles(packageCeiling).join(', ')} roles`,
         403
       )
     }
-    if (!canManageTeamRole(actorRole, defaultRole)) {
+    if (!isOwner && !canManageTeamRole(actorRole, defaultRole)) {
       return bad('You cannot assign or add this role', 403)
     }
 
@@ -2922,9 +3161,13 @@ async function handleApi(request, env, url) {
     const isOwner = team.owner_profile_id === profile.id
     const isSelf = member.profile_id === profile.id
     const actorMembership = await getActorTeamMembership(env, profile.id, team.id)
-    const ownerRole = await getProfilePersonalType(env, team.owner_profile_id)
+    const allMemberRows = await sb(
+      env,
+      `team_members?team_id=eq.${encodeURIComponent(team.id)}&deleted=eq.false&select=role,status,profile_id`
+    )
+    const packageCeiling = resolveTeamPackageCeiling(team, allMemberRows || [])
     const actorRole = isOwner
-      ? ownerRole
+      ? normalizePersonalType(actorMembership?.role || packageCeiling)
       : normalizePersonalType(actorMembership?.role || '')
 
     // Accept / reject invite (self only)
@@ -2957,6 +3200,35 @@ async function handleApi(request, env, url) {
       return json({ ok: true, id: memberId, status: 'active' })
     }
 
+    // Transfer ownership to another active member (current owner only)
+    if (body?.action === 'transfer_ownership' || body?.action === 'make_owner') {
+      if (!isOwner) return bad('Only the current team owner can transfer ownership', 403)
+      if (member.deleted) return bad('Cannot transfer ownership to a removed member', 400)
+      if (member.status !== 'active' || !member.profile_id) {
+        return bad('New owner must be an active claimed team member', 400)
+      }
+      if (member.profile_id === profile.id) {
+        return bad('You are already the team owner', 400)
+      }
+      const now = new Date().toISOString()
+      const newOwnerEmail = String(member.invite_email || '').trim().toLowerCase()
+      await sb(env, `teams?id=eq.${encodeURIComponent(team.id)}`, {
+        method: 'PATCH',
+        body: {
+          owner_profile_id: member.profile_id,
+          owner_email: newOwnerEmail || team.owner_email || '',
+          updated_at: now
+        },
+        prefer: 'return=minimal'
+      })
+      return json({
+        ok: true,
+        teamId: team.id,
+        ownerProfileId: member.profile_id,
+        previousOwnerProfileId: profile.id
+      })
+    }
+
     // Members cannot leave after accepting
     if (body?.action === 'leave') {
       return bad('Team members cannot leave after accepting an invite', 403)
@@ -2965,7 +3237,7 @@ async function handleApi(request, env, url) {
     // Soft-remove member (owner or higher-tier manager)
     if (body?.deleted === true || body?.action === 'remove') {
       if (member.profile_id === team.owner_profile_id) {
-        return bad('Cannot remove the team owner', 403)
+        return bad('Cannot remove the team owner. Transfer ownership first.', 403)
       }
       if (!isOwner && !canManageTeamRole(actorRole, member.role)) {
         return bad('You cannot manage this member', 403)
@@ -2995,19 +3267,16 @@ async function handleApi(request, env, url) {
     // Assign role
     if (body?.role !== undefined) {
       const nextRole = normalizePersonalType(body.role)
-      if (member.profile_id === team.owner_profile_id) {
-        return bad("The owner's role follows their personal card type", 403)
-      }
-      if (!assignableTeamRoles(ownerRole).includes(nextRole)) {
+      if (!assignableTeamRoles(packageCeiling).includes(nextRole)) {
         return bad(
-          `This team can only include ${assignableTeamRoles(ownerRole).join(', ')} roles based on the owner's card`,
+          `This team package only includes ${assignableTeamRoles(packageCeiling).join(', ')} roles`,
           403
         )
       }
       if (!isOwner && !canManageTeamRole(actorRole, member.role)) {
         return bad('You cannot manage this member', 403)
       }
-      if (!canManageTeamRole(actorRole, nextRole)) {
+      if (!isOwner && !canManageTeamRole(actorRole, nextRole)) {
         return bad('You cannot assign this role', 403)
       }
       await sb(env, `team_members?id=eq.${encodeURIComponent(memberId)}`, {
@@ -3020,7 +3289,19 @@ async function handleApi(request, env, url) {
         cardId: member.card_id || '',
         personalType: nextRole
       })
-      return json({ ok: true, id: memberId, role: nextRole })
+      const refreshed = await sb(
+        env,
+        `team_members?team_id=eq.${encodeURIComponent(team.id)}&deleted=eq.false&select=role`
+      )
+      const ceiling = resolveTeamPackageCeiling(team, refreshed || [])
+      if (ceiling !== normalizePersonalType(team.package_ceiling || '')) {
+        await sb(env, `teams?id=eq.${encodeURIComponent(team.id)}`, {
+          method: 'PATCH',
+          body: { package_ceiling: ceiling, updated_at: new Date().toISOString() },
+          prefer: 'return=minimal'
+        })
+      }
+      return json({ ok: true, id: memberId, role: nextRole, packageCeiling: ceiling })
     }
 
     return bad('No changes provided')
@@ -3109,6 +3390,16 @@ async function handleApi(request, env, url) {
       )
     }
 
+    const profiles = await sb(env, `profiles?id=eq.${encodeURIComponent(id)}&select=*`)
+    const newProfile = profiles?.[0]
+    if (newProfile) {
+      try {
+        await claimProvisionalTeamsForProfile(env, newProfile)
+      } catch (_) {
+        /* non-fatal */
+      }
+    }
+
     const token = uid('tok')
     const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
     await sb(env, 'sessions', {
@@ -3117,8 +3408,7 @@ async function handleApi(request, env, url) {
       prefer: 'return=minimal'
     })
 
-    const profiles = await sb(env, `profiles?id=eq.${encodeURIComponent(id)}&select=*`)
-    const pub = await publicProfile(env, profiles?.[0])
+    const pub = await publicProfile(env, newProfile || profiles?.[0])
     const pendingTeamInvite = claimCard
       ? await findPendingTeamInviteForCard(env, claimCard.id, id)
       : null
@@ -3159,6 +3449,11 @@ async function handleApi(request, env, url) {
       prefer: 'return=minimal'
     })
     const loginEmail = String(profile.login_email || profile.email || '').trim().toLowerCase()
+    try {
+      await claimProvisionalTeamsForProfile(env, profile)
+    } catch (_) {
+      /* non-fatal */
+    }
     if (loginEmail.includes('@')) {
       sendLoginAlertEmail(env, {
         email: loginEmail,
@@ -5335,6 +5630,25 @@ async function handleApi(request, env, url) {
       .join('\n')
 
     const toList = [companyTo, email].filter((v, i, arr) => arr.indexOf(v) === i)
+    let provisionedTeam = null
+    try {
+      provisionedTeam = await provisionTeamFromShopQuote(env, {
+        name,
+        company,
+        email,
+        quoteRef,
+        lines
+      })
+    } catch (err) {
+      await logAppError(env, {
+        source: 'shop_team_provision',
+        message: err?.message || String(err),
+        stack: err?.stack || '',
+        path: pathname,
+        method,
+        context: { kind: 'team_from_quote', quoteRef }
+      })
+    }
     try {
       const sent = await sendCloudflareEmail(env, {
         from,
@@ -5349,7 +5663,15 @@ async function handleApi(request, env, url) {
         id: sent.id || '',
         quoteRef,
         to: toList,
-        provider: sent.provider
+        provider: sent.provider,
+        team: provisionedTeam
+          ? {
+              id: provisionedTeam.teamId,
+              packageCeiling: provisionedTeam.packageCeiling,
+              businessQty: provisionedTeam.businessQty,
+              executiveQty: provisionedTeam.executiveQty
+            }
+          : null
       })
     } catch (err) {
       if (!err?._logged) {

@@ -545,6 +545,10 @@ export function apiUpdateTeamMember(id, payload) {
   })
 }
 
+export function apiTransferTeamOwnership(memberId) {
+  return apiUpdateTeamMember(memberId, { action: 'transfer_ownership' })
+}
+
 /** Guest submits catalog cart quote / interest (emails owner + guest, stores for owner inbox) */
 export function apiSubmitCatalogCart(profileId, payload) {
   return request(`/api/profiles/${encodeURIComponent(profileId)}/catalog-cart`, {

@@ -71,14 +71,33 @@ export function canManageRole(actorRole, targetRole) {
 }
 
 /**
- * Roles allowed on a team, capped by the team owner's card type.
- * Professional owner -> professional only
- * Business owner -> business + professional
- * Executive owner -> all
+ * Roles allowed on a team, capped by package / highest seat (Option A).
+ * Professional ceiling -> professional only
+ * Business ceiling -> business + professional
+ * Executive ceiling -> all
  */
-export function assignableRoles(ownerOrActorRole) {
-  const rank = personalTypeRank(ownerOrActorRole)
+export function assignableRoles(packageCeilingOrRole) {
+  const rank = personalTypeRank(packageCeilingOrRole)
   return PERSONAL_TYPE_IDS.filter((id) => personalTypeRank(id) <= rank)
+}
+
+/** Highest role among a list of seat/member roles. */
+export function packageCeilingFromRoles(roles) {
+  let best = 'professional'
+  for (const role of roles || []) {
+    const id = normalizePersonalType(role, { fallback: '' })
+    if (!id) continue
+    if (personalTypeRank(id) > personalTypeRank(best)) best = id
+  }
+  return best
+}
+
+/**
+ * Solo (Professional) hides Team. Business / Executive seats (or an existing team) unlock it.
+ */
+export function canAccessTeamFeatures(personalType, { hasTeam = false } = {}) {
+  if (hasTeam) return true
+  return personalTypeRank(personalType) >= personalTypeRank('business')
 }
 
 export function memberStatusLabel(status) {
