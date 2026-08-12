@@ -327,8 +327,8 @@ async function addPackageToCart() {
         <div class="shrink-0 z-10 bg-surface/95 backdrop-blur-md border-b border-border-subtle px-5 py-4 flex items-start justify-between gap-3">
           <div class="min-w-0">
             <h2 class="font-headline-lg-mobile text-[22px] font-medium uppercase tracking-tight">{{ title }}</h2>
-            <p class="text-on-surface-variant text-sm mt-1">
-              {{ isTeam ? 'Pick how many Business and Executive cards you need (min 5 total)' : `Professional · 1–${SOLO_PACKAGE_MAX} cards` }}
+            <p v-if="!isTeam" class="text-on-surface-variant text-sm mt-1">
+              Professional · 1–{{ SOLO_PACKAGE_MAX }} cards
             </p>
           </div>
           <button
@@ -399,9 +399,9 @@ async function addPackageToCart() {
                   <td class="py-2 pl-1 text-center text-primary">✓</td>
                 </tr>
                 <tr class="border-b border-border-subtle/60">
-                  <td class="py-2 pr-2 text-on-surface">Custom logo on card</td>
+                  <td class="py-2 pr-2 text-on-surface">Custom Logo(B&W)</td>
                   <td class="py-2 px-1 text-center">—</td>
-                  <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">Black &amp; White</td>
+                  <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">✓</td>
                 </tr>
                 <tr class="border-b border-border-subtle/60">
                   <td class="py-2 pr-2 text-on-surface">Team profiles </td>
@@ -416,12 +416,12 @@ async function addPackageToCart() {
                 <tr>
                   <td class="py-2 pr-2 text-on-surface">Custom subdomain</td>
                   <td class="py-2 px-1 text-center">—</td>
-                  <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">From {{ TEAM_EXEC_SUBDOMAIN_MIN }} Executive</td>
+                  <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">✓</td>
                 </tr>
               </tbody>
             </table>
             <p class="text-[11px] text-on-surface-variant leading-snug">
-              Need {{ TEAM_PACKAGE_MIN }}+ cards or a shared team? Choose Connect Teams (Business package).
+              Need {{ TEAM_PACKAGE_MIN }}+ cards, choose Connect Teams (Business package).
             </p>
             <button
               type="button"
@@ -578,39 +578,33 @@ async function addPackageToCart() {
                     <td class="py-2 pl-1 text-center text-primary">✓</td>
                   </tr>
                   <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">Once-off (no monthly fee)</td>
+                    <td class="py-2 pr-2 text-on-surface">Once-off </td>
                     <td class="py-2 px-1 text-center text-primary">✓</td>
                     <td class="py-2 pl-1 text-center text-primary">✓</td>
                   </tr>
                   <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">Catalogue &amp; book meeting</td>
+                    <td class="py-2 pr-2 text-on-surface">Product & Service Catalogue</td>
                     <td class="py-2 px-1 text-center text-primary">✓</td>
                     <td class="py-2 pl-1 text-center text-primary">✓</td>
                   </tr>
                   <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">Custom logo on card</td>
-                    <td class="py-2 px-1 text-center text-primary text-[11px]">Black &amp; White</td>
-                    <td class="py-2 pl-1 text-center text-primary text-[11px]">Black &amp; White</td>
+                    <td class="py-2 pr-2 text-on-surface">Meeting booking</td>
+                    <td class="py-2 px-1 text-center text-primary">✓</td>
+                    <td class="py-2 pl-1 text-center text-primary">✓</td>
+                  </tr>
+                  <tr class="border-b border-border-subtle/60">
+                    <td class="py-2 pr-2 text-on-surface">Custom Logo(B&W)</td>
+                    <td class="py-2 px-1 text-center text-primary text-[11px]">✓</td>
+                    <td class="py-2 pl-1 text-center text-primary text-[11px]">✓</td>
                   </tr>
                   <tr class="border-b border-border-subtle/60">
                     <td class="py-2 pr-2 text-on-surface">Team profiles </td>
                     <td class="py-2 px-1 text-center text-primary">✓</td>
                     <td class="py-2 pl-1 text-center text-primary">✓</td>
                   </tr>
-                  <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">Buy alone</td>
-                    <td class="py-2 px-1 text-center text-primary text-[11px] leading-snug">Up to {{ TEAM_BUSINESS_ALONE_MAX }}</td>
-                    <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">Min {{ TEAM_PACKAGE_MIN }}</td>
-                  </tr>
-                  <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">Scale past {{ TEAM_SCALE_THRESHOLD }}</td>
-                    <td class="py-2 px-1 text-center text-[11px] leading-snug">Free mix to 10</td>
-                    <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">11–{{ TEAM_FREE_MIX_AFTER }} Executive only, then free mix</td>
-                  </tr>
-                  <tr>
                     <td class="py-2 pr-2 text-on-surface">Custom subdomain</td>
                     <td class="py-2 px-1 text-center">—</td>
-                    <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">From {{ TEAM_EXEC_SUBDOMAIN_MIN }} Executive</td>
+                    <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">✓</td>
                   </tr>
                 </tbody>
               </table>
@@ -677,8 +671,8 @@ async function addPackageToCart() {
               Need {{ TEAM_PACKAGE_MIN }}+ cards?
             </h3>
             <p class="text-sm text-on-surface-variant leading-relaxed">
-              Connect Solo is limited to {{ SOLO_PACKAGE_MAX }} cards.
-              For {{ TEAM_PACKAGE_MIN }} or more cards — or a shared team — view the Connect Teams package instead.
+              Connect Solo is limited to {{ SOLO_PACKAGE_MAX }} cards only.
+              Choose Connect Teams package instead.
             </p>
           </div>
         </div>
@@ -688,7 +682,7 @@ async function addPackageToCart() {
             class="w-full bg-primary text-on-primary py-3.5 font-button-text text-[12px] uppercase tracking-widest hover:opacity-90"
             @click="switchToTeam"
           >
-            View Connect Teams
+            Choose Connect Teams
           </button>
           <button
             type="button"
