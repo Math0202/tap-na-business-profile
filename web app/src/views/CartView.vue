@@ -3,7 +3,6 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import ShopHeader from '../components/ShopHeader.vue'
-import ShopBottomNav from '../components/ShopBottomNav.vue'
 import { EXECUTIVE_CARD_ID, formatPrice, isTeamSubdomainEligible, loadShopProducts, TEAM_PACKAGE_MIN, validateTeamMix } from '../lib/shopCatalog'
 import {
   cartLines,
@@ -188,7 +187,7 @@ async function placeOrder() {
       @shop-all="shopAll"
     />
 
-    <main class="pt-16 min-h-screen bg-surface pb-28 md:pb-12">
+    <main class="pt-16 min-h-screen bg-surface pb-12">
       <div class="max-w-6xl mx-auto px-margin-mobile md:px-margin-desktop pt-stack-md md:pt-10">
         <div class="flex items-end justify-between gap-4 mb-8">
           <div class="flex flex-col gap-1">
@@ -369,8 +368,6 @@ async function placeOrder() {
       </div>
     </main>
 
-    <ShopBottomNav />
-
     <!-- Checkout contact prompt -->
     <div
       v-if="checkoutOpen"
@@ -485,7 +482,7 @@ async function placeOrder() {
 
     <div
       v-if="toast"
-      class="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-[60] bg-primary text-on-primary px-5 py-3 font-label-caps text-[11px] uppercase tracking-widest shadow-lg"
+      class="fixed bottom-8 left-1/2 -translate-x-1/2 z-[60] bg-primary text-on-primary px-5 py-3 font-label-caps text-[11px] uppercase tracking-widest shadow-lg"
       role="status"
     >
       {{ toast }}

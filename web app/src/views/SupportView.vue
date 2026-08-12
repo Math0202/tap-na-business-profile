@@ -2,7 +2,6 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import ShopHeader from '../components/ShopHeader.vue'
-import ShopBottomNav from '../components/ShopBottomNav.vue'
 import { apiShopSupport } from '../lib/api'
 import { setPageSeo } from '../lib/seo'
 
@@ -98,7 +97,7 @@ onUnmounted(() => {
       @shop-all="shopAll"
     />
 
-    <main class="pt-16 min-h-screen bg-surface pb-24 md:pb-10">
+    <main class="pt-16 min-h-screen bg-surface pb-10">
       <div class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-10 flex flex-col gap-10">
         <header class="flex flex-col gap-3">
           <p class="font-label-caps text-[11px] uppercase tracking-[0.2em] text-ink-muted">Support</p>
@@ -227,8 +226,6 @@ onUnmounted(() => {
         </p>
       </div>
     </main>
-
-    <ShopBottomNav />
   </div>
 </template>
 

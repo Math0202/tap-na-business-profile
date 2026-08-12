@@ -2,7 +2,6 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import ShopHeader from '../components/ShopHeader.vue'
-import ShopBottomNav from '../components/ShopBottomNav.vue'
 
 const router = useRouter()
 const menuOpen = ref(false)
@@ -31,7 +30,7 @@ onUnmounted(() => {
       @shop-all="shopAll"
     />
 
-    <main class="pt-16 min-h-screen bg-surface pb-24 md:pb-10">
+    <main class="pt-16 min-h-screen bg-surface pb-10">
       <div class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-10 flex flex-col gap-14">
         <!-- Hero -->
         <header class="flex flex-col gap-4">
@@ -491,8 +490,6 @@ onUnmounted(() => {
         </p>
       </div>
     </main>
-
-    <ShopBottomNav />
   </div>
 </template>
 

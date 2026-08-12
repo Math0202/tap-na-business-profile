@@ -2,7 +2,6 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import ShopHeader from '../components/ShopHeader.vue'
-import ShopBottomNav from '../components/ShopBottomNav.vue'
 import { tableBrochuresList, formatPrice, loadShopProducts } from '../lib/shopCatalog'
 import { addToCart } from '../lib/cartStore'
 import { setPageSeo } from '../lib/seo'
@@ -115,7 +114,7 @@ onUnmounted(() => {
       @shop-all="scrollToShop"
     />
 
-    <main class="pt-16 min-h-screen bg-surface pb-24 md:pb-0">
+    <main class="pt-16 min-h-screen bg-surface pb-10">
       <div class="flex flex-col w-full overflow-x-clip max-w-6xl mx-auto">
         <section
           :ref="setSectionRef"
@@ -274,11 +273,9 @@ onUnmounted(() => {
       </footer>
     </main>
 
-    <ShopBottomNav />
-
     <div
       v-if="toast"
-      class="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-[60] bg-primary text-on-primary px-5 py-3 font-label-caps text-[11px] uppercase tracking-widest shadow-lg flex items-center gap-3"
+      class="fixed bottom-8 left-1/2 -translate-x-1/2 z-[60] bg-primary text-on-primary px-5 py-3 font-label-caps text-[11px] uppercase tracking-widest shadow-lg flex items-center gap-3"
       role="status"
     >
       <span>{{ toast }}</span>

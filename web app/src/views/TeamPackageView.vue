@@ -2,7 +2,6 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import ShopHeader from '../components/ShopHeader.vue'
-import ShopBottomNav from '../components/ShopBottomNav.vue'
 import ConnectPackageDialog from '../components/ConnectPackageDialog.vue'
 import {
   BUSINESS_CARD_ID,
@@ -283,7 +282,7 @@ onUnmounted(() => {
       @shop-all="shopAll"
     />
 
-    <main class="pt-16 min-h-screen bg-surface pb-28 md:pb-12">
+    <main class="pt-16 min-h-screen bg-surface pb-12">
       <div class="max-w-6xl mx-auto px-margin-mobile md:px-margin-desktop pt-stack-md md:pt-10 flex flex-col gap-10">
         <button
           type="button"
@@ -592,8 +591,6 @@ onUnmounted(() => {
         </template>
       </div>
     </main>
-
-    <ShopBottomNav />
 
     <ConnectPackageDialog
       :open="checkoutOpen"
