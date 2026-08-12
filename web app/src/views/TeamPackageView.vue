@@ -300,8 +300,7 @@ onUnmounted(() => {
           </h1>
           <div class="h-1 w-12 bg-primary" />
           <p class="text-on-surface-variant text-sm mt-1">
-            Business and Executive in one mixable pack. Min {{ TEAM_PACKAGE_MIN }} combined.
-            Business alone max {{ TEAM_BUSINESS_ALONE_MAX }}. Cards 11–{{ TEAM_FREE_MIX_AFTER }} must be Executive, then free mix. Subdomain from {{ TEAM_EXEC_SUBDOMAIN_MIN }} Executive.
+            Min {{ TEAM_PACKAGE_MIN }} combined, Business and Executive.
           </p>
         </div>
 
