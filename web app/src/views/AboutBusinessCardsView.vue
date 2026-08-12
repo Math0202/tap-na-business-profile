@@ -92,8 +92,8 @@ onUnmounted(() => {
             <li class="bg-surface-container rounded-xl p-4 flex gap-3">
               <span class="material-symbols-outlined text-primary shrink-0">security</span>
               <div>
-                <p class="font-medium text-sm">Dourable</p>
-                <p class="text-xs text-on-surface-variant mt-1">As durable as a bank card</p>
+                <p class="font-medium text-sm">Durable</p>
+                <p class="text-xs text-on-surface-variant mt-1">As durable as a bank card.</p>
               </div>
             </li>
             <li class="bg-surface-container rounded-xl p-4 flex gap-3">
@@ -147,7 +147,7 @@ onUnmounted(() => {
             <li class="flex gap-4">
               <span class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-caps text-xs shrink-0">1</span>
               <p class="text-sm text-on-surface-variant leading-relaxed pt-1">
-                Order online. Delivery free in Windhoek within <strong class="text-on-surface">1–4 working days. Couriered nationwide</strong>.
+                Order online. Delivery free in Windhoek within <strong class="text-on-surface">1–4 working days. Courier nationwide</strong>.
               </p>
             </li>
             <li class="flex gap-4">
@@ -308,11 +308,11 @@ onUnmounted(() => {
             <div class="h-1 w-12 bg-primary" />
           </div>
           <ul class="space-y-2 text-sm text-on-surface-variant leading-relaxed">
-            <li>• Fully online store — order on tapnam.com</li>
-            <li>• Solo Cards are readily available, Business & Executive Cards are made on order</li>
-            <li>• Free delivery in Windhoek; Couriered nationwide</li>
-            <li>• Typical delivery: 1–4 working days</li>
-            <li>• Quote when you want to order; invoice after payment / delivery as agreed with sales</li>
+            <li>• Fully online store — order on tapnam.com.</li>
+            <li>• Solo Cards are readily available, Business & Executive Cards are made on order.</li>
+            <li>• Free delivery in Windhoek, Courier nationwide.</li>
+            <li>• Delivery: 1–4 working days.</li>
+            <li>• Quote on order -> invoice after payment and delivery as agreed with sales.</li>
           </ul>
         </section>
 
@@ -324,23 +324,23 @@ onUnmounted(() => {
           </div>
           <div class="space-y-4">
             <div>
-              <p class="font-medium text-sm">Are there other fees after I buy?</p>
+              <p class="font-medium text-sm">1. Are there other fees?</p>
               <p class="text-sm text-on-surface-variant mt-1 leading-relaxed">
                 No. The card is a once-off purchase. Order a replacement only if a card is lost or damaged.
               </p>
             </div>
             <div>
-              <p class="font-medium text-sm">Can I customise Professional?</p>
+              <p class="font-medium text-sm">2. Can I customise Professional?</p>
               <p class="text-sm text-on-surface-variant mt-1 leading-relaxed">
-                No — Professional is a standard, non-customisable finish. Choose Business or Executive for company logo branding.
+                No — Professional is a standard pack. Choose Business or Executive for company logo branding in black &amp; white.
               </p>
             </div>
             <div>
-              <p class="font-medium text-sm">What if a phone has no NFC?</p>
+              <p class="font-medium text-sm">3. What if a phone has no NFC?</p>
               <p class="text-sm text-on-surface-variant mt-1 leading-relaxed">Use the QR code on the card.</p>
             </div>
             <div>
-              <p class="font-medium text-sm">Who else uses Tap-Na?</p>
+              <p class="font-medium text-sm">4. Who else uses Tap-Na?</p>
               <p class="text-sm text-on-surface-variant mt-1 leading-relaxed">
                 We don’t disclose client names for privacy and security.
               </p>
@@ -351,9 +351,7 @@ onUnmounted(() => {
         <!-- CTA -->
         <section class="bg-surface-charcoal text-on-primary rounded-xl p-8 flex flex-col gap-4">
           <h2 class="text-2xl font-semibold leading-tight">Ready for your digital business card?</h2>
-          <p class="text-on-primary/70 text-sm leading-relaxed">
-            See the packages, and order online.
-          </p>
+          
           <button
             type="button"
             class="self-start bg-surface-container-lowest text-primary px-8 py-4 font-button-text uppercase tracking-widest hover:opacity-90 transition-opacity"

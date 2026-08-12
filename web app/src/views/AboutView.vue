@@ -24,9 +24,9 @@ onMounted(() => {
         </div>
 
         <section class="card-item-bg rounded-2xl p-5 space-y-3">
-          <h2 class="text-lg font-semibold">Connect smarter</h2>
+          <h2 class="text-lg font-semibold">Tap. Share. Connect Smarter</h2>
           <p class="text-sm text-gray-400 leading-relaxed">
-            tap-na makes networking effortless with NFC business cards and digital profiles.
+            tap-na makes networking frictionless with NFC business cards and digital profiles.
             Share your details instantly — no typing, no friction.
           </p>
         </section>
@@ -43,7 +43,7 @@ onMounted(() => {
           <div class="card-item-bg rounded-2xl p-4 flex gap-3">
             <span class="material-symbols-outlined text-2xl">table_restaurant</span>
             <div>
-              <p class="font-medium text-sm">Table NFC cards</p>
+              <p class="font-medium text-sm">Vanue Display NFC cards</p>
               <p class="text-xs text-gray-400 mt-0.5">On-site venue profiles with logo, menu &amp; reviews.</p>
             </div>
           </div>
@@ -63,7 +63,7 @@ onMounted(() => {
           About Connect cards
         </RouterLink>
         <RouterLink
-          to="/cards"
+          to="/"
           class="block w-full py-4 rounded-full bg-zinc-800 text-white font-bold text-center text-base hover:bg-zinc-700 transition-colors no-underline"
         >
           Browse cards

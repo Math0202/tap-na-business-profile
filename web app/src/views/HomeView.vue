@@ -308,7 +308,7 @@ onUnmounted(() => {
           <div class="flex justify-between items-end gap-4">
             <div class="flex flex-col gap-1 min-w-0">
               <h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg uppercase">
-                Connect Team
+                Connect Teams
               </h2>
               <div class="h-1 w-12 bg-primary" />
               <p class="text-on-surface-variant text-sm mt-1">
