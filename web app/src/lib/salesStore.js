@@ -1386,10 +1386,18 @@ export async function sendInvoiceEmail(invoiceId, { to } = {}) {
     payload.attachments = [
       {
         filename: pdf.filename,
-        content: pdf.base64
+        content: pdf.base64,
+        type: 'application/pdf',
+        contentType: 'application/pdf'
       }
     ]
-    if (pdf.imageAttachment) payload.attachments.push(pdf.imageAttachment)
+    if (pdf.imageAttachment) {
+      payload.attachments.push({
+        ...pdf.imageAttachment,
+        type: pdf.imageAttachment.type || 'image/jpeg',
+        contentType: pdf.imageAttachment.type || 'image/jpeg'
+      })
+    }
   } catch (err) {
     return { ok: false, error: err?.message || 'Could not generate invoice PDF' }
   }
@@ -1442,10 +1450,18 @@ export async function sendQuoteEmail(quoteId, { to } = {}) {
     payload.attachments = [
       {
         filename: pdf.filename,
-        content: pdf.base64
+        content: pdf.base64,
+        type: 'application/pdf',
+        contentType: 'application/pdf'
       }
     ]
-    if (pdf.imageAttachment) payload.attachments.push(pdf.imageAttachment)
+    if (pdf.imageAttachment) {
+      payload.attachments.push({
+        ...pdf.imageAttachment,
+        type: pdf.imageAttachment.type || 'image/jpeg',
+        contentType: pdf.imageAttachment.type || 'image/jpeg'
+      })
+    }
   } catch (err) {
     return { ok: false, error: err?.message || 'Could not generate quote PDF' }
   }

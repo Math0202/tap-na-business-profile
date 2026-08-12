@@ -21,7 +21,9 @@ const isShopHome = computed(
   () =>
     route.path === '/' ||
     route.path === '/cart' ||
+    route.path === '/venue-display' ||
     route.path.startsWith('/product/') ||
+    route.path.startsWith('/package/') ||
     route.path.startsWith('/about/business-cards') ||
     route.path === '/support'
 )
@@ -34,7 +36,7 @@ const isLogin = computed(
 const onBusinessSurface = computed(() => {
   const p = route.path
   if (p === '/business' || p === '/table') return true
-  if (p.startsWith('/venue')) return true
+  if (p.startsWith('/venue') && p !== '/venue-display') return true
   // Table owners editing profile use FAB (no business bottom nav)
   if (p === '/profile' && (isTable.value || viewedIsTable.value)) return true
   if (p.startsWith('/c/')) {

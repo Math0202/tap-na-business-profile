@@ -1812,6 +1812,54 @@ function utf8ToBase64(str) {
   return btoa(binary)
 }
 
+function pdfEscapeText(value) {
+  return String(value || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+}
+
+/** Minimal single-page PDF (Helvetica) for shop quotes without browser deps. */
+function buildSimplePdfBase64(title, lines = []) {
+  const allLines = [String(title || 'Document').slice(0, 80), '', ...(Array.isArray(lines) ? lines : [])]
+    .map((l) => pdfEscapeText(l).slice(0, 95))
+    .slice(0, 45)
+  const ops = ['BT', '/F1 11 Tf', '50 750 Td']
+  allLines.forEach((line, i) => {
+    if (i === 0) {
+      ops.push('/F1 16 Tf', `(${line}) Tj`, '/F1 10 Tf')
+    } else if (i === 1 && line === '') {
+      ops.push('0 -18 Td')
+    } else {
+      ops.push(`0 -14 Td (${line}) Tj`)
+    }
+  })
+  ops.push('ET')
+  const stream = ops.join('\n')
+  const objs = []
+  objs.push('1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj\n')
+  objs.push('2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj\n')
+  objs.push(
+    '3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>endobj\n'
+  )
+  objs.push('4 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj\n')
+  objs.push(`5 0 obj<< /Length ${stream.length} >>stream\n${stream}\nendstream\nendobj\n`)
+  let pdf = '%PDF-1.4\n'
+  const offsets = [0]
+  for (const o of objs) {
+    offsets.push(pdf.length)
+    pdf += o
+  }
+  const xrefStart = pdf.length
+  pdf += `xref\n0 ${objs.length + 1}\n`
+  pdf += '0000000000 65535 f \n'
+  for (let i = 1; i < offsets.length; i++) {
+    pdf += String(offsets[i]).padStart(10, '0') + ' 00000 n \n'
+  }
+  pdf += `trailer<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`
+  return utf8ToBase64(pdf)
+}
+
 function icsEscape(value) {
   return String(value || '')
     .replace(/\\/g, '\\\\')
@@ -5609,6 +5657,7 @@ async function handleApi(request, env, url) {
   </table>
   <p style="font-size:16px;font-weight:700;margin:0 0 16px;">Quoted total: ${escapeHtml(money(subtotal))}</p>
   ${note ? `<p style="font-size:13px;color:#555;margin:0 0 16px;"><strong>Notes:</strong> ${escapeHtml(note)}</p>` : ''}
+  <p style="font-size:12px;color:#777;margin:0 0 8px;">A PDF copy of this quote is attached.</p>
   <p style="font-size:12px;color:#777;margin:0;">This is a quote request from the tap-na shop. Reply to confirm stock, delivery, and payment.</p>
 </body>
 </html>`.trim()
@@ -5628,10 +5677,34 @@ async function handleApi(request, env, url) {
       `Quoted total: ${money(subtotal)}`,
       note ? `Notes: ${note}` : '',
       '',
+      'A PDF copy of this quote is attached.',
       'This is a quote request from the tap-na shop.'
     ]
       .filter(Boolean)
       .join('\n')
+
+    const pdfLines = [
+      'Auckmund Investment CC',
+      'Erf: 62, Hosea Kutako Drive, Windhoek North',
+      '+264 85 811 7337 | welcome@tapnam.com',
+      '',
+      `Customer: ${name}`,
+      company ? `Company: ${company}` : '',
+      `Email: ${email}`,
+      `Phone: ${phone}`,
+      `Town: ${town}`,
+      '',
+      ...lines.map((l) => `${l.name} x ${l.qty} @ ${money(l.price)} = ${money(l.lineTotal)}`),
+      '',
+      `Quoted total: ${money(subtotal)}`,
+      note ? `Notes: ${note}` : ''
+    ].filter(Boolean)
+    const pdfAttachment = {
+      filename: `${quoteRef}.pdf`,
+      content: buildSimplePdfBase64(`Order quote ${quoteRef}`, pdfLines),
+      type: 'application/pdf',
+      contentType: 'application/pdf'
+    }
 
     const toList = [companyTo, email].filter((v, i, arr) => arr.indexOf(v) === i)
     let provisionedTeam = null
@@ -5660,7 +5733,8 @@ async function handleApi(request, env, url) {
         replyTo: email,
         subject,
         html,
-        text
+        text,
+        attachments: [pdfAttachment]
       })
       return json({
         ok: true,
@@ -5668,6 +5742,7 @@ async function handleApi(request, env, url) {
         quoteRef,
         to: toList,
         provider: sent.provider,
+        pdfAttached: true,
         team: provisionedTeam
           ? {
               id: provisionedTeam.teamId,
