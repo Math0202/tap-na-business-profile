@@ -7,7 +7,7 @@ const SESSION_KEY = 'tapna_session'
 
 export const DEFAULT_PROFILE = {
   cardType: 'personal', // personal | table
-  name: 'Name and Surname',
+  name: '',
   title: 'Job or Role',
   company: 'Company Name',
   phone: '',

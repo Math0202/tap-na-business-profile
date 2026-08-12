@@ -363,7 +363,7 @@ onUnmounted(() => {
                 class="w-full border border-primary text-primary py-3 md:py-4 font-button-text uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-colors"
                 @click="openPackage('solo', product.id)"
               >
-                View package
+                View package | Order now
               </button>
             </article>
         </div>
@@ -439,7 +439,7 @@ onUnmounted(() => {
                 class="w-full border border-primary text-primary py-3 md:py-4 font-button-text uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-colors"
                 @click="openPackage('team', product.id)"
               >
-                View package
+                View package | Order now
               </button>
             </article>
           </div>

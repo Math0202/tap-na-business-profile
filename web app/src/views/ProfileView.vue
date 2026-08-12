@@ -908,7 +908,7 @@ onMounted(() => {
           <label class="field-label" for="field-company">Company</label>
           <div class="field-shell">
             <span class="material-symbols-outlined field-icon">apartment</span>
-            <input id="field-company" v-model="company" type="text" class="field-input" placeholder="Your Company Name" />
+            <input id="field-company" v-model="company" type="text" class="field-input"/>
           </div>
         </div>
       </section>

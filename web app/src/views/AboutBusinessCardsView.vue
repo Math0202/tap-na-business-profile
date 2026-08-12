@@ -480,7 +480,7 @@ onUnmounted(() => {
             class="self-start bg-surface-container-lowest text-primary px-8 py-4 font-button-text uppercase tracking-widest hover:opacity-90 transition-opacity"
             @click="shopAll"
           >
-            View packages
+            View packages | Order now
           </button>
         </section>
 
