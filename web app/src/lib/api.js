@@ -611,7 +611,7 @@ export function apiShopOrderQuote(payload) {
   })
 }
 
-/** Public shop support form — emails auckmund@gmail.com */
+/** Public shop support form — emails welcome@tapnam.com */
 export function apiShopSupport(payload) {
   return request('/api/shop/support', {
     method: 'POST',

@@ -229,7 +229,7 @@ function onPackageOrdered(payload) {
   showToast(
     payload?.quoteRef
       ? `Quote ${payload.quoteRef} emailed`
-      : 'Quote emailed to you and auckmund@gmail.com'
+      : 'Quote emailed to you and welcome@tapnam.com'
   )
 }
 

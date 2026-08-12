@@ -5563,7 +5563,7 @@ async function handleApi(request, env, url) {
       'N$ ' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 
     const quoteRef = `SQ-${Date.now().toString(36).toUpperCase()}`
-    const companyTo = 'auckmund@gmail.com'
+    const companyTo = 'welcome@tapnam.com'
     const from = defaultEmailFrom(env)
     const subject = `Order quote ${quoteRef} — ${name}`
 
@@ -5585,7 +5585,7 @@ async function handleApi(request, env, url) {
 <body style="font-family:Arial,sans-serif;color:#111;line-height:1.5;max-width:560px;margin:0 auto;padding:24px;">
   <h1 style="font-size:20px;margin:0 0 4px;">tap-na</h1>
   <p style="margin:0 0 4px;color:#555;font-size:13px;">Auckmund Investment CC</p>
-  <p style="margin:0 0 20px;color:#555;font-size:13px;">Erf: 62, Hosea Kutako Drive, Windhoek North<br>+264 85 792 7373 · auckmund@gmail.com</p>
+  <p style="margin:0 0 20px;color:#555;font-size:13px;">Erf: 62, Hosea Kutako Drive, Windhoek North<br>+264 85 811 7337 · welcome@tapnam.com</p>
   <h2 style="font-size:18px;margin:0 0 8px;">Order quote ${escapeHtml(quoteRef)}</h2>
   <p style="margin:0 0 16px;color:#555;font-size:13px;">Requested from the online shop</p>
   <p style="margin:0 0 4px;"><strong>Customer</strong></p>
@@ -5706,7 +5706,7 @@ async function handleApi(request, env, url) {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return bad('Valid email is required')
     if (message.length < 10) return bad('Message is required')
 
-    const companyTo = 'auckmund@gmail.com'
+    const companyTo = 'welcome@tapnam.com'
     const from = defaultEmailFrom(env)
     const subject = subjectIn
       ? `Support: ${subjectIn} — ${name}`
@@ -5842,7 +5842,7 @@ async function handleApi(request, env, url) {
     const allowed = !gate.error || (testKey && expectedKey && testKey === expectedKey)
     if (!allowed) return gate.error || bad('Unauthorized', 401)
 
-    const to = String(body?.to || 'auckmund@gmail.com').trim().toLowerCase()
+    const to = String(body?.to || 'welcome@tapnam.com').trim().toLowerCase()
     const kind = String(body?.kind || 'ping').trim().toLowerCase()
     try {
       let sent

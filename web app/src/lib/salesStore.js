@@ -36,8 +36,8 @@ export const CASH_CATEGORIES = [
 export const COMPANY = {
   name: 'tap-na',
   legalName: 'Auckmund Investment CC',
-  email: 'auckmund@gmail.com',
-  phone: '+264 85 792 7373',
+  email: 'welcome@tapnam.com',
+  phone: '+264 85 811 7337',
   address: 'Erf: 62, Hosea Kutako Drive, Windhoek North',
   currency: 'NAD',
   fromName: 'tap-na',

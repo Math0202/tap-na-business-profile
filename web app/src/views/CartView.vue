@@ -171,7 +171,7 @@ async function placeOrder() {
     clearCart()
     checkoutOpen.value = false
     checkoutNote.value = ''
-    showToast('Quote emailed to you and auckmund@gmail.com')
+    showToast('Quote emailed to you and welcome@tapnam.com')
   } finally {
     submitting.value = false
   }
@@ -389,7 +389,7 @@ async function placeOrder() {
               Request a quote
             </h2>
             <p class="text-on-surface-variant text-sm mt-1">
-              We’ll email your order quote to you and to auckmund@gmail.com.
+              We’ll email your order quote to you.
             </p>
           </div>
           <button

@@ -10,7 +10,7 @@ import {
   BRAND_WHATSAPP_HREF
 } from '../lib/brandLinks'
 
-const SUPPORT_EMAIL = 'auckmund@gmail.com'
+const SUPPORT_EMAIL = 'welcome@tapnam.com'
 const SUPPORT_WHATSAPP_DISPLAY = BRAND_WHATSAPP_DISPLAY
 
 const router = useRouter()
