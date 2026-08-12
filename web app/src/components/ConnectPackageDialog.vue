@@ -13,7 +13,6 @@ import {
   formatPrice,
   getProduct,
   initialTeamMix,
-  isTeamSubdomainEligible,
   minExecutiveForTeamTotal,
   canApplyTeamMix,
   isTeamMixOrderReady,
@@ -53,7 +52,6 @@ const teamMixCheck = computed(() => validateTeamMix(businessQty.value, executive
 const teamOrderReady = computed(() => isTeamMixOrderReady(businessQty.value, executiveQty.value))
 const inExecutiveBridge = computed(() => isTeamExecutiveBridge(teamTotal.value))
 const minExecutiveNeeded = computed(() => minExecutiveForTeamTotal(teamTotal.value))
-const subdomainEligible = computed(() => isTeamSubdomainEligible(executiveQty.value))
 const soloSubtotal = computed(() => (soloProduct.value?.price || 0) * soloQty.value)
 const teamSubtotal = computed(
   () =>
@@ -61,7 +59,7 @@ const teamSubtotal = computed(
     (executiveProduct.value?.price || 0) * executiveQty.value
 )
 const subtotal = computed(() => (isTeam.value ? teamSubtotal.value : soloSubtotal.value))
-const title = computed(() => (isTeam.value ? 'Connect Teamss package' : 'Connect Solo'))
+const title = computed(() => (isTeam.value ? 'Connect Teams package' : 'Connect Solo'))
 const itemCount = computed(() => (isTeam.value ? teamTotal.value : soloQty.value))
 const cardsNeededForMin = computed(() => Math.max(0, TEAM_PACKAGE_MIN - teamTotal.value))
 const mixStatusLabel = computed(() => {
@@ -178,7 +176,6 @@ watch(
         props.initialBusinessQty != null ? Math.max(0, Math.floor(props.initialBusinessQty)) : mix.businessQty
       executiveQty.value =
         props.initialExecutiveQty != null ? Math.max(0, Math.floor(props.initialExecutiveQty)) : mix.executiveQty
-      subdomain.value = String(props.initialSubdomain || '').trim()
     } else {
       soloQty.value = Math.min(SOLO_PACKAGE_MAX, Math.max(1, Math.floor(Number(props.initialSoloQty) || 1)))
     }
@@ -280,7 +277,7 @@ async function addPackageToCart() {
       ok = setTeamPackage({
         businessQty: businessQty.value,
         executiveQty: executiveQty.value,
-        subdomain: subdomainEligible.value ? subdomain.value.trim() : ''
+        subdomain: ''
       })
     } else {
       const id = soloProduct.value?.id
@@ -629,23 +626,11 @@ async function addPackageToCart() {
                 for {{ teamTotal }} cards.
                 <span v-if="!teamOrderReady" class="text-red-600"> {{ teamMixCheck.error }}</span>
               </p>
-              <label v-if="subdomainEligible" class="flex flex-col gap-2 pt-1 border-t border-border-subtle">
-                <span class="font-label-caps text-[10px] uppercase tracking-widest text-primary">Optional custom subdomain</span>
-                <input
-                  v-model="subdomain"
-                  type="text"
-                  class="bg-surface border border-border-subtle rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-primary"
-                  placeholder="cards.yourcompany.com"
-                >
-              </label>
-              <p v-else class="font-label-caps text-[10px] uppercase tracking-widest text-ink-muted pt-1 border-t border-border-subtle">
-                Optional subdomain from {{ TEAM_EXEC_SUBDOMAIN_MIN }}+ Executive cards
-              </p>
             </div>
           </template>
 
           <p class="text-sm text-on-surface-variant leading-snug">
-            Review quantities here, then check out from Cart with your delivery details.
+            
           </p>
 
           <p v-if="error" class="text-sm text-red-600">{{ error }}</p>

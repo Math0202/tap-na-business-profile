@@ -7,14 +7,12 @@ import {
   BUSINESS_CARD_ID,
   EXECUTIVE_CARD_ID,
   TEAM_BUSINESS_ALONE_MAX,
-  TEAM_EXEC_SUBDOMAIN_MIN,
   TEAM_FREE_MIX_AFTER,
   TEAM_PACKAGE_MIN,
   isTeamExecutiveBridge,
   formatPrice,
   getProduct,
   initialTeamMix,
-  isTeamSubdomainEligible,
   loadShopProducts,
   canApplyTeamMix,
   isTeamMixOrderReady,
@@ -31,14 +29,12 @@ const checkoutOpen = ref(false)
 const error = ref('')
 const businessQty = ref(2)
 const executiveQty = ref(3)
-const subdomain = ref('')
 const highlighted = ref('')
 let toastTimer = null
 
 const businessProduct = computed(() => getProduct(BUSINESS_CARD_ID))
 const executiveProduct = computed(() => getProduct(EXECUTIVE_CARD_ID))
 const teamTotal = computed(() => businessQty.value + executiveQty.value)
-const subdomainEligible = computed(() => isTeamSubdomainEligible(executiveQty.value))
 const teamOrderReady = computed(() => isTeamMixOrderReady(businessQty.value, executiveQty.value))
 const inExecutiveBridge = computed(() => isTeamExecutiveBridge(teamTotal.value))
 const cardsNeededForMin = computed(() => Math.max(0, TEAM_PACKAGE_MIN - teamTotal.value))
@@ -240,9 +236,9 @@ async function refresh() {
   const focus = String(route.query.focus || '').trim()
   applyFocus(focus)
   setPageSeo({
-    title: 'Connect Teamss package — tap-na',
+    title: 'Connect Teams package — tap-na',
     description:
-      'Combine Business and Executive Connect cards. Business alone max 10. Free mix to 10. Cards 11–15 must be Executive, then mix freely. Subdomain from 5 Executive.',
+      'Combine Business and Executive Connect cards. Business alone max 10. Free mix to 10. Cards 11–15 must be Executive, then mix freely.',
     path: '/package/team'
   })
   await nextTick()
@@ -290,7 +286,7 @@ onUnmounted(() => {
         </button>
 
         <div class="flex flex-col gap-2 max-w-2xl">
-          <p class="font-label-caps text-[11px] uppercase tracking-widest text-primary">Connect Teamss</p>
+          <p class="font-label-caps text-[11px] uppercase tracking-widest text-primary">Connect Teams</p>
           <h1 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg uppercase">
             Teams package
           </h1>
@@ -523,20 +519,6 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <p v-if="!subdomainEligible" class="font-label-caps text-[10px] uppercase tracking-widest text-ink-muted">
-              Optional custom subdomain from {{ TEAM_EXEC_SUBDOMAIN_MIN }}+ Executive cards
-            </p>
-            <label v-else class="flex flex-col gap-2">
-              <span class="font-label-caps text-[10px] uppercase tracking-widest text-primary">Optional custom subdomain</span>
-              <input
-                v-model="subdomain"
-                type="text"
-                class="bg-surface border border-border-subtle rounded-lg px-3 py-3 text-sm focus:outline-none focus:border-primary"
-                placeholder="cards.yourcompany.com"
-                autocomplete="off"
-              >
-            </label>
-
             <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
 
             <div class="flex flex-col sm:flex-row gap-3">
@@ -560,7 +542,6 @@ onUnmounted(() => {
       :focus-id="highlighted"
       :initial-business-qty="businessQty"
       :initial-executive-qty="executiveQty"
-      :initial-subdomain="subdomain"
       @close="checkoutOpen = false"
       @ordered="onPackageOrdered"
     />

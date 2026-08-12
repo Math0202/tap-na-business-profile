@@ -88,9 +88,9 @@ export const ROUTE_SEO = {
       'NFC Venue Display cards for restaurants and businesses. Menus, reviews, Wi-Fi, and guest check-in — tap once at the table.'
   },
   'team-package': {
-    title: 'Connect Teamss package — tap-na',
+    title: 'Connect Teams package — tap-na',
     description:
-      'Combine Business and Executive Connect cards. Business alone max 10. Cards 11–15 must be Executive, then free mix. Subdomain from 5 Executive.'
+      'Combine Business and Executive Connect cards. Business alone max 10. Cards 11–15 must be Executive, then free mix.'
   },
   cart: {
     title: 'Cart — tap-na',
