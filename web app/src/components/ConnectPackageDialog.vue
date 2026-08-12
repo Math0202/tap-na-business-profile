@@ -61,7 +61,7 @@ const teamSubtotal = computed(
     (executiveProduct.value?.price || 0) * executiveQty.value
 )
 const subtotal = computed(() => (isTeam.value ? teamSubtotal.value : soloSubtotal.value))
-const title = computed(() => (isTeam.value ? 'Connect Team package' : 'Connect Solo'))
+const title = computed(() => (isTeam.value ? 'Connect Teams package' : 'Connect Solo'))
 const itemCount = computed(() => (isTeam.value ? teamTotal.value : soloQty.value))
 const cardsNeededForMin = computed(() => Math.max(0, TEAM_PACKAGE_MIN - teamTotal.value))
 const mixStatusLabel = computed(() => {

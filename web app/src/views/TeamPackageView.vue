@@ -244,7 +244,7 @@ async function refresh() {
   const focus = String(route.query.focus || '').trim()
   applyFocus(focus)
   setPageSeo({
-    title: 'Connect Team package — tap-na',
+    title: 'Connect Teams package — tap-na',
     description:
       'Combine Business and Executive Connect cards. Business alone max 10. Free mix to 10. Cards 11–15 must be Executive, then mix freely. Subdomain from 5 Executive.',
     path: '/package/team'
@@ -294,9 +294,9 @@ onUnmounted(() => {
         </button>
 
         <div class="flex flex-col gap-2 max-w-2xl">
-          <p class="font-label-caps text-[11px] uppercase tracking-widest text-primary">Connect Team</p>
+          <p class="font-label-caps text-[11px] uppercase tracking-widest text-primary">Connect Teams</p>
           <h1 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg uppercase">
-            Team package
+            Teams package
           </h1>
           <div class="h-1 w-12 bg-primary" />
           <p class="text-on-surface-variant text-sm mt-1">
