@@ -4,6 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import ShopHeader from '../components/ShopHeader.vue'
 import { tableBrochuresList, formatPrice, loadShopProducts } from '../lib/shopCatalog'
 import { addToCart } from '../lib/cartStore'
+import { BRAND_SOCIAL_LINKS } from '../lib/brandLinks'
 import { setPageSeo } from '../lib/seo'
 
 const route = useRoute()
@@ -71,7 +72,7 @@ onMounted(async () => {
     title: 'Venue Display — tap-na',
     description:
       'NFC Venue Display cards for restaurants and businesses. Menus, reviews, Wi-Fi, and guest check-in — tap once at the table.',
-    path: '/table-top'
+    path: '/venue-display'
   })
   await refreshCatalog()
   await nextTick()
@@ -263,6 +264,20 @@ onUnmounted(() => {
               About Connect cards
             </RouterLink>
             <RouterLink to="/support" class="text-on-surface no-underline hover:opacity-70">Support</RouterLink>
+          </div>
+          <div class="flex flex-col gap-2">
+            <span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Social</span>
+            <a
+              v-for="link in BRAND_SOCIAL_LINKS"
+              :key="link.id"
+              :href="link.href"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex items-center gap-2 text-on-surface no-underline hover:opacity-70"
+            >
+              <span class="material-symbols-outlined text-[18px]" aria-hidden="true">{{ link.icon }}</span>
+              <span class="text-sm">{{ link.label }}</span>
+            </a>
           </div>
         </div>
         <div class="flex items-center justify-between pt-8 border-t border-border-subtle">

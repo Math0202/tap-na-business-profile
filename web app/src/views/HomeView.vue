@@ -10,6 +10,7 @@ import {
   isTeamCard,
   loadShopProducts,
 } from '../lib/shopCatalog'
+import { BRAND_SOCIAL_LINKS } from '../lib/brandLinks'
 
 const route = useRoute()
 const router = useRouter()
@@ -138,7 +139,7 @@ watch(
   (hash) => {
     if (hash === '#business-cards' || hash === '#connect-solo') nextTick(() => scrollToShop())
     if (hash === '#connect-team') nextTick(() => scrollToTeam())
-    if (hash === '#table-brochures') router.replace('/table-top')
+    if (hash === '#table-brochures') router.replace('/venue-display')
   }
 )
 
@@ -146,7 +147,7 @@ onMounted(async () => {
   document.title = 'tap-na — Connect business cards'
   document.documentElement.classList.add('shop-home')
   if (route.hash === '#table-brochures') {
-    router.replace('/table-top')
+    router.replace('/venue-display')
     return
   }
   await refreshCatalog()
@@ -565,48 +566,6 @@ onUnmounted(() => {
           </div>
         </section>
 
-        <!-- Why TAPna -->
-        <section
-          :ref="setSectionRef"
-          class="px-margin-mobile md:px-margin-desktop pt-stack-lg pb-stack-md flex flex-col gap-8"
-        >
-          <div class="flex flex-col gap-2 max-w-xl">
-            <h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg uppercase">
-              Why TAPna?
-            </h2>
-            <p class="text-on-surface-variant">
-              Changing how we network and share contact details..
-            </p>
-          </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-10">
-            <div class="flex gap-4 items-start">
-              <div
-                class="w-12 h-12 bg-surface-container-high rounded flex items-center justify-center shrink-0"
-              >
-                <span class="material-symbols-outlined">qr_code_2</span>
-              </div>
-              <div class="flex flex-col gap-1">
-                <h4 class="font-label-caps text-[14px] uppercase font-bold">Universal Backup</h4>
-                <p class="text-[13px] text-on-tertiary-container">
-                  Every card comes with a laser-etched QR code for older devices without NFC.
-                </p>
-              </div>
-            </div>
-            <div class="flex gap-4 items-start">
-              <div
-                class="w-12 h-12 bg-surface-container-high rounded flex items-center justify-center shrink-0"
-              >
-                <span class="material-symbols-outlined">security</span>
-              </div>
-              <div class="flex flex-col gap-1">
-                <h4 class="font-label-caps text-[14px] uppercase font-bold">Encrypted Tech</h4>
-                <p class="text-[13px] text-on-tertiary-container">
-                  Your data is safe. We use high-security NTAG215 chips for reliable performance.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
 
         <!-- Newsletter -->
         <section :ref="setSectionRef" class="px-margin-mobile md:px-margin-desktop pt-stack-md pb-stack-lg">
@@ -659,7 +618,7 @@ onUnmounted(() => {
             >
               Connect Teams
             </button>
-            <RouterLink to="/table-top" class="text-on-surface no-underline hover:opacity-70">
+            <RouterLink to="/venue-display" class="text-on-surface no-underline hover:opacity-70">
               Venue Display
             </RouterLink>
             <RouterLink to="/cart" class="text-on-surface no-underline hover:opacity-70">
@@ -682,9 +641,19 @@ onUnmounted(() => {
           </div>
           <div class="flex flex-col gap-2">
             <span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Social</span>
-            <div class="flex gap-4 mt-1">
-              <span class="material-symbols-outlined text-[20px]">share</span>
-              <span class="material-symbols-outlined text-[20px]">public</span>
+            <div class="flex flex-col gap-2 mt-1">
+              <a
+                v-for="link in BRAND_SOCIAL_LINKS"
+                :key="link.id"
+                :href="link.href"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center gap-2 text-on-surface no-underline hover:opacity-70"
+              >
+                <span class="material-symbols-outlined text-[18px]" aria-hidden="true">{{ link.icon }}</span>
+                <span class="text-sm">{{ link.label }}</span>
+                <span v-if="link.detail" class="text-xs text-on-surface-variant">{{ link.detail }}</span>
+              </a>
             </div>
           </div>
         </div>

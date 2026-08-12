@@ -4,10 +4,14 @@ import { RouterLink, useRouter } from 'vue-router'
 import ShopHeader from '../components/ShopHeader.vue'
 import { apiShopSupport } from '../lib/api'
 import { setPageSeo } from '../lib/seo'
+import {
+  BRAND_SOCIAL_LINKS,
+  BRAND_WHATSAPP_DISPLAY,
+  BRAND_WHATSAPP_HREF
+} from '../lib/brandLinks'
 
 const SUPPORT_EMAIL = 'auckmund@gmail.com'
-const SUPPORT_WHATSAPP = '+264858117337'
-const SUPPORT_WHATSAPP_DISPLAY = '+264 85 811 7337'
+const SUPPORT_WHATSAPP_DISPLAY = BRAND_WHATSAPP_DISPLAY
 
 const router = useRouter()
 const menuOpen = ref(false)
@@ -26,7 +30,8 @@ function shopAll() {
 }
 
 const mailtoHref = `mailto:${SUPPORT_EMAIL}`
-const whatsappHref = `https://wa.me/${SUPPORT_WHATSAPP.replace(/\D/g, '')}`
+const whatsappHref = BRAND_WHATSAPP_HREF
+const socialLinks = BRAND_SOCIAL_LINKS.filter((l) => l.id !== 'whatsapp')
 
 async function onSubmit() {
   if (submitting.value) return
@@ -130,6 +135,20 @@ onUnmounted(() => {
             <div>
               <p class="font-medium text-sm">Email us</p>
               <p class="text-sm text-on-surface-variant mt-1">{{ SUPPORT_EMAIL }}</p>
+            </div>
+          </a>
+          <a
+            v-for="link in socialLinks"
+            :key="link.id"
+            :href="link.href"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="bg-surface-container rounded-xl p-5 no-underline text-inherit flex gap-3 hover:opacity-90 transition-opacity"
+          >
+            <span class="material-symbols-outlined text-primary shrink-0">{{ link.icon }}</span>
+            <div>
+              <p class="font-medium text-sm">{{ link.label }}</p>
+              <p class="text-sm text-on-surface-variant mt-1">Follow tap-na</p>
             </div>
           </a>
         </section>
