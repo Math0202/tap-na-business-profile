@@ -50,7 +50,7 @@ onUnmounted(() => {
               class="bg-primary text-on-primary px-8 py-4 font-button-text uppercase tracking-widest hover:opacity-90 transition-opacity"
               @click="shopAll"
             >
-              Shop cards
+              Packages
             </button>
             <a
               href="#how-to-claim"
@@ -110,23 +110,26 @@ onUnmounted(() => {
             <h2 class="font-headline-lg-mobile text-[24px] uppercase font-semibold">How the cards work</h2>
             <div class="h-1 w-12 bg-primary" />
           </div>
-          <ol class="space-y-4">
-            <li class="flex gap-4">
-              <span class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-caps text-xs shrink-0">1</span>
-              <p class="text-sm text-on-surface-variant leading-relaxed pt-1">
-                Each card has an <strong class="text-on-surface">NFC chip</strong> (and usually a QR backup). The chip holds a unique link — not your personal data.
+          <ol class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 list-none p-0 m-0">
+            <li class="flex flex-col gap-3 sm:text-center bg-surface-container rounded-xl p-5">
+              <span class="material-symbols-outlined text-primary text-[32px] sm:mx-auto" aria-hidden="true">contactless</span>
+              <p class="font-label-caps text-[12px] uppercase tracking-[0.2em] text-on-surface">Tap</p>
+              <p class="text-sm text-on-surface-variant leading-relaxed">
+                Hold the card to a phone (NFC) or scan the QR. No app needed for visitors.
               </p>
             </li>
-            <li class="flex gap-4">
-              <span class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-caps text-xs shrink-0">2</span>
-              <p class="text-sm text-on-surface-variant leading-relaxed pt-1">
-                Someone <strong class="text-on-surface">taps</strong> the card to a phone (or scans the QR).
+            <li class="flex flex-col gap-3 sm:text-center bg-surface-container rounded-xl p-5">
+              <span class="material-symbols-outlined text-primary text-[32px] sm:mx-auto" aria-hidden="true">link</span>
+              <p class="font-label-caps text-[12px] uppercase tracking-[0.2em] text-on-surface">Connect</p>
+              <p class="text-sm text-on-surface-variant leading-relaxed">
+                Their browser opens your live Tap-Na profile — always the latest version.
               </p>
             </li>
-            <li class="flex gap-4">
-              <span class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-caps text-xs shrink-0">3</span>
-              <p class="text-sm text-on-surface-variant leading-relaxed pt-1">
-                Their browser opens your <strong class="text-on-surface">live Tap-Na profile</strong> — always the latest version.
+            <li class="flex flex-col gap-3 sm:text-center bg-surface-container rounded-xl p-5">
+              <span class="material-symbols-outlined text-primary text-[32px] sm:mx-auto" aria-hidden="true">ios_share</span>
+              <p class="font-label-caps text-[12px] uppercase tracking-[0.2em] text-on-surface">Share</p>
+              <p class="text-sm text-on-surface-variant leading-relaxed">
+                They save your contact, open links, browse your catalogue, or book a meeting.
               </p>
             </li>
           </ol>
@@ -266,7 +269,7 @@ onUnmounted(() => {
           <div class="flex flex-col gap-4">
             <article class="border border-border-subtle rounded-xl p-5 flex flex-col gap-2">
               <div class="flex items-start justify-between gap-3">
-                <h3 class="font-semibold text-lg">Professional Class</h3>
+                <h3 class="font-semibold text-lg">Professional</h3>
                 <span class="font-label-caps text-[10px] uppercase tracking-widest bg-surface-container px-2 py-1">Solo</span>
               </div>
               <p class="text-sm text-on-surface-variant leading-relaxed">
@@ -276,7 +279,7 @@ onUnmounted(() => {
             </article>
             <article class="border border-border-subtle rounded-xl p-5 flex flex-col gap-2">
               <div class="flex items-start justify-between gap-3">
-                <h3 class="font-semibold text-lg">Business Class</h3>
+                <h3 class="font-semibold text-lg">Business</h3>
                 <span class="font-label-caps text-[10px] uppercase tracking-widest bg-primary text-on-primary px-2 py-1">Best Seller</span>
               </div>
               <p class="text-sm text-on-surface-variant leading-relaxed">
@@ -285,12 +288,12 @@ onUnmounted(() => {
             </article>
             <article class="border border-border-subtle rounded-xl p-5 flex flex-col gap-2">
               <div class="flex items-start justify-between gap-3">
-                <h3 class="font-semibold text-lg">Executive Class</h3>
+                <h3 class="font-semibold text-lg">Executive</h3>
                 <span class="font-label-caps text-[10px] uppercase tracking-widest bg-surface-charcoal text-on-primary px-2 py-1">Executive</span>
               </div>
               <p class="text-sm text-on-surface-variant leading-relaxed">
                 Matte black flagship for leaders and larger teams (5–20+). black &amp; white company logo, fuller team tools, and a company subdomain
-                such as <strong class="text-on-surface">cards.company.com</strong>. Business Class cards on the same team can also load onto that subdomain.
+                such as <strong class="text-on-surface">cards.company.com</strong>. Business cards on the same team can also load onto that subdomain.
               </p>
             </article>
           </div>
@@ -325,7 +328,7 @@ onUnmounted(() => {
               </thead>
               <tbody class="text-on-surface-variant">
                 <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">NFC + QR → live profile</td>
+                  <td class="py-3 pr-4 text-on-surface">NFC + QR → live digital profile</td>
                   <td class="py-3 px-2 text-center text-primary">✓</td>
                   <td class="py-3 px-2 text-center text-primary">✓</td>
                   <td class="py-3 pl-2 text-center text-primary">✓</td>
@@ -349,7 +352,7 @@ onUnmounted(() => {
                   <td class="py-3 pl-2 text-center text-primary text-xs">Black &amp; White</td>
                 </tr>
                 <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Team profiles + owner block</td>
+                  <td class="py-3 pr-4 text-on-surface">Team profiles </td>
                   <td class="py-3 px-2 text-center">—</td>
                   <td class="py-3 px-2 text-center text-primary">✓</td>
                   <td class="py-3 pl-2 text-center text-primary">✓</td>
@@ -398,7 +401,7 @@ onUnmounted(() => {
             <p class="font-medium text-sm">Executive subdomain for the whole team</p>
             <p class="text-sm text-on-surface-variant leading-relaxed">
               Executive unlocks a branded host such as <strong class="text-on-surface">cards.company.com</strong>.
-              If the team also has Business Class cards, those profiles can load onto the same custom subdomain.
+              If the team also has Business cards, those profiles can load onto the same custom subdomain.
             </p>
           </div>
         </section>
@@ -450,7 +453,7 @@ onUnmounted(() => {
               </p>
             </div>
             <div>
-              <p class="font-medium text-sm">Can I customise Professional Class?</p>
+              <p class="font-medium text-sm">Can I customise Professional?</p>
               <p class="text-sm text-on-surface-variant mt-1 leading-relaxed">
                 No — Professional is a standard, non-customisable finish. Choose Business or Executive for company logo branding.
               </p>
