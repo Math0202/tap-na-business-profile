@@ -506,10 +506,6 @@ onUnmounted(() => {
 
             <div class="flex flex-col gap-2 text-sm">
               <div class="flex justify-between">
-                <span class="text-on-surface-variant">Mix</span>
-                <span class="font-label-caps text-[11px] uppercase tracking-widest">{{ businessQty }} Business · {{ executiveQty }} Executive</span>
-              </div>
-              <div class="flex justify-between">
                 <span class="text-on-surface-variant">Total cards</span>
                 <span class="font-label-caps text-label-caps">{{ teamTotal }} <span class="text-ink-muted font-normal">(min {{ TEAM_PACKAGE_MIN }})</span></span>
               </div>
