@@ -125,9 +125,6 @@ const placeOrderLabel = computed(() => {
   if (isTeam.value && !teamOrderReady.value) return 'Fix mix to add'
   return 'Add to cart'
 })
-const compareOpen = ref(false)
-
-
 let previousHtmlOverflow = ''
 let previousBodyOverflow = ''
 
@@ -166,7 +163,6 @@ watch(
     error.value = ''
     notice.value = ''
     soloLimitOpen.value = false
-    compareOpen.value = false
     submitting.value = false
     if (props.mode === 'team') {
       const mix = initialTeamMix(props.focusId)
@@ -436,6 +432,56 @@ async function addPackageToCart() {
 
           <!-- Team lines -->
           <template v-else-if="isTeam">
+            <div class="bg-surface-container rounded-xl p-4 flex flex-col gap-3">
+              <h3 class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">Features</h3>
+              <table class="w-full text-left text-[12px] border-collapse">
+                <thead>
+                  <tr class="border-b border-border-subtle">
+                    <th class="py-2 pr-2 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium">Feature</th>
+                    <th class="py-2 px-1 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium text-center whitespace-nowrap">Business</th>
+                    <th class="py-2 pl-1 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium text-center whitespace-nowrap">Executive</th>
+                  </tr>
+                </thead>
+                <tbody class="text-on-surface-variant">
+                  <tr class="border-b border-border-subtle/60">
+                    <td class="py-2 pr-2 text-on-surface">NFC + QR → live digital profile</td>
+                    <td class="py-2 px-1 text-center text-primary">✓</td>
+                    <td class="py-2 pl-1 text-center text-primary">✓</td>
+                  </tr>
+                  <tr class="border-b border-border-subtle/60">
+                    <td class="py-2 pr-2 text-on-surface">Once-off</td>
+                    <td class="py-2 px-1 text-center text-primary">✓</td>
+                    <td class="py-2 pl-1 text-center text-primary">✓</td>
+                  </tr>
+                  <tr class="border-b border-border-subtle/60">
+                    <td class="py-2 pr-2 text-on-surface">Product &amp; Service Catalogue</td>
+                    <td class="py-2 px-1 text-center text-primary">✓</td>
+                    <td class="py-2 pl-1 text-center text-primary">✓</td>
+                  </tr>
+                  <tr class="border-b border-border-subtle/60">
+                    <td class="py-2 pr-2 text-on-surface">Meeting booking</td>
+                    <td class="py-2 px-1 text-center text-primary">✓</td>
+                    <td class="py-2 pl-1 text-center text-primary">✓</td>
+                  </tr>
+                  <tr class="border-b border-border-subtle/60">
+                    <td class="py-2 pr-2 text-on-surface">Custom Logo(B&amp;W)</td>
+                    <td class="py-2 px-1 text-center text-primary">✓</td>
+                    <td class="py-2 pl-1 text-center text-primary">✓</td>
+                  </tr>
+                  <tr class="border-b border-border-subtle/60">
+                    <td class="py-2 pr-2 text-on-surface">Team profiles</td>
+                    <td class="py-2 px-1 text-center text-primary">✓</td>
+                    <td class="py-2 pl-1 text-center text-primary">✓</td>
+                  </tr>
+                  <tr>
+                    <td class="py-2 pr-2 text-on-surface">Custom subdomain</td>
+                    <td class="py-2 px-1 text-center">—</td>
+                    <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">✓</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
             <section class="flex flex-col gap-4" aria-labelledby="team-mix-heading">
               <div class="flex flex-col gap-1">
                 <h3 id="team-mix-heading" class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">
@@ -449,6 +495,16 @@ async function addPackageToCart() {
                   {{ mixStatusLabel }}
                 </p>
                 <p v-if="mixHint" class="text-[12px] text-on-surface-variant leading-snug">{{ mixHint }}</p>
+                <p v-if="inExecutiveBridge" class="text-[11px] text-on-surface-variant leading-snug">
+                  Cards 11–{{ TEAM_FREE_MIX_AFTER }} must be Executive
+                  ({{ minExecutiveNeeded }} needed · you have {{ executiveQty }}).
+                  After {{ TEAM_FREE_MIX_AFTER }}, mix Business or Executive freely.
+                </p>
+                <p v-else-if="minExecutiveNeeded > 0" class="text-[11px] text-on-surface-variant leading-snug">
+                  Keep at least <span class="text-on-surface font-medium">{{ minExecutiveNeeded }} Executive</span>
+                  for {{ teamTotal }} cards.
+                  <span v-if="!teamOrderReady" class="text-red-600"> {{ teamMixCheck.error }}</span>
+                </p>
               </div>
 
               <ul class="flex flex-col gap-3 list-none p-0 m-0">
@@ -549,76 +605,6 @@ async function addPackageToCart() {
                 </li>
               </ul>
             </section>
-            <div class="bg-surface-container rounded-xl p-4 flex flex-col gap-3">
-              <div class="flex items-baseline justify-between gap-3">
-                <h3 class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">Package</h3>
-                <span class="text-[12px] text-on-surface font-medium">{{ teamTotal }} cards · {{ businessQty }} Business · {{ executiveQty }} Executive</span>
-              </div>
-              <button
-                type="button"
-                class="w-full flex items-center justify-between gap-2 text-left py-1 border-0 bg-transparent cursor-pointer"
-                :aria-expanded="compareOpen ? 'true' : 'false'"
-                @click="compareOpen = !compareOpen"
-              >
-                <span class="font-label-caps text-[10px] uppercase tracking-widest text-ink-muted">Compare finishes</span>
-                <span class="material-symbols-outlined text-[18px] text-ink-muted" aria-hidden="true">{{ compareOpen ? 'expand_less' : 'expand_more' }}</span>
-              </button>
-              <table v-if="compareOpen" class="w-full text-left text-[12px] border-collapse">
-                <thead>
-                  <tr class="border-b border-border-subtle">
-                    <th class="py-2 pr-2 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium">Feature</th>
-                    <th class="py-2 px-1 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium text-center whitespace-nowrap">Business</th>
-                    <th class="py-2 pl-1 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium text-center whitespace-nowrap">Executive</th>
-                  </tr>
-                </thead>
-                <tbody class="text-on-surface-variant">
-                  <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">NFC + QR → live digital profile</td>
-                    <td class="py-2 px-1 text-center text-primary">✓</td>
-                    <td class="py-2 pl-1 text-center text-primary">✓</td>
-                  </tr>
-                  <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">Once-off </td>
-                    <td class="py-2 px-1 text-center text-primary">✓</td>
-                    <td class="py-2 pl-1 text-center text-primary">✓</td>
-                  </tr>
-                  <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">Product & Service Catalogue</td>
-                    <td class="py-2 px-1 text-center text-primary">✓</td>
-                    <td class="py-2 pl-1 text-center text-primary">✓</td>
-                  </tr>
-                  <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">Meeting booking</td>
-                    <td class="py-2 px-1 text-center text-primary">✓</td>
-                    <td class="py-2 pl-1 text-center text-primary">✓</td>
-                  </tr>
-                  <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">Custom Logo(B&W)</td>
-                    <td class="py-2 px-1 text-center text-primary text-[11px]">✓</td>
-                    <td class="py-2 pl-1 text-center text-primary text-[11px]">✓</td>
-                  </tr>
-                  <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">Team profiles </td>
-                    <td class="py-2 px-1 text-center text-primary">✓</td>
-                    <td class="py-2 pl-1 text-center text-primary">✓</td>
-                  </tr>
-                    <td class="py-2 pr-2 text-on-surface">Custom subdomain</td>
-                    <td class="py-2 px-1 text-center">—</td>
-                    <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">✓</td>
-                  </tr>
-                </tbody>
-              </table>
-              <p v-if="inExecutiveBridge" class="text-[11px] text-on-surface-variant leading-snug">
-                Cards 11–{{ TEAM_FREE_MIX_AFTER }} must be Executive
-                ({{ minExecutiveNeeded }} needed · you have {{ executiveQty }}).
-                After {{ TEAM_FREE_MIX_AFTER }}, mix Business or Executive freely.
-              </p>
-              <p v-else-if="minExecutiveNeeded > 0" class="text-[11px] text-on-surface-variant leading-snug">
-                Keep at least <span class="text-on-surface font-medium">{{ minExecutiveNeeded }} Executive</span>
-                for {{ teamTotal }} cards.
-                <span v-if="!teamOrderReady" class="text-red-600"> {{ teamMixCheck.error }}</span>
-              </p>
-            </div>
           </template>
 
           <p class="text-sm text-on-surface-variant leading-snug">
