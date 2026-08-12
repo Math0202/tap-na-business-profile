@@ -1523,9 +1523,9 @@ async function provisionTeamFromShopQuote(env, {
     .toLowerCase()
   const packageCeiling = executiveQty > 0 ? 'executive_exclusive' : 'business'
   const teamName =
-    String(company || name || 'Connect Team')
+    String(company || name || 'Connect Teams')
       .trim()
-      .slice(0, 120) || 'Connect Team'
+      .slice(0, 120) || 'Connect Teams'
   const id = uid('team')
   const now = new Date().toISOString()
 
@@ -3034,7 +3034,7 @@ async function handleApi(request, env, url) {
     const defaultRole = normalizePersonalType(
       body?.role || card.personal_type || 'business'
     )
-    // Cap by Connect Team package ceiling (highest seat), not current owner's card
+    // Cap by Connect Teams package ceiling (highest seat), not current owner's card
     if (!assignableTeamRoles(packageCeiling).includes(defaultRole)) {
       return bad(
         `This team package only includes ${assignableTeamRoles(packageCeiling).join(', ')} roles`,

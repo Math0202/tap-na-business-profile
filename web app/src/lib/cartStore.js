@@ -140,7 +140,7 @@ export function addToCart(productId, qty = 1) {
   return true
 }
 
-/** Replace Connect Team mix in the cart. Total must be >= TEAM_PACKAGE_MIN. Either line may be 0. */
+/** Replace Connect Teams mix in the cart. Total must be >= TEAM_PACKAGE_MIN. Either line may be 0. */
 export function setTeamPackage({ businessQty = 0, executiveQty = 0, subdomain = '' } = {}) {
   const business = Math.min(99, Math.max(0, Math.floor(Number(businessQty) || 0)))
   const executive = Math.min(99, Math.max(0, Math.floor(Number(executiveQty) || 0)))

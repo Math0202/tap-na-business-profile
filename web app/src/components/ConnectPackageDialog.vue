@@ -61,7 +61,7 @@ const teamSubtotal = computed(
     (executiveProduct.value?.price || 0) * executiveQty.value
 )
 const subtotal = computed(() => (isTeam.value ? teamSubtotal.value : soloSubtotal.value))
-const title = computed(() => (isTeam.value ? 'Connect Teams package' : 'Connect Solo'))
+const title = computed(() => (isTeam.value ? 'Connect Teamss package' : 'Connect Solo'))
 const itemCount = computed(() => (isTeam.value ? teamTotal.value : soloQty.value))
 const cardsNeededForMin = computed(() => Math.max(0, TEAM_PACKAGE_MIN - teamTotal.value))
 const mixStatusLabel = computed(() => {
@@ -384,7 +384,7 @@ async function addPackageToCart() {
                 <tr class="border-b border-border-subtle">
                   <th class="py-2 pr-2 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium">Feature</th>
                   <th class="py-2 px-1 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium text-center whitespace-nowrap">Solo</th>
-                  <th class="py-2 pl-1 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium text-center whitespace-nowrap">Connect Team</th>
+                  <th class="py-2 pl-1 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium text-center whitespace-nowrap">Connect Teams</th>
                 </tr>
               </thead>
               <tbody class="text-on-surface-variant">
@@ -426,14 +426,14 @@ async function addPackageToCart() {
               </tbody>
             </table>
             <p class="text-[11px] text-on-surface-variant leading-snug">
-              Need {{ TEAM_PACKAGE_MIN }}+ cards or a shared team? Choose Connect Team (Business package).
+              Need {{ TEAM_PACKAGE_MIN }}+ cards or a shared team? Choose Connect Teams (Business package).
             </p>
             <button
               type="button"
               class="w-full border border-primary text-primary py-3 font-button-text text-[11px] uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-colors"
               @click="switchToTeam"
             >
-              View Connect Team
+              View Connect Teams
             </button>
           </div>
 
@@ -695,7 +695,7 @@ async function addPackageToCart() {
             </h3>
             <p class="text-sm text-on-surface-variant leading-relaxed">
               Connect Solo is limited to {{ SOLO_PACKAGE_MAX }} cards.
-              For {{ TEAM_PACKAGE_MIN }} or more cards — or a shared team — view the Connect Team package instead.
+              For {{ TEAM_PACKAGE_MIN }} or more cards — or a shared team — view the Connect Teams package instead.
             </p>
           </div>
         </div>
@@ -705,7 +705,7 @@ async function addPackageToCart() {
             class="w-full bg-primary text-on-primary py-3.5 font-button-text text-[12px] uppercase tracking-widest hover:opacity-90"
             @click="switchToTeam"
           >
-            View Connect Team
+            View Connect Teams
           </button>
           <button
             type="button"

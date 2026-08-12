@@ -68,9 +68,9 @@ watch(
 onMounted(async () => {
   document.documentElement.classList.add('shop-home')
   setPageSeo({
-    title: 'Table Top Tap — tap-na',
+    title: 'Venue Display — tap-na',
     description:
-      'NFC Table Top Tap cards for restaurants and businesses. Menus, reviews, Wi-Fi, and guest check-in — tap once at the table.',
+      'NFC Venue Display cards for restaurants and businesses. Menus, reviews, Wi-Fi, and guest check-in — tap once at the table.',
     path: '/table-top'
   })
   await refreshCatalog()
@@ -154,7 +154,7 @@ onUnmounted(() => {
                 Business &amp; Restaurant
               </span>
               <h1 class="font-display-lg text-[40px] md:text-[56px] leading-[1.1] text-on-primary tracking-[-0.02em] font-semibold">
-                Table Top Tap
+                Venue Display
               </h1>
               <p class="text-on-tertiary-container max-w-[90%] md:max-w-md text-body-md">
                 NFC cards for tables — menus, reviews, Wi-Fi, and guest check-in. Guests tap and go. No app required.
@@ -187,7 +187,7 @@ onUnmounted(() => {
           <div class="flex justify-between items-end gap-4">
             <div class="flex flex-col gap-1 min-w-0">
               <h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg uppercase">
-                Table Top Tap
+                Venue Display
               </h2>
               <div class="h-1 w-12 bg-primary" />
               <p class="text-on-surface-variant text-sm mt-1">Business &amp; restaurant NFC</p>
@@ -253,7 +253,7 @@ onUnmounted(() => {
             <span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Shop</span>
             <RouterLink to="/" class="text-on-surface no-underline hover:opacity-70">Connect cards</RouterLink>
             <button type="button" class="text-left text-on-surface hover:opacity-70" @click="scrollToShop">
-              Table Top Tap
+              Venue Display
             </button>
             <RouterLink to="/cart" class="text-on-surface no-underline hover:opacity-70">Cart</RouterLink>
           </div>

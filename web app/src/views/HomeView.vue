@@ -299,7 +299,7 @@ onUnmounted(() => {
         <div
           class="px-margin-mobile md:px-margin-desktop pt-stack-lg grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-10 lg:gap-14 items-start"
         >
-        <!-- Connect Team -->
+        <!-- Connect Teams -->
         <section
           id="connect-team"
           :ref="setSectionRef"
@@ -308,7 +308,7 @@ onUnmounted(() => {
           <div class="flex justify-between items-end gap-4">
             <div class="flex flex-col gap-1 min-w-0">
               <h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg uppercase">
-                Connect Teams
+                Connect Teamss
               </h2>
               <div class="h-1 w-12 bg-primary" />
               <p class="text-on-surface-variant text-sm mt-1">
@@ -542,23 +542,22 @@ onUnmounted(() => {
               class="material-symbols-outlined absolute top-4 left-4 text-surface-variant text-[64px] opacity-30"
               aria-hidden="true"
             >
-              format_quote
+              
             </span>
             <div class="relative z-10 flex flex-col gap-6">
               <p class="font-body-md text-headline-lg-mobile italic text-on-surface-variant leading-relaxed">
-                "The friction in networking is gone. I tap their phone, and I'm in their contacts forever. It's
-                the ultimate professional edge."
+                ""
               </p>
               <div class="flex items-center gap-4">
                 <div
                   class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center font-label-caps"
                 >
-                  JD
+                  --
                 </div>
                 <div class="flex flex-col">
-                  <span class="font-label-caps text-[12px] uppercase font-bold">Julian Draxler</span>
+                  <span class="font-label-caps text-[12px] uppercase font-bold">......</span>
                   <span class="text-[10px] text-ink-muted uppercase tracking-widest">
-                    Architect &amp; Designer
+                    -----
                   </span>
                 </div>
               </div>
@@ -576,7 +575,7 @@ onUnmounted(() => {
               Why TAPna?
             </h2>
             <p class="text-on-surface-variant">
-              Elevating standard interaction into a premium experience.
+              Changing how we network and share contact details..
             </p>
           </div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-10">
@@ -613,7 +612,7 @@ onUnmounted(() => {
         <section :ref="setSectionRef" class="px-margin-mobile md:px-margin-desktop pt-stack-md pb-stack-lg">
           <div class="flex flex-col gap-4 border-t border-border-subtle pt-8 max-w-md">
             <h3 class="font-label-caps text-[10px] uppercase tracking-[0.3em] text-ink-muted">
-              Stay Synced
+              Stay Update
             </h3>
             <div v-if="!subscribed" class="flex flex-col gap-4">
               <input
@@ -629,7 +628,7 @@ onUnmounted(() => {
                 class="bg-primary text-on-primary py-4 font-button-text uppercase tracking-widest text-sm hover:opacity-90 transition-opacity"
                 @click="handleSubscribe"
               >
-                Lets Connect
+                Connect
           </button>
         </div>
             <div v-else class="flex flex-col items-center gap-2 py-4">
@@ -658,10 +657,10 @@ onUnmounted(() => {
               class="text-left text-on-surface hover:opacity-70"
               @click="scrollToTeam"
             >
-              Connect Team
+              Connect Teams
             </button>
             <RouterLink to="/table-top" class="text-on-surface no-underline hover:opacity-70">
-              Table Top Tap
+              Venue Display
             </RouterLink>
             <RouterLink to="/cart" class="text-on-surface no-underline hover:opacity-70">
               Cart

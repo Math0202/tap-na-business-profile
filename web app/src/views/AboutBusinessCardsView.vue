@@ -41,7 +41,7 @@ onUnmounted(() => {
             Digital Business Cards
           </h1>
           <p class="text-on-surface-variant text-base leading-relaxed max-w-2xl">
-            <strong class="text-on-surface font-semibold">Tap - Share:</strong> Phone, email, website, Social Links, Products &amp; Services, Get Meeting booking.
+            <strong class="text-on-surface font-semibold">Tap - Share:</strong> Phone, Email, Website, Social-links, Products &amp; Services, Get Meeting booking.
           </p>
           <div class="flex flex-wrap gap-3 mt-2">
             <button
@@ -86,14 +86,14 @@ onUnmounted(() => {
               <span class="material-symbols-outlined text-primary shrink-0">local_shipping</span>
               <div>
                 <p class="font-medium text-sm">Free Windhoek delivery</p>
-                <p class="text-xs text-on-surface-variant mt-1">Order online. Made to order. Typically 1-4 working days.</p>
+                <p class="text-xs text-on-surface-variant mt-1">Order online. Made to order. It takes 1-4 working days.</p>
               </div>
             </li>
             <li class="bg-surface-container rounded-xl p-4 flex gap-3">
               <span class="material-symbols-outlined text-primary shrink-0">security</span>
               <div>
                 <p class="font-medium text-sm">Durable</p>
-                <p class="text-xs text-on-surface-variant mt-1">As durable as a bank card.</p>
+                <p class="text-xs text-on-surface-variant mt-1">Cards last longer.</p>
               </div>
             </li>
             <li class="bg-surface-container rounded-xl p-4 flex gap-3">
@@ -198,7 +198,7 @@ onUnmounted(() => {
                 <span class="font-label-caps text-[10px] uppercase tracking-widest bg-primary text-on-primary px-2 py-1">Best Seller</span>
               </div>
               <p class="text-sm text-on-surface-variant leading-relaxed">
-                For teams. Meeting booking, share catalogue, team profiles, and company logo in black &amp; white (charcoal card).
+                For teams. Meeting booking, share catalogue, team profiles, and company logo(W&amp;B) (charcoal card).
               </p>
             </article>
             <article class="border border-border-subtle rounded-xl p-5 flex flex-col gap-2">
@@ -207,7 +207,7 @@ onUnmounted(() => {
                 <span class="font-label-caps text-[10px] uppercase tracking-widest bg-surface-charcoal text-on-primary px-2 py-1">Executive</span>
               </div>
               <p class="text-sm text-on-surface-variant leading-relaxed">
-                Matte black flagship for leaders and larger teams (5–20+). black &amp; white company logo, fuller team tools, and a company subdomain
+                Matte black flagship for leaders and larger teams (5+). Company logo(B&amp;W), team management tool, and a company subdomain
                 such as <strong class="text-on-surface">cards.companyname.com</strong>.
               </p>
             </article>
@@ -332,7 +332,7 @@ onUnmounted(() => {
             <div>
               <p class="font-medium text-sm">2. Can I customise Professional?</p>
               <p class="text-sm text-on-surface-variant mt-1 leading-relaxed">
-                No — Professional is a standard pack. Choose Business or Executive for company logo branding in black &amp; white.
+                No — Professional is a standard pack. Choose Business or Executive for company logo branding in B&amp;W.
               </p>
             </div>
             <div>

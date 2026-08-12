@@ -80,12 +80,12 @@ export const ROUTE_SEO = {
       'Shop NFC Connect business cards for professionals and teams. Professional, Business, and Executive classes. Once-off purchase. Free delivery in Windhoek in 1-3 working days.'
   },
   'table-top': {
-    title: 'Table Top Tap — tap-na',
+    title: 'Venue Display — tap-na',
     description:
-      'NFC Table Top Tap cards for restaurants and businesses. Menus, reviews, Wi-Fi, and guest check-in — tap once at the table.'
+      'NFC Venue Display cards for restaurants and businesses. Menus, reviews, Wi-Fi, and guest check-in — tap once at the table.'
   },
   'team-package': {
-    title: 'Connect Teams package — tap-na',
+    title: 'Connect Teamss package — tap-na',
     description:
       'Combine Business and Executive Connect cards. Business alone max 10. Cards 11–15 must be Executive, then free mix. Subdomain from 5 Executive.'
   },
