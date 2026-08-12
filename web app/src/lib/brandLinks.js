@@ -15,5 +15,5 @@ export const BRAND_SOCIAL_LINKS = [
   { id: 'instagram', label: 'Instagram', href: BRAND_INSTAGRAM_HREF, icon: 'photo_camera' },
   { id: 'linkedin', label: 'LinkedIn', href: BRAND_LINKEDIN_HREF, icon: 'work' },
   { id: 'facebook', label: 'Facebook', href: BRAND_FACEBOOK_HREF, icon: 'public' },
-  { id: 'whatsapp', label: 'WhatsApp', href: BRAND_WHATSAPP_HREF, icon: 'chat', detail: BRAND_WHATSAPP_DISPLAY }
+  { id: 'whatsapp', label: 'WhatsApp', href: BRAND_WHATSAPP_HREF, icon: 'chat' }
 ]
