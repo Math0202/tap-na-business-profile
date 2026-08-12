@@ -70,42 +70,41 @@ export function bankingReferenceAdvice(docNumber, { kind } = {}) {
   return `Please use your ${label} number as the payment reference: ${num}`
 }
 
-export function bankingDetailsLines(docNumber, { kind } = {}) {
+export function bankingDetailsLines(_docNumber, { kind: _kind } = {}) {
   const b = BANKING_DETAILS
   return [
-    bankingReferenceAdvice(docNumber, { kind }),
-    `Reference: ${String(docNumber || '').trim() || (kind === 'quote' ? 'Quote number' : 'Invoice number')}`,
-    `Account holder: ${b.accountHolder}`,
-    `Account type: ${b.accountType}`,
-    `Account number: ${b.accountNumber}`,
-    `Branch code: ${b.branchCode}`,
-    `Swift code: ${b.swiftCode}`
+    `Account Holder ${b.accountHolder}`,
+    `Account Type ${b.accountType}`,
+    `Account Number ${b.accountNumber}`,
+    `Branch Code ${b.branchCode}`,
+    `Swift Code ${b.swiftCode}`
   ]
 }
 
 export function bankingDetailsHtml(docNumber, { kind } = {}) {
-  const lines = bankingDetailsLines(docNumber, { kind })
-  const advice = escapeHtml(lines[0])
-  const rows = lines
-    .slice(1)
-    .map((line) => {
-      const idx = line.indexOf(':')
-      if (idx < 0) return `<div>${escapeHtml(line)}</div>`
-      const label = escapeHtml(line.slice(0, idx + 1))
-      const value = escapeHtml(line.slice(idx + 1).trim())
-      return `<div><span style="color:#777;">${label}</span> ${value}</div>`
-    })
+  void docNumber
+  void kind
+  const b = BANKING_DETAILS
+  const rows = [
+    ['Account Holder', b.accountHolder],
+    ['Account Type', b.accountType],
+    ['Account Number', b.accountNumber],
+    ['Branch Code', b.branchCode],
+    ['Swift Code', b.swiftCode]
+  ]
+    .map(
+      ([label, value]) =>
+        `<div><span style="color:#777;">${escapeHtml(label)}</span> ${escapeHtml(value)}</div>`
+    )
     .join('')
   return `
-  <div style="margin:16px 0;padding:14px 16px;border:1px solid #e5e5e5;border-radius:12px;background:#fafafa;font-size:13px;line-height:1.55;">
-    <p style="margin:0 0 8px;font-weight:700;font-size:14px;">Banking details</p>
-    <p style="margin:0 0 10px;color:#444;">${advice}</p>
+  <div style="margin:16px 0 0;font-size:13px;line-height:1.6;">
     ${rows}
   </div>`.trim()
 }
 
 export function bankingDetailsText(docNumber, { kind } = {}) {
-  return ['Banking details', ...bankingDetailsLines(docNumber, { kind })].join('\n')
+  return bankingDetailsLines(docNumber, { kind }).join('\n')
 }
 
 
@@ -1154,19 +1153,24 @@ function companyContactBlockHtml() {
   </p>`.trim()
 }
 
-function productImageHtml(productId) {
+function productImageHtml(productId, { size = 72 } = {}) {
   const img = resolveProductImage(productId)
   if (!img.src && !img.absolute) return ''
-  // Prefer CID for reliable inline display; public URLs also work for /images/*
-  if (img.isData) {
-    return `<img src="cid:product-image" alt="Product" width="180" style="display:block;max-width:180px;border-radius:12px;margin:0 0 16px;border:1px solid #eee;" />`
-  }
-  return `<img src="${escapeHtml(img.absolute)}" alt="Product" width="180" style="display:block;max-width:180px;border-radius:12px;margin:0 0 16px;border:1px solid #eee;" />`
+  const src = img.isData ? 'cid:product-image' : img.absolute
+  return `<img src="${escapeHtml(src)}" alt="" width="${size}" height="${size}" style="display:inline-block;width:${size}px;height:${size}px;object-fit:cover;margin:0 8px 0 0;border:1px solid #eee;vertical-align:top;" />`
 }
 
 function linesImageHtml(doc) {
   const lines = normalizeLines(doc.lines, doc)
-  return productImageHtml(lines[0]?.productId)
+  const ids = []
+  for (const line of lines) {
+    const id = String(line.productId || '').trim()
+    if (id && !ids.includes(id)) ids.push(id)
+  }
+  if (!ids.length && doc?.productId) ids.push(String(doc.productId))
+  const imgs = ids.map((id) => productImageHtml(id)).filter(Boolean).join('')
+  if (!imgs) return ''
+  return `<div style="margin:0 0 16px;line-height:0;">${imgs}</div>`
 }
 
 function linesTableRowsHtml(doc) {
@@ -1200,23 +1204,26 @@ export function buildInvoiceEmailPayload(invoice, { to } = {}) {
         day: 'numeric'
       })
     : ''
+  const paymentMethod = String(invoice.paymentMethod || 'eft').trim() || 'eft'
   const html = `
 <!DOCTYPE html>
 <html>
 <body style="font-family:Arial,sans-serif;color:#111;line-height:1.5;max-width:560px;margin:0 auto;padding:24px;">
-  <h1 style="font-size:20px;margin:0 0 4px;">${escapeHtml(COMPANY.name)}</h1>
-  <p style="margin:0 0 4px;color:#555;font-size:13px;">${escapeHtml(COMPANY.legalName)}</p>
-  <p style="margin:0 0 20px;color:#555;font-size:13px;">${escapeHtml(COMPANY.address)}<br>${escapeHtml(COMPANY.phone)} · ${escapeHtml(COMPANY.email)}</p>
-  <h2 style="font-size:18px;margin:0 0 8px;">Invoice ${escapeHtml(invoice.invoiceNumber)}</h2>
+  <div style="text-align:right;margin:0 0 28px;">
+    <div style="font-size:18px;font-weight:700;margin:0 0 4px;">${escapeHtml(COMPANY.name)}</div>
+    <div style="font-size:13px;color:#555;">${escapeHtml(COMPANY.legalName)}</div>
+    <div style="font-size:13px;color:#555;">${escapeHtml(COMPANY.address)}</div>
+    <div style="font-size:13px;color:#555;">${escapeHtml(COMPANY.phone)} | ${escapeHtml(COMPANY.email)}</div>
+  </div>
+  <h2 style="font-size:18px;margin:0 0 4px;font-weight:700;">Invoice ${escapeHtml(invoice.invoiceNumber)}</h2>
   <p style="margin:0 0 16px;color:#555;font-size:13px;">Issued ${escapeHtml(issued)}</p>
-  ${linesImageHtml(invoice)}
   <p style="margin:0 0 4px;"><strong>Bill to</strong></p>
   <p style="margin:0 0 16px;">
     ${escapeHtml(invoice.customerName)}<br>
     ${escapeHtml(invoice.customerEmail || '')}<br>
-    ${escapeHtml(invoice.customerPhone || '')}<br>
     ${escapeHtml(invoice.customerAddress || '')}
   </p>
+  ${linesImageHtml(invoice)}
   <table style="width:100%;border-collapse:collapse;margin:0 0 16px;font-size:14px;">
     <thead>
       <tr style="border-bottom:1px solid #ddd;text-align:left;">
@@ -1230,34 +1237,38 @@ export function buildInvoiceEmailPayload(invoice, { to } = {}) {
       ${linesTableRowsHtml(invoice)}
     </tbody>
   </table>
-  <p style="font-size:16px;font-weight:700;margin:0 0 16px;">Amount due: ${escapeHtml(formatMoney(invoice.amount))}</p>
-  <p style="font-size:12px;color:#777;margin:0;">Payment: ${escapeHtml(invoice.paymentMethod || '—')}${invoice.notes ? ' · ' + escapeHtml(invoice.notes) : ''}</p>
+  <p style="font-size:15px;font-weight:700;margin:0 0 6px;">Amount due: ${escapeHtml(formatMoney(invoice.amount))}</p>
+  <p style="font-size:13px;margin:0 0 16px;">Payment method: ${escapeHtml(paymentMethod)}</p>
   ${
     shouldIncludeBankingDetails(invoice, { kind: 'invoice' })
       ? bankingDetailsHtml(invoice.invoiceNumber, { kind: 'invoice' })
       : ''
   }
-  <p style="font-size:12px;color:#777;margin:12px 0 0;">A PDF copy of this invoice is attached.</p>
-  ${companyContactBlockHtml()}
 </body>
 </html>`.trim()
 
   const text = [
-    `${COMPANY.name} — Invoice ${invoice.invoiceNumber}`,
+    COMPANY.name,
     COMPANY.legalName,
     COMPANY.address,
-    `${COMPANY.phone} · ${COMPANY.email}`,
+    `${COMPANY.phone} | ${COMPANY.email}`,
     '',
-    `Bill to: ${invoice.customerName}`,
+    `Invoice ${invoice.invoiceNumber}`,
+    `Issued ${issued}`,
+    '',
+    'Bill to',
+    invoice.customerName,
+    invoice.customerEmail || '',
     invoice.customerAddress || '',
+    '',
     linesTextBlock(invoice),
-    `Total: ${formatMoney(invoice.amount)}`,
-    `Payment: ${invoice.paymentMethod || '—'}`,
+    '',
+    `Amount due: ${formatMoney(invoice.amount)}`,
+    `Payment method: ${paymentMethod}`,
     '',
     ...(shouldIncludeBankingDetails(invoice, { kind: 'invoice' })
-      ? [bankingDetailsText(invoice.invoiceNumber, { kind: 'invoice' }), '']
-      : []),
-    'A PDF copy of this invoice is attached.'
+      ? [bankingDetailsText(invoice.invoiceNumber, { kind: 'invoice' })]
+      : [])
   ].join('\n')
 
   return {

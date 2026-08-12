@@ -9,12 +9,13 @@ import {
   normalizeLines,
   resolveProductImage,
   BANKING_DETAILS,
-  shouldIncludeBankingDetails,
-  bankingReferenceAdvice
+  shouldIncludeBankingDetails
 } from './salesStore'
 
+const LOGO_SRC = '/images/tap-na_logo.png'
+
 function formatDay(iso) {
-  if (!iso) return '-'
+  if (!iso) return '—'
   try {
     return new Date(iso).toLocaleDateString(undefined, {
       year: 'numeric',
@@ -22,7 +23,7 @@ function formatDay(iso) {
       day: 'numeric'
     })
   } catch {
-    return '-'
+    return '—'
   }
 }
 
@@ -49,7 +50,7 @@ function loadImageAsDataUrl(src) {
         ctx.fillStyle = '#ffffff'
         ctx.fillRect(0, 0, canvas.width, canvas.height)
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-        resolve(canvas.toDataURL('image/jpeg', 0.82))
+        resolve(canvas.toDataURL('image/jpeg', 0.85))
       } catch {
         resolve('')
       }
@@ -65,177 +66,202 @@ function dataUrlParts(dataUrl) {
   return { mime: m[1], base64: m[2] }
 }
 
-function drawHeader(doc, title, subtitle) {
+function imageFormat(dataUrl) {
+  return String(dataUrl || '').includes('image/png') ? 'PNG' : 'JPEG'
+}
+
+function ensureSpace(doc, y, need = 24) {
+  if (y + need <= 280) return y
+  doc.addPage()
+  return 20
+}
+
+function drawCompanyBlockTopRight(doc, logoDataUrl) {
+  const right = 190
+  let y = 18
+
+  let showedLogo = false
+  if (logoDataUrl) {
+    try {
+      const w = 28
+      const h = 12
+      doc.addImage(logoDataUrl, imageFormat(logoDataUrl), right - w, y - 4, w, h, undefined, 'FAST')
+      y += 12
+      showedLogo = true
+    } catch {
+      /* skip logo */
+    }
+  }
+
+  if (!showedLogo) {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(14)
+    doc.setTextColor(17, 17, 17)
+    doc.text(COMPANY.name, right, y, { align: 'right' })
+    y += 5
+  }
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(70, 70, 70)
+  doc.text(COMPANY.legalName, right, y, { align: 'right' })
+  y += 4
+  doc.text(COMPANY.address, right, y, { align: 'right' })
+  y += 4
+  doc.text(`${COMPANY.phone} | ${COMPANY.email}`, right, y, { align: 'right' })
+  return y + 10
+}
+
+function drawBillTo(doc, row, y) {
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(18)
+  doc.setFontSize(10)
   doc.setTextColor(17, 17, 17)
-  doc.text(COMPANY.name, 20, 22)
+  doc.text('Bill to', 20, y)
+  y += 5
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(10)
-  doc.setTextColor(80, 80, 80)
-  doc.text(COMPANY.legalName, 20, 28)
-  doc.text(COMPANY.address, 20, 33)
-  doc.text(COMPANY.phone + '  |  ' + COMPANY.email, 20, 38)
+  doc.setTextColor(40, 40, 40)
+  const lines = [row.customerName, row.customerEmail, row.customerAddress].filter(
+    (v) => String(v || '').trim()
+  )
+  for (const line of lines) {
+    const wrapped = doc.splitTextToSize(String(line), 110)
+    doc.text(wrapped, 20, y)
+    y += wrapped.length * 4.5
+  }
+  return y + 6
+}
+
+function drawProductImageRow(doc, imageDataUrls, y) {
+  const images = (imageDataUrls || []).filter(Boolean).slice(0, 6)
+  if (!images.length) return y
+
+  y = ensureSpace(doc, y, 42)
+  const size = 32
+  const gap = 4
+  let x = 20
+  for (const dataUrl of images) {
+    try {
+      doc.addImage(dataUrl, imageFormat(dataUrl), x, y, size, size, undefined, 'FAST')
+      x += size + gap
+      if (x + size > 190) break
+    } catch {
+      /* skip broken image */
+    }
+  }
+  return y + size + 8
+}
+
+function drawMinimalTable(doc, lines, y) {
+  y = ensureSpace(doc, y, 28)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(9)
+  doc.setTextColor(17, 17, 17)
+  doc.text('Item', 20, y)
+  doc.text('Qty', 112, y)
+  doc.text('Unit', 132, y)
+  doc.text('Total', 190, y, { align: 'right' })
+  y += 2
+  doc.setDrawColor(210, 210, 210)
+  doc.setLineWidth(0.3)
+  doc.line(20, y, 190, y)
+  y += 6
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(10)
+  doc.setTextColor(30, 30, 30)
+  for (const line of lines) {
+    y = ensureSpace(doc, y, 12)
+    const nameLines = doc.splitTextToSize(String(line.productName || 'Product'), 88)
+    doc.text(nameLines, 20, y)
+    doc.text(String(line.quantity || 1), 112, y)
+    doc.text(formatMoney(line.unitPrice), 132, y)
+    doc.text(formatMoney(line.amount), 190, y, { align: 'right' })
+    y += Math.max(7, nameLines.length * 4.5) + 2
+  }
+  doc.setDrawColor(210, 210, 210)
+  doc.line(20, y, 190, y)
+  return y + 8
+}
+
+function drawTotals(doc, row, isInvoice, y) {
+  y = ensureSpace(doc, y, 18)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(12)
+  doc.setTextColor(17, 17, 17)
+  doc.text(
+    isInvoice ? `Amount due: ${formatMoney(row.amount)}` : `Quoted total: ${formatMoney(row.amount)}`,
+    20,
+    y
+  )
+  y += 7
+
+  if (isInvoice) {
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(10)
+    doc.setTextColor(50, 50, 50)
+    const method = String(row.paymentMethod || 'eft').trim() || 'eft'
+    doc.text(`Payment method: ${method}`, 20, y)
+    y += 8
+  }
+  return y
+}
+
+function drawBanking(doc, y) {
+  y = ensureSpace(doc, y, 36)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(10)
+  const rows = [
+    ['Account Holder', BANKING_DETAILS.accountHolder],
+    ['Account Type', BANKING_DETAILS.accountType],
+    ['Account Number', BANKING_DETAILS.accountNumber],
+    ['Branch Code', BANKING_DETAILS.branchCode],
+    ['Swift Code', BANKING_DETAILS.swiftCode]
+  ]
+  for (const [label, value] of rows) {
+    y = ensureSpace(doc, y, 6)
+    doc.setTextColor(110, 110, 110)
+    doc.text(label, 20, y)
+    doc.setTextColor(25, 25, 25)
+    doc.text(String(value || ''), 68, y)
+    y += 5.2
+  }
+  return y
+}
+
+async function buildPdfBytes({ kind, row, logoDataUrl, lineImageDataUrls }) {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  const isInvoice = kind === 'invoice'
+  const number = isInvoice ? row.invoiceNumber : row.quoteNumber
+  const lines = normalizeLines(row.lines, row)
+
+  let y = drawCompanyBlockTopRight(doc, logoDataUrl)
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(16)
   doc.setTextColor(17, 17, 17)
-  doc.text(title, 20, 52)
-
-  if (subtitle) {
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(10)
-    doc.setTextColor(90, 90, 90)
-    doc.text(subtitle, 20, 58)
-  }
-}
-
-function drawCustomer(doc, label, docRow, y) {
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(10)
-  doc.setTextColor(17, 17, 17)
-  doc.text(label, 20, y)
+  doc.text(isInvoice ? `Invoice ${number || ''}` : `Quote ${number || ''}`, 20, y)
+  y += 6
 
   doc.setFont('helvetica', 'normal')
-  doc.setTextColor(50, 50, 50)
-  const lines = [
-    docRow.customerName,
-    docRow.customerEmail,
-    docRow.customerPhone,
-    docRow.customerAddress
-  ].filter(Boolean)
-  let yy = y + 5
-  for (const line of lines) {
-    doc.text(String(line), 20, yy)
-    yy += 5
-  }
-  return yy + 4
-}
-
-async function buildPdfBytes({ kind, row, imageDataUrl }) {
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
-  const isInvoice = kind === 'invoice'
-  const number = isInvoice ? row.invoiceNumber : row.quoteNumber
-  const title = isInvoice ? ('Invoice ' + number) : ('Quote ' + number)
-  const subtitle = isInvoice
-    ? ('Issued ' + formatDay(row.issuedAt))
-    : ('Valid until ' + formatDay(row.validUntil))
-  const lines = normalizeLines(row.lines, row)
-
-  drawHeader(doc, title, subtitle)
-  let y = drawCustomer(doc, isInvoice ? 'Bill to' : 'Prepared for', row, 68)
-
-  if (imageDataUrl) {
-    try {
-      const fmt = imageDataUrl.includes('image/png') ? 'PNG' : 'JPEG'
-      doc.addImage(imageDataUrl, fmt, 130, 64, 55, 55, undefined, 'FAST')
-    } catch {
-      /* skip image if unsupported */
-    }
-  }
-
-  y = Math.max(y, 128)
-  doc.setDrawColor(220, 220, 220)
-  doc.line(20, y, 190, y)
-  y += 8
-
-  doc.setFont('helvetica', 'bold')
   doc.setFontSize(10)
-  doc.setTextColor(17, 17, 17)
-  doc.text('Item', 20, y)
-  doc.text('Qty', 110, y)
-  doc.text('Unit', 130, y)
-  doc.text('Total', 170, y, { align: 'right' })
-  y += 3
-  doc.line(20, y, 190, y)
-  y += 8
-
-  doc.setFont('helvetica', 'normal')
-  for (const line of lines) {
-    if (y > 265) {
-      doc.addPage()
-      y = 20
-    }
-    const nameLines = doc.splitTextToSize(String(line.productName || 'Product'), 85)
-    doc.text(nameLines, 20, y)
-    doc.text(String(line.quantity || 1), 110, y)
-    doc.text(formatMoney(line.unitPrice), 130, y)
-    doc.text(formatMoney(line.amount), 190, y, { align: 'right' })
-    y += Math.max(8, nameLines.length * 5)
-  }
-  doc.line(20, y, 190, y)
-  y += 10
-
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(13)
-  doc.setTextColor(17, 17, 17)
+  doc.setTextColor(80, 80, 80)
   doc.text(
-    isInvoice ? ('Amount due: ' + formatMoney(row.amount)) : ('Quoted total: ' + formatMoney(row.amount)),
+    isInvoice ? `Issued ${formatDay(row.issuedAt)}` : `Valid until ${formatDay(row.validUntil)}`,
     20,
     y
   )
-  y += 8
+  y += 10
 
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(10)
-  doc.setTextColor(90, 90, 90)
-  if (isInvoice) {
-    doc.text('Payment method: ' + (row.paymentMethod || '-'), 20, y)
-    y += 5
-  }
-  if (row.notes) {
-    const notes = doc.splitTextToSize('Notes: ' + row.notes, 170)
-    doc.text(notes, 20, y)
-    y += notes.length * 5
-  }
+  y = drawBillTo(doc, row, y)
+  y = drawProductImageRow(doc, lineImageDataUrls, y)
+  y = drawMinimalTable(doc, lines, y)
+  y = drawTotals(doc, row, isInvoice, y)
 
   if (shouldIncludeBankingDetails(row, { kind })) {
-    if (y > 220) {
-      doc.addPage()
-      y = 20
-    } else {
-      y += 6
-    }
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(11)
-    doc.setTextColor(17, 17, 17)
-    doc.text('Banking details', 20, y)
-    y += 6
-
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(9)
-    doc.setTextColor(50, 50, 50)
-    const advice = doc.splitTextToSize(bankingReferenceAdvice(number, { kind }), 170)
-    doc.text(advice, 20, y)
-    y += advice.length * 4.5 + 2
-
-    const bankLines = [
-      ['Reference', number],
-      ['Account holder', BANKING_DETAILS.accountHolder],
-      ['Account type', BANKING_DETAILS.accountType],
-      ['Account number', BANKING_DETAILS.accountNumber],
-      ['Branch code', BANKING_DETAILS.branchCode],
-      ['Swift code', BANKING_DETAILS.swiftCode]
-    ]
-    for (const [label, value] of bankLines) {
-      if (y > 275) {
-        doc.addPage()
-        y = 20
-      }
-      doc.setTextColor(110, 110, 110)
-      doc.text(label + ':', 20, y)
-      doc.setTextColor(30, 30, 30)
-      doc.text(String(value), 55, y)
-      y += 5
-    }
+    y = drawBanking(doc, y)
   }
-
-  y = Math.max(y + 16, 250)
-  doc.setFontSize(9)
-  doc.setTextColor(120, 120, 120)
-  doc.text(COMPANY.legalName + ' | ' + COMPANY.address, 20, y)
-  doc.text(COMPANY.phone + ' | ' + COMPANY.email, 20, y + 5)
 
   return doc.output('arraybuffer')
 }
@@ -262,6 +288,26 @@ function triggerDownload(bytes, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1500)
 }
 
+async function loadLineImages(doc) {
+  const lines = normalizeLines(doc?.lines, doc || {})
+  const ids = []
+  for (const line of lines) {
+    const id = String(line.productId || '').trim()
+    if (id && !ids.includes(id)) ids.push(id)
+  }
+  if (!ids.length) {
+    const fallback = String(doc?.productId || '').trim()
+    if (fallback) ids.push(fallback)
+  }
+  const urls = await Promise.all(
+    ids.map(async (id) => {
+      const resolved = resolveProductImage(id)
+      return loadImageAsDataUrl(resolved.src || resolved.absolute)
+    })
+  )
+  return urls.filter(Boolean)
+}
+
 export async function prepareDocumentMedia(productId) {
   const resolved = resolveProductImage(productId)
   const dataUrl = await loadImageAsDataUrl(resolved.src || resolved.absolute)
@@ -284,34 +330,33 @@ function primaryProductId(doc) {
   return lines[0]?.productId || doc?.productId || ''
 }
 
-export async function generateInvoicePdf(invoice) {
-  const media = await prepareDocumentMedia(primaryProductId(invoice))
+async function generateDocPdf(kind, row) {
+  const [logoDataUrl, lineImageDataUrls, media] = await Promise.all([
+    loadImageAsDataUrl(LOGO_SRC),
+    loadLineImages(row),
+    prepareDocumentMedia(primaryProductId(row))
+  ])
   const bytes = await buildPdfBytes({
-    kind: 'invoice',
-    row: invoice,
-    imageDataUrl: media.imageDataUrl
+    kind,
+    row,
+    logoDataUrl,
+    lineImageDataUrls: lineImageDataUrls.length ? lineImageDataUrls : [media.imageDataUrl].filter(Boolean)
   })
+  const number = kind === 'invoice' ? row.invoiceNumber : row.quoteNumber
   return {
     ...media,
     bytes,
     base64: bytesToBase64(bytes),
-    filename: (invoice.invoiceNumber || 'invoice') + '.pdf'
+    filename: (number || kind) + '.pdf'
   }
 }
 
+export async function generateInvoicePdf(invoice) {
+  return generateDocPdf('invoice', invoice)
+}
+
 export async function generateQuotePdf(quote) {
-  const media = await prepareDocumentMedia(primaryProductId(quote))
-  const bytes = await buildPdfBytes({
-    kind: 'quote',
-    row: quote,
-    imageDataUrl: media.imageDataUrl
-  })
-  return {
-    ...media,
-    bytes,
-    base64: bytesToBase64(bytes),
-    filename: (quote.quoteNumber || 'quote') + '.pdf'
-  }
+  return generateDocPdf('quote', quote)
 }
 
 export async function downloadInvoicePdf(invoice) {
