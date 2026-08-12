@@ -453,12 +453,9 @@ onUnmounted(() => {
         >
           <div class="flex flex-col gap-1 max-w-2xl">
             <h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg uppercase">
-              Feature matrix
+              Features
             </h2>
             <div class="h-1 w-12 bg-primary" />
-            <p class="text-on-surface-variant text-sm mt-1">
-              Solo vs Connect Team finishes — Business and Executive differences.
-            </p>
           </div>
           <div class="overflow-x-auto -mx-1 px-1">
             <table class="w-full min-w-[560px] text-left text-sm border-collapse">
@@ -486,40 +483,52 @@ onUnmounted(() => {
                   <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
                 <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Once-off (no monthly fee)</td>
+                  <td class="py-3 pr-4 text-on-surface">Contact Details</td>
                   <td class="py-3 px-2 text-center text-primary">✓</td>
                   <td class="py-3 px-2 text-center text-primary">✓</td>
                   <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
                 <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Catalogue &amp; book meeting</td>
+                  <td class="py-3 pr-4 text-on-surface">Products &amp; Services Catalogue</td>
                   <td class="py-3 px-2 text-center text-primary">✓</td>
                   <td class="py-3 px-2 text-center text-primary">✓</td>
                   <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
                 <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Custom logo on card</td>
+                  <td class="py-3 pr-4 text-on-surface">Meeting Booking</td>
+                  <td class="py-3 px-2 text-center text-primary">✓</td>
+                  <td class="py-3 px-2 text-center text-primary">✓</td>
+                  <td class="py-3 pl-2 text-center text-primary">✓</td>
+                </tr>
+                <tr class="border-b border-border-subtle/70">
+                  <td class="py-3 pr-4 text-on-surface">Profile Sharing</td>
+                  <td class="py-3 px-2 text-center text-primary">✓</td>
+                  <td class="py-3 px-2 text-center text-primary">✓</td>
+                  <td class="py-3 pl-2 text-center text-primary">✓</td>
+                </tr>
+                <tr class="border-b border-border-subtle/70">
+                  <td class="py-3 pr-4 text-on-surface">Team profiles</td>
                   <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center text-primary text-xs">✓</td>
-                  <td class="py-3 pl-2 text-center text-primary text-xs">✓</td>
+                  <td class="py-3 px-2 text-center text-primary">✓</td>
+                  <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
                 <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Team profiles </td>
+                  <td class="py-3 pr-4 text-on-surface">Customization</td>
                   <td class="py-3 px-2 text-center">—</td>
                   <td class="py-3 px-2 text-center text-primary">✓</td>
                   <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
                 <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Buy alone</td>
-                  <td class="py-3 px-2 text-center text-xs">✓</td>
-                  <td class="py-3 px-2 text-center text-xs leading-snug">-</td>
-                  <td class="py-3 pl-2 text-center text-xs leading-snug">-</td>
-                </tr>
-                <tr>
                   <td class="py-3 pr-4 text-on-surface">Custom subdomain</td>
                   <td class="py-3 px-2 text-center">—</td>
                   <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 pl-2 text-center text-primary text-xs leading-snug">From 5</td>
+                  <td class="py-3 pl-2 text-center text-primary">✓</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4 text-on-surface">Custom logo on card</td>
+                  <td class="py-3 px-2 text-center">—</td>
+                  <td class="py-3 px-2 text-center text-primary">✓</td>
+                  <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
               </tbody>
             </table>
