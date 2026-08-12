@@ -5615,7 +5615,10 @@ async function handleApi(request, env, url) {
     const money = (n) =>
       'N$ ' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 
-    const quoteRef = `SQ-${Date.now().toString(36).toUpperCase()}`
+    const quoteRefRaw = String(body?.quoteRef || '').trim()
+    const quoteRef = /^SQ-[A-Z0-9]+$/i.test(quoteRefRaw)
+      ? quoteRefRaw.toUpperCase()
+      : `SQ-${Date.now().toString(36).toUpperCase()}`
     const salesCopyTo = 'sales@tapnam.com'
     const from = defaultEmailFrom(env)
     const subject = `Quote ${quoteRef} — ${name}`
@@ -5624,6 +5627,25 @@ async function handleApi(request, env, url) {
       month: 'long',
       day: 'numeric'
     })
+    let validUntilLabel = ''
+    const validUntilRaw = body?.validUntil || body?.valid_until
+    if (validUntilRaw) {
+      const d = new Date(validUntilRaw)
+      if (!Number.isNaN(d.getTime())) {
+        validUntilLabel = d.toLocaleDateString('en-GB', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        })
+      }
+    }
+    if (!validUntilLabel) {
+      validUntilLabel = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })
+    }
     const origin = 'https://tapnam.com'
     const logoUrl = `${origin}/images/tap-na_logo.png`
     const banking = {
@@ -5694,7 +5716,8 @@ async function handleApi(request, env, url) {
     </div>
   </div>
   <h2 style="font-size:18px;margin:0 0 4px;font-weight:700;">Quote ${escapeHtml(quoteRef)}</h2>
-  <p style="margin:0 0 16px;color:#555;font-size:13px;">Issued ${escapeHtml(issued)}</p>
+  <p style="margin:0 0 4px;color:#555;font-size:13px;">Issued ${escapeHtml(issued)}</p>
+  <p style="margin:0 0 16px;color:#555;font-size:13px;">Valid until ${escapeHtml(validUntilLabel)}</p>
   <p style="margin:0 0 4px;"><strong>Bill to</strong></p>
   <p style="margin:0 0 16px;">
     ${escapeHtml(name)}<br>
@@ -5713,7 +5736,7 @@ async function handleApi(request, env, url) {
     </thead>
     <tbody>${rowsHtml}</tbody>
   </table>
-  <p style="font-size:15px;font-weight:700;margin:0 0 6px;">Amount due: ${escapeHtml(money(subtotal))}</p>
+  <p style="font-size:15px;font-weight:700;margin:0 0 6px;">Quoted total: ${escapeHtml(money(subtotal))}</p>
   <p style="font-size:13px;margin:0 0 16px;">Payment method: eft</p>
   ${bankingHtml}
 </body>
@@ -5727,6 +5750,7 @@ async function handleApi(request, env, url) {
       '',
       `Quote ${quoteRef}`,
       `Issued ${issued}`,
+      `Valid until ${validUntilLabel}`,
       '',
       'Bill to',
       name,
@@ -5735,7 +5759,7 @@ async function handleApi(request, env, url) {
       '',
       ...lines.map((l) => `${l.name} × ${l.qty} @ ${money(l.price)} = ${money(l.lineTotal)}`),
       '',
-      `Amount due: ${money(subtotal)}`,
+      `Quoted total: ${money(subtotal)}`,
       'Payment method: eft',
       '',
       `Account Holder ${banking.accountHolder}`,
@@ -5754,6 +5778,7 @@ async function handleApi(request, env, url) {
       '',
       `Quote ${quoteRef}`,
       `Issued ${issued}`,
+      `Valid until ${validUntilLabel}`,
       '',
       'Bill to',
       name,
@@ -5763,7 +5788,7 @@ async function handleApi(request, env, url) {
       'Item / Qty / Unit / Total',
       ...lines.map((l) => `${l.name}  ${l.qty}  ${money(l.price)}  ${money(l.lineTotal)}`),
       '',
-      `Amount due: ${money(subtotal)}`,
+      `Quoted total: ${money(subtotal)}`,
       'Payment method: eft',
       '',
       `Account Holder ${banking.accountHolder}`,
@@ -5772,12 +5797,26 @@ async function handleApi(request, env, url) {
       `Branch Code ${banking.branchCode}`,
       `Swift Code ${banking.swiftCode}`
     ].filter(Boolean)
-    const pdfAttachment = {
-      filename: `${quoteRef}.pdf`,
-      content: buildSimplePdfBase64(`Quote ${quoteRef}`, pdfLines),
-      type: 'application/pdf',
-      contentType: 'application/pdf'
-    }
+    const clientPdf = body?.pdf || body?.pdfAttachment || null
+    const clientPdfContent = String(clientPdf?.content || '').replace(/\s+/g, '')
+    const clientPdfName = String(clientPdf?.filename || `${quoteRef}.pdf`)
+      .trim()
+      .slice(0, 120)
+      .replace(/[^\w.\-]+/g, '_')
+    const pdfAttachment =
+      clientPdfContent.length > 100
+        ? {
+            filename: clientPdfName.endsWith('.pdf') ? clientPdfName : `${quoteRef}.pdf`,
+            content: clientPdfContent,
+            type: 'application/pdf',
+            contentType: 'application/pdf'
+          }
+        : {
+            filename: `${quoteRef}.pdf`,
+            content: buildSimplePdfBase64(`Quote ${quoteRef}`, pdfLines),
+            type: 'application/pdf',
+            contentType: 'application/pdf'
+          }
 
     const recipients = [email, salesCopyTo].filter((v, i, arr) => arr.indexOf(v) === i)
     let provisionedTeam = null

@@ -197,14 +197,12 @@ function drawTotals(doc, row, isInvoice, y) {
   )
   y += 7
 
-  if (isInvoice) {
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(10)
-    doc.setTextColor(50, 50, 50)
-    const method = String(row.paymentMethod || 'eft').trim() || 'eft'
-    doc.text(`Payment method: ${method}`, 20, y)
-    y += 8
-  }
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(10)
+  doc.setTextColor(50, 50, 50)
+  const method = String(row.paymentMethod || 'eft').trim() || 'eft'
+  doc.text(`Payment method: ${method}`, 20, y)
+  y += 8
   return y
 }
 
@@ -247,12 +245,18 @@ async function buildPdfBytes({ kind, row, logoDataUrl, lineImageDataUrls }) {
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(10)
   doc.setTextColor(80, 80, 80)
-  doc.text(
-    isInvoice ? `Issued ${formatDay(row.issuedAt)}` : `Valid until ${formatDay(row.validUntil)}`,
-    20,
-    y
-  )
-  y += 10
+  if (isInvoice) {
+    doc.text(`Issued ${formatDay(row.issuedAt)}`, 20, y)
+    y += 10
+  } else {
+    const issued = formatDay(row.issuedAt || row.createdAt)
+    if (issued && issued !== '—') {
+      doc.text(`Issued ${issued}`, 20, y)
+      y += 5
+    }
+    doc.text(`Valid until ${formatDay(row.validUntil)}`, 20, y)
+    y += 10
+  }
 
   y = drawBillTo(doc, row, y)
   y = drawProductImageRow(doc, lineImageDataUrls, y)

@@ -17,6 +17,7 @@ import {
 } from '../lib/cartStore'
 import { loadProfile } from '../lib/profileStore'
 import { apiShopOrderQuote } from '../lib/api'
+import { generateQuotePdf } from '../lib/salesDocuments'
 
 const router = useRouter()
 const menuOpen = ref(false)
@@ -150,6 +151,42 @@ async function placeOrder() {
     const combinedNote = [`Company: ${company}`, checkoutNote.value.trim(), subdomainNote]
       .filter(Boolean)
       .join('\n')
+    const quoteRef = `SQ-${Date.now().toString(36).toUpperCase()}`
+    const billToAddress = [company, town].filter(Boolean).join(', ')
+    const quoteLines = lines.value.map((l) => ({
+      productId: l.id,
+      productName: l.name,
+      quantity: l.qty,
+      unitPrice: l.price,
+      amount: Math.round(Number(l.qty) * Number(l.price) * 100) / 100
+    }))
+    const validUntil = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+    let pdfPayload = null
+    try {
+      const pdf = await generateQuotePdf({
+        quoteNumber: quoteRef,
+        customerName: name,
+        customerEmail: email,
+        customerPhone: phone,
+        customerAddress: billToAddress,
+        validUntil,
+        createdAt: new Date().toISOString(),
+        amount: subtotal.value,
+        paymentMethod: 'eft',
+        notes: combinedNote,
+        lines: quoteLines,
+        productId: quoteLines[0]?.productId || '',
+        productName: quoteLines[0]?.productName || ''
+      })
+      pdfPayload = {
+        filename: pdf.filename || `${quoteRef}.pdf`,
+        content: pdf.base64,
+        type: 'application/pdf',
+        contentType: 'application/pdf'
+      }
+    } catch {
+      // Worker will fall back to a simple PDF if client generation fails
+    }
     const res = await apiShopOrderQuote({
       name,
       company,
@@ -157,6 +194,9 @@ async function placeOrder() {
       phone,
       town,
       note: combinedNote,
+      quoteRef,
+      validUntil,
+      pdf: pdfPayload,
       items: lines.value.map((l) => ({
         id: l.id,
         name: l.name,
