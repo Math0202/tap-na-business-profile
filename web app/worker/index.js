@@ -1965,19 +1965,11 @@ function googleCalendarUrl({ title, details, location, startIso, durationMinutes
   return `https://calendar.google.com/calendar/render?${params.toString()}`
 }
 
-function outlookCalendarUrl({ title, details, location, startIso, durationMinutes = 30 }) {
-  const { start, end } = meetingWindow(startIso, durationMinutes)
-  const iso = (d) => d.toISOString().replace(/\.\d{3}Z$/, 'Z')
-  const params = new URLSearchParams({
-    path: '/calendar/action/compose',
-    rru: 'addevent',
-    subject: String(title || 'Meeting'),
-    body: String(details || ''),
-    startdt: iso(start),
-    enddt: iso(end),
-    location: String(location || '')
-  })
-  return `https://outlook.live.com/calendar/0/deeplink/compose?${params.toString()}`
+const OUTLOOK_CALENDAR_URL =
+  'https://outlook.cloud.microsoft/calendar/view/workweek?deeplink=mail%2F'
+
+function outlookCalendarUrl() {
+  return OUTLOOK_CALENDAR_URL
 }
 
 async function meetingInviteToken(env, meetingId) {
@@ -2021,7 +2013,7 @@ function ownerNotifyEmails(owner) {
 }
 
 function calendarAddLinksHtml({ googleUrl, outlookUrl, icsUrl }) {
-  const meetLogo = `${CANONICAL_ORIGIN}/images/email/google-meet.png`
+  const gmailLogo = `${CANONICAL_ORIGIN}/images/email/gmail.png`
   const outlookLogo = `${CANONICAL_ORIGIN}/images/email/outlook.png`
   const row = (href, logoSrc, label) => {
     const img = logoSrc
@@ -2031,7 +2023,7 @@ function calendarAddLinksHtml({ googleUrl, outlookUrl, icsUrl }) {
   }
   return `
   <p style="margin:16px 0 10px;font-weight:700;">Add to your calendar</p>
-  ${row(googleUrl, meetLogo, 'Google Calendar')}
+  ${row(googleUrl, gmailLogo, 'Google Calendar')}
   ${row(outlookUrl, outlookLogo, 'Outlook')}
   ${row(icsUrl, '', 'Add to calendar')}`
 }
@@ -5438,12 +5430,7 @@ async function handleApi(request, env, url) {
           location,
           startIso: preferredAt
         }),
-        outlookUrl: outlookCalendarUrl({
-          title,
-          details: description,
-          location,
-          startIso: preferredAt
-        }),
+        outlookUrl: outlookCalendarUrl(),
         icsUrl: meetingInviteIcsUrl(id, token)
       }
       const calendarHtml = calendarAddLinksHtml(calendarLinks)
