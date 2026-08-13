@@ -1945,6 +1945,132 @@ function meetingInviteAttachment(icsText) {
   }
 }
 
+function meetingWindow(startIso, durationMinutes = 30) {
+  const start = new Date(startIso)
+  if (Number.isNaN(start.getTime())) throw new Error('Invalid meeting start time')
+  const minutes = Math.max(15, Number(durationMinutes) || 30)
+  const end = new Date(start.getTime() + minutes * 60 * 1000)
+  return { start, end, minutes }
+}
+
+function googleCalendarUrl({ title, details, location, startIso, durationMinutes = 30 }) {
+  const { start, end } = meetingWindow(startIso, durationMinutes)
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: String(title || 'Meeting'),
+    dates: `${formatIcsUtc(start)}/${formatIcsUtc(end)}`,
+    details: String(details || ''),
+    location: String(location || '')
+  })
+  return `https://calendar.google.com/calendar/render?${params.toString()}`
+}
+
+function outlookCalendarUrl({ title, details, location, startIso, durationMinutes = 30 }) {
+  const { start, end } = meetingWindow(startIso, durationMinutes)
+  const iso = (d) => d.toISOString().replace(/\.\d{3}Z$/, 'Z')
+  const params = new URLSearchParams({
+    path: '/calendar/action/compose',
+    rru: 'addevent',
+    subject: String(title || 'Meeting'),
+    body: String(details || ''),
+    startdt: iso(start),
+    enddt: iso(end),
+    location: String(location || '')
+  })
+  return `https://outlook.live.com/calendar/0/deeplink/compose?${params.toString()}`
+}
+
+async function meetingInviteToken(env, meetingId) {
+  const secret = String(env.SUPABASE_SERVICE_ROLE_KEY || env.EMAIL_API_TOKEN || 'tap-na-meeting-ics').slice(0, 80)
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`meeting-ics:${meetingId}`))
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 20)
+}
+
+function tokensMatch(a, b) {
+  const left = String(a || '')
+  const right = String(b || '')
+  if (!left || left.length !== right.length) return false
+  let diff = 0
+  for (let i = 0; i < left.length; i++) diff |= left.charCodeAt(i) ^ right.charCodeAt(i)
+  return diff === 0
+}
+
+function meetingInviteIcsUrl(meetingId, token) {
+  return `${CANONICAL_ORIGIN}/api/meetings/${encodeURIComponent(meetingId)}/invite.ics?t=${encodeURIComponent(token)}`
+}
+
+function calendarAddLinksHtml({ googleUrl, outlookUrl, icsUrl }) {
+  const btn = (href, label) =>
+    `<a href="${escapeHtml(href)}" style="display:inline-block;padding:10px 14px;border:1px solid #111;border-radius:8px;color:#111;text-decoration:none;font-size:13px;font-weight:700;">${escapeHtml(label)}</a>`
+  return `
+  <p style="margin:16px 0 8px;font-weight:700;">Add to your calendar</p>
+  <p style="margin:0 0 8px;">${btn(googleUrl, 'Google Calendar')}</p>
+  <p style="margin:0 0 8px;">${btn(outlookUrl, 'Outlook')}</p>
+  <p style="margin:0 0 8px;">${btn(icsUrl, 'Add to calendar')}</p>
+  <p style="margin:0;font-size:12px;color:#777;">Outlook opens in the browser with a new event ready to save. A .ics invite is also attached.</p>`
+}
+
+function calendarAddLinksText({ googleUrl, outlookUrl, icsUrl }) {
+  return [
+    'Add to your calendar:',
+    `Google Calendar: ${googleUrl}`,
+    `Outlook: ${outlookUrl}`,
+    `Add to calendar (.ics): ${icsUrl}`
+  ].join('\n')
+}
+
+function meetingInvitePayload({
+  id,
+  owner,
+  guestName,
+  guestEmail,
+  guestPhone,
+  message,
+  preferredAt
+}) {
+  const ownerName = String(owner?.name || owner?.company || 'tap-na host').trim() || 'tap-na host'
+  const ownerEmail = String(owner?.login_email || owner?.email || '')
+    .trim()
+    .toLowerCase()
+  const location = String(owner?.address || '').trim() || 'To be confirmed'
+  const title = `Meeting with ${ownerName}`
+  const description = [
+    message ? `Message: ${message}` : '',
+    guestPhone ? `Guest phone: ${guestPhone}` : '',
+    guestName ? `Guest: ${guestName}` : '',
+    guestEmail ? `Guest email: ${guestEmail}` : '',
+    `Booked via tap-na · ${CANONICAL_ORIGIN}/meetings`
+  ]
+    .filter(Boolean)
+    .join('\n')
+  return {
+    ownerName,
+    ownerEmail,
+    location,
+    title,
+    description,
+    ics: buildMeetingIcs({
+      uid: id,
+      title,
+      description,
+      startIso: preferredAt,
+      durationMinutes: 30,
+      organizerName: ownerName,
+      organizerEmail: ownerEmail.includes('@') ? ownerEmail : 'welcome@tapnam.com',
+      attendeeName: guestName,
+      attendeeEmail: guestEmail,
+      location
+    })
+  }
+}
+
 
 function base64ToArrayBuffer(b64) {
   const cleaned = String(b64 || '').replace(/\s+/g, '')
@@ -5272,34 +5398,37 @@ async function handleApi(request, env, url) {
     try {
       const owners = await sb(env, 'profiles?id=eq.' + encodeURIComponent(profileId) + '&select=*')
       const owner = owners?.[0]
-      const ownerName = String(owner?.name || owner?.company || 'tap-na host').trim() || 'tap-na host'
-      const ownerEmail = String(owner?.login_email || owner?.email || '')
-        .trim()
-        .toLowerCase()
-      const whenLabel = new Date(preferredAt).toUTCString()
-      const meetingTitle = `Meeting with ${ownerName}`
-      const meetingDesc = [
-        message ? `Message: ${message}` : '',
-        phone ? `Guest phone: ${phone}` : '',
-        `Booked via tap-na · https://tapnam.com/meetings`
-      ]
-        .filter(Boolean)
-        .join('\n')
-
-      const ics = buildMeetingIcs({
-        uid: id,
-        title: meetingTitle,
-        description: meetingDesc,
-        startIso: preferredAt,
-        durationMinutes: 30,
-        organizerName: ownerName,
-        organizerEmail: ownerEmail.includes('@') ? ownerEmail : 'welcome@tapnam.com',
-        attendeeName: name,
-        attendeeEmail: email,
-        location: String(owner?.address || '').trim() || 'To be confirmed'
+      const invite = meetingInvitePayload({
+        id,
+        owner,
+        guestName: name,
+        guestEmail: email,
+        guestPhone: phone,
+        message,
+        preferredAt
       })
-      const icsAttachment = meetingInviteAttachment(ics)
+      const { ownerName, ownerEmail, location, title, description } = invite
+      const icsAttachment = meetingInviteAttachment(invite.ics)
+      const whenLabel = new Date(preferredAt).toUTCString()
       const whenHtml = escapeHtml(whenLabel)
+      const token = await meetingInviteToken(env, id)
+      const calendarLinks = {
+        googleUrl: googleCalendarUrl({
+          title,
+          details: description,
+          location,
+          startIso: preferredAt
+        }),
+        outlookUrl: outlookCalendarUrl({
+          title,
+          details: description,
+          location,
+          startIso: preferredAt
+        }),
+        icsUrl: meetingInviteIcsUrl(id, token)
+      }
+      const calendarHtml = calendarAddLinksHtml(calendarLinks)
+      const calendarText = calendarAddLinksText(calendarLinks)
       const sends = []
 
       // Guest confirmation + calendar invite
@@ -5315,16 +5444,17 @@ async function handleApi(request, env, url) {
               <p style="margin:0 0 8px;"><strong>When (UTC):</strong> ${whenHtml}</p>
               <p style="margin:0 0 8px;"><strong>Host:</strong> ${escapeHtml(ownerName)}</p>
               ${message ? `<p style="margin:0 0 8px;"><strong>Your note:</strong> ${escapeHtml(message)}</p>` : ''}
-              <p style="margin:16px 0 0;">A calendar invite (.ics) is attached — open it to add this to your calendar.</p>`,
+              ${calendarHtml}`,
             footerNote: 'If the time does not work, reply to this email to reschedule.'
           }),
           text: [
             `Meeting request with ${ownerName}`,
             `When (UTC): ${whenLabel}`,
             message ? `Note: ${message}` : '',
-            'A calendar invite (.ics) is attached.'
+            '',
+            calendarText
           ]
-            .filter(Boolean)
+            .filter((line, i, arr) => line !== '' || arr[i - 1] !== '')
             .join('\n'),
           attachments: [icsAttachment]
         })
@@ -5346,8 +5476,8 @@ async function handleApi(request, env, url) {
                 <p style="margin:0 0 8px;"><strong>Email:</strong> ${escapeHtml(email)}</p>
                 <p style="margin:0 0 8px;"><strong>Phone:</strong> ${escapeHtml(phone || '—')}</p>
                 ${message ? `<p style="margin:0 0 8px;"><strong>Message:</strong> ${escapeHtml(message)}</p>` : ''}
-                <p style="margin:16px 0 0;">A calendar invite (.ics) is attached.</p>
-                <p style="margin:12px 0 0;"><a href="https://tapnam.com/meetings">Open Meetings</a></p>`,
+                ${calendarHtml}
+                <p style="margin:12px 0 0;"><a href="${CANONICAL_ORIGIN}/meetings">Open Meetings</a></p>`,
               footerNote: 'Confirm or follow up from your Meetings tab.'
             }),
             text: [
@@ -5356,10 +5486,12 @@ async function handleApi(request, env, url) {
               `Email: ${email}`,
               `Phone: ${phone || '—'}`,
               message ? `Message: ${message}` : '',
-              'A calendar invite (.ics) is attached.',
-              'Open: https://tapnam.com/meetings'
+              '',
+              calendarText,
+              '',
+              `Open: ${CANONICAL_ORIGIN}/meetings`
             ]
-              .filter(Boolean)
+              .filter((line, i, arr) => line !== '' || arr[i - 1] !== '')
               .join('\n'),
             attachments: [icsAttachment]
           })
@@ -5387,6 +5519,45 @@ async function handleApi(request, env, url) {
       })
     }
     return json({ ok: true, id })
+  }
+
+  const meetingInviteMatch = pathname.match(/^\/api\/meetings\/([^/]+)\/invite\.ics$/)
+  if (meetingInviteMatch && method === 'GET') {
+    const meetingId = decodeURIComponent(meetingInviteMatch[1])
+    const token = String(url.searchParams.get('t') || '').trim()
+    const expected = await meetingInviteToken(env, meetingId)
+    if (!tokensMatch(token, expected)) return bad('Invite not found', 404)
+
+    const rows = await sb(env, 'meetings?id=eq.' + encodeURIComponent(meetingId) + '&select=*')
+    const meeting = rows?.[0]
+    if (!meeting || meeting.deleted === true) return bad('Invite not found', 404)
+    if (String(meeting.status || '').toLowerCase() === 'cancelled') {
+      return bad('This meeting was cancelled', 410)
+    }
+    if (!meeting.preferred_at) return bad('Invite not found', 404)
+
+    const owners = await sb(
+      env,
+      'profiles?id=eq.' + encodeURIComponent(meeting.profile_id) + '&select=*'
+    )
+    const invite = meetingInvitePayload({
+      id: meeting.id,
+      owner: owners?.[0],
+      guestName: meeting.name || '',
+      guestEmail: meeting.email || '',
+      guestPhone: meeting.phone || '',
+      message: meeting.message || '',
+      preferredAt: meeting.preferred_at
+    })
+    return new Response(invite.ics, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/calendar; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="meeting-invite.ics"',
+        'Cache-Control': 'private, max-age=300',
+        ...CORS_HEADERS
+      }
+    })
   }
 
   if (pathname === '/api/meetings' && method === 'GET') {

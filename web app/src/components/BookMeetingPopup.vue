@@ -111,7 +111,7 @@ async function onSubmit(e) {
         v-if="success"
         class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-emerald-300 text-sm"
       >
-        Request sent. Check your email for the calendar invite — they got one too.
+        Request sent. Check your email to add it to Google Calendar, Outlook, or your calendar — they got one too.
       </div>
 
       <form v-else class="space-y-3" @submit="onSubmit">
