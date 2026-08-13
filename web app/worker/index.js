@@ -2006,23 +2006,42 @@ function meetingInviteIcsUrl(meetingId, token) {
   return `${CANONICAL_ORIGIN}/api/meetings/${encodeURIComponent(meetingId)}/invite.ics?t=${encodeURIComponent(token)}`
 }
 
+function uniqueEmails(...values) {
+  const out = []
+  for (const value of values) {
+    const email = String(value || '').trim().toLowerCase()
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue
+    if (!out.includes(email)) out.push(email)
+  }
+  return out
+}
+
+function ownerNotifyEmails(owner) {
+  return uniqueEmails(owner?.email, owner?.login_email)
+}
+
 function calendarAddLinksHtml({ googleUrl, outlookUrl, icsUrl }) {
-  const btn = (href, label) =>
-    `<a href="${escapeHtml(href)}" style="display:inline-block;padding:10px 14px;border:1px solid #111;border-radius:8px;color:#111;text-decoration:none;font-size:13px;font-weight:700;">${escapeHtml(label)}</a>`
+  const meetLogo = `${CANONICAL_ORIGIN}/images/email/google-meet.png`
+  const outlookLogo = `${CANONICAL_ORIGIN}/images/email/outlook.png`
+  const row = (href, logoSrc, label) => {
+    const img = logoSrc
+      ? `<img src="${escapeHtml(logoSrc)}" width="22" height="22" alt="" style="display:inline-block;width:22px;height:22px;vertical-align:middle;margin-right:10px;border:0;" />`
+      : ''
+    return `<p style="margin:0 0 10px;"><a href="${escapeHtml(href)}" style="display:inline-block;padding:10px 14px;border:1px solid #ddd;border-radius:10px;color:#111;text-decoration:none;font-size:14px;font-weight:700;line-height:22px;">${img}<span style="vertical-align:middle;">${escapeHtml(label)}</span></a></p>`
+  }
   return `
-  <p style="margin:16px 0 8px;font-weight:700;">Add to your calendar</p>
-  <p style="margin:0 0 8px;">${btn(googleUrl, 'Google Calendar')}</p>
-  <p style="margin:0 0 8px;">${btn(outlookUrl, 'Outlook')}</p>
-  <p style="margin:0 0 8px;">${btn(icsUrl, 'Add to calendar')}</p>
-  <p style="margin:0;font-size:12px;color:#777;">Outlook opens in the browser with a new event ready to save. A .ics invite is also attached.</p>`
+  <p style="margin:16px 0 10px;font-weight:700;">Add to your calendar</p>
+  ${row(googleUrl, meetLogo, 'Google Calendar')}
+  ${row(outlookUrl, outlookLogo, 'Outlook')}
+  ${row(icsUrl, '', 'Add to calendar')}`
 }
 
 function calendarAddLinksText({ googleUrl, outlookUrl, icsUrl }) {
   return [
-    'Add to your calendar:',
+    'Add to your calendar',
     `Google Calendar: ${googleUrl}`,
     `Outlook: ${outlookUrl}`,
-    `Add to calendar (.ics): ${icsUrl}`
+    `Add to calendar: ${icsUrl}`
   ].join('\n')
 }
 
@@ -2036,9 +2055,8 @@ function meetingInvitePayload({
   preferredAt
 }) {
   const ownerName = String(owner?.name || owner?.company || 'tap-na host').trim() || 'tap-na host'
-  const ownerEmail = String(owner?.login_email || owner?.email || '')
-    .trim()
-    .toLowerCase()
+  const ownerEmails = ownerNotifyEmails(owner)
+  const ownerEmail = ownerEmails[0] || ''
   const location = String(owner?.address || '').trim() || 'To be confirmed'
   const title = `Meeting with ${ownerName}`
   const description = [
@@ -2053,6 +2071,7 @@ function meetingInvitePayload({
   return {
     ownerName,
     ownerEmail,
+    ownerEmails,
     location,
     title,
     description,
@@ -2063,7 +2082,7 @@ function meetingInvitePayload({
       startIso: preferredAt,
       durationMinutes: 30,
       organizerName: ownerName,
-      organizerEmail: ownerEmail.includes('@') ? ownerEmail : 'welcome@tapnam.com',
+      organizerEmail: ownerEmail || 'welcome@tapnam.com',
       attendeeName: guestName,
       attendeeEmail: guestEmail,
       location
@@ -5407,7 +5426,7 @@ async function handleApi(request, env, url) {
         message,
         preferredAt
       })
-      const { ownerName, ownerEmail, location, title, description } = invite
+      const { ownerName, ownerEmail, ownerEmails, location, title, description } = invite
       const icsAttachment = meetingInviteAttachment(invite.ics)
       const whenLabel = new Date(preferredAt).toUTCString()
       const whenHtml = escapeHtml(whenLabel)
@@ -5429,13 +5448,15 @@ async function handleApi(request, env, url) {
       }
       const calendarHtml = calendarAddLinksHtml(calendarLinks)
       const calendarText = calendarAddLinksText(calendarLinks)
+      const hostEmails = ownerEmails.length ? ownerEmails : uniqueEmails('welcome@tapnam.com')
+      const guestReplyTo = ownerEmail || hostEmails[0]
       const sends = []
 
       // Guest confirmation + calendar invite
       sends.push(
         sendCloudflareEmail(env, {
           to: email,
-          replyTo: ownerEmail.includes('@') ? ownerEmail : undefined,
+          replyTo: guestReplyTo,
           subject: `Meeting request with ${ownerName}`,
           html: transactionalShell({
             title: 'Meeting request sent',
@@ -5460,11 +5481,10 @@ async function handleApi(request, env, url) {
         })
       )
 
-      // Host notification + calendar invite
-      if (ownerEmail.includes('@')) {
-        sends.push(
+      // Host notification + calendar invite (profile email + login email)
+      sends.push(
           sendCloudflareEmail(env, {
-            to: ownerEmail,
+            to: hostEmails,
             replyTo: email,
             subject: `New meeting request from ${name}`,
             html: transactionalShell({
@@ -5496,7 +5516,6 @@ async function handleApi(request, env, url) {
             attachments: [icsAttachment]
           })
         )
-      }
 
       await Promise.all(
         sends.map((p) => p.catch((err) => logAppError(env, {
