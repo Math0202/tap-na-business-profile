@@ -405,6 +405,16 @@ async function addPackageToCart() {
                   <td class="py-2 pl-1 text-center text-primary">✓</td>
                 </tr>
                 <tr class="border-b border-border-subtle/60">
+                  <td class="py-2 pr-2 text-on-surface">CRM Integration</td>
+                  <td class="py-2 px-1 text-center">—</td>
+                  <td class="py-2 pl-1 text-center text-primary">✓</td>
+                </tr>
+                <tr class="border-b border-border-subtle/60">
+                  <td class="py-2 pr-2 text-on-surface">Google &amp; Microsoft Meeting Calendar</td>
+                  <td class="py-2 px-1 text-center">—</td>
+                  <td class="py-2 pl-1 text-center text-primary">✓</td>
+                </tr>
+                <tr class="border-b border-border-subtle/60">
                   <td class="py-2 pr-2 text-on-surface">Quantity</td>
                   <td class="py-2 px-1 text-center text-primary text-[11px] leading-snug">Up to {{ SOLO_PACKAGE_MAX }}</td>
                   <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">Min {{ TEAM_PACKAGE_MIN }}</td>
@@ -470,6 +480,16 @@ async function addPackageToCart() {
                   </tr>
                   <tr class="border-b border-border-subtle/60">
                     <td class="py-2 pr-2 text-on-surface">Team profiles</td>
+                    <td class="py-2 px-1 text-center text-primary">✓</td>
+                    <td class="py-2 pl-1 text-center text-primary">✓</td>
+                  </tr>
+                  <tr class="border-b border-border-subtle/60">
+                    <td class="py-2 pr-2 text-on-surface">CRM Integration</td>
+                    <td class="py-2 px-1 text-center text-primary">✓</td>
+                    <td class="py-2 pl-1 text-center text-primary">✓</td>
+                  </tr>
+                  <tr class="border-b border-border-subtle/60">
+                    <td class="py-2 pr-2 text-on-surface">Google &amp; Microsoft Meeting Calendar</td>
                     <td class="py-2 px-1 text-center text-primary">✓</td>
                     <td class="py-2 pl-1 text-center text-primary">✓</td>
                   </tr>

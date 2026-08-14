@@ -535,6 +535,18 @@ onUnmounted(() => {
                   <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
                 <tr class="border-b border-border-subtle/70">
+                  <td class="py-3 pr-4 text-on-surface">CRM Integration</td>
+                  <td class="py-3 px-2 text-center">—</td>
+                  <td class="py-3 px-2 text-center text-primary">✓</td>
+                  <td class="py-3 pl-2 text-center text-primary">✓</td>
+                </tr>
+                <tr class="border-b border-border-subtle/70">
+                  <td class="py-3 pr-4 text-on-surface">Google &amp; Microsoft Meeting Calendar</td>
+                  <td class="py-3 px-2 text-center">—</td>
+                  <td class="py-3 px-2 text-center text-primary">✓</td>
+                  <td class="py-3 pl-2 text-center text-primary">✓</td>
+                </tr>
+                <tr class="border-b border-border-subtle/70">
                   <td class="py-3 pr-4 text-on-surface">Customization</td>
                   <td class="py-3 px-2 text-center">—</td>
                   <td class="py-3 px-2 text-center text-primary">✓</td>

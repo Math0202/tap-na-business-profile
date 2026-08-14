@@ -23,6 +23,8 @@ import {
 } from '../lib/api'
 import { isLoggedIn, isTableBusiness, loadProfile } from '../lib/profileStore'
 import { RouterLink, useRouter } from 'vue-router'
+import TeamIntegrationsFields from '../components/TeamIntegrationsFields.vue'
+import { validateTeamIntegrations } from '../lib/teamIntegrations'
 
 const router = useRouter()
 const loading = ref(true)
@@ -39,6 +41,10 @@ const pendingInvites = ref([])
 
 const teamName = ref('')
 const shareCatalog = ref(false)
+const meetingTool = ref('')
+const usesCrm = ref(false)
+const crmProvider = ref('')
+const crmOther = ref('')
 const addSlug = ref('')
 const addEmail = ref('')
 const addRole = ref(DEFAULT_PERSONAL_TYPE)
@@ -111,6 +117,10 @@ async function refresh() {
     pendingInvites.value = res.data.pendingInvites || []
     teamName.value = team.value?.name || ''
     shareCatalog.value = !!team.value?.shareCatalog
+    meetingTool.value = team.value?.meetingTool || ''
+    usesCrm.value = !!team.value?.usesCrm
+    crmProvider.value = team.value?.crmProvider || ''
+    crmOther.value = team.value?.crmOther || ''
   } finally {
     loading.value = false
   }
@@ -141,6 +151,36 @@ async function saveTeamName() {
     team.value = res.data.team
     shareCatalog.value = !!res.data.team?.shareCatalog
     flash('Team name saved')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function saveIntegrations() {
+  if (!isOwner.value) return
+  const check = validateTeamIntegrations({
+    meetingTool: meetingTool.value,
+    usesCrm: usesCrm.value,
+    crmProvider: crmProvider.value,
+    crmOther: crmOther.value
+  })
+  if (!check.ok) {
+    flash(check.error)
+    return
+  }
+  saving.value = true
+  try {
+    const res = await apiUpdateMyTeam(check.value)
+    if (!res.ok) {
+      flash(res.error || 'Could not save calendar and CRM settings')
+      return
+    }
+    team.value = res.data.team
+    meetingTool.value = team.value?.meetingTool || ''
+    usesCrm.value = !!team.value?.usesCrm
+    crmProvider.value = team.value?.crmProvider || ''
+    crmOther.value = team.value?.crmOther || ''
+    flash('Calendar and CRM settings saved')
   } finally {
     saving.value = false
   }
@@ -392,6 +432,36 @@ onMounted(() => {
             <template v-if="isOwner"> · Owner</template>
             · Package: <span class="text-gray-300">{{ personalTypeLabel(packageCeiling) }}</span>
           </p>
+        </div>
+
+        <div class="card-item-bg rounded-2xl p-4 mb-4 space-y-3">
+          <h2 class="text-sm font-semibold">Meeting calendar &amp; CRM</h2>
+          <p v-if="isOwner && !meetingTool" class="text-xs text-amber-300/90 leading-relaxed">
+            Choose Google Meet or Microsoft so booking emails include your calendar button.
+          </p>
+          <p v-else-if="!isOwner" class="text-xs text-gray-500 leading-relaxed">
+            Inherited from the team owner. Members are not asked to set this again.
+          </p>
+          <TeamIntegrationsFields
+            :meeting-tool="meetingTool"
+            :uses-crm="usesCrm"
+            :crm-provider="crmProvider"
+            :crm-other="crmOther"
+            :disabled="!isOwner || saving"
+            @update:meetingTool="meetingTool = $event"
+            @update:usesCrm="usesCrm = $event"
+            @update:crmProvider="crmProvider = $event"
+            @update:crmOther="crmOther = $event"
+          />
+          <button
+            v-if="isOwner"
+            type="button"
+            class="w-full py-2.5 rounded-full bg-zinc-800 text-sm font-semibold disabled:opacity-50"
+            :disabled="saving"
+            @click="saveIntegrations"
+          >
+            Save calendar &amp; CRM
+          </button>
         </div>
 
         <div class="card-item-bg rounded-2xl p-4 mb-6 space-y-3">

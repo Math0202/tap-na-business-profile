@@ -7,6 +7,12 @@ import { saveProfile, hashPassword, markLoggedIn } from '../lib/profileStore'
 import { linkCardToProfile, extractSerialFromScan, kindLabel } from '../lib/cardLinkStore'
 import { LOCAL_ID } from '../lib/adminStore'
 import { hideFloatingChrome } from '../lib/uiChrome'
+import { normalizePersonalType, DEFAULT_PERSONAL_TYPE } from '../lib/teamRoles'
+import {
+  isConnectTeamPersonalType,
+  validateTeamIntegrations
+} from '../lib/teamIntegrations'
+import TeamIntegrationsFields from '../components/TeamIntegrationsFields.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -26,9 +32,22 @@ const cell = ref('')
 const email = ref('')
 const password = ref('')
 const confirm = ref('')
+const personalType = ref(DEFAULT_PERSONAL_TYPE)
+const pendingTeamInvite = ref(null)
+const meetingTool = ref('')
+const usesCrm = ref(false)
+const crmProvider = ref('')
+const crmOther = ref('')
 const error = ref('')
 const submitting = ref(false)
 const offlineNote = ref('')
+
+const showTeamIntegrations = computed(
+  () =>
+    cardType.value === 'personal' &&
+    isConnectTeamPersonalType(personalType.value) &&
+    !pendingTeamInvite.value
+)
 
 function profileTypeFromKind(kind) {
   return kind === 'personal' ? 'personal' : 'table'
@@ -55,6 +74,11 @@ onMounted(async () => {
   }
   cardKind.value = remote.card.kind === 'personal' ? 'personal' : 'table'
   cardType.value = profileTypeFromKind(cardKind.value)
+  personalType.value =
+    remote.card.kind === 'personal'
+      ? normalizePersonalType(remote.card.personalType || remote.card.personal_type || DEFAULT_PERSONAL_TYPE)
+      : ''
+  pendingTeamInvite.value = remote.pendingTeamInvite || null
   cardState.value = 'ok'
 })
 
@@ -79,6 +103,21 @@ async function onSubmit(e) {
   if (String(password.value).length < 6) { error.value = 'Password must be at least 6 characters.'; return }
   if (password.value !== confirm.value) { error.value = 'Passwords do not match.'; return }
 
+  let integrations = null
+  if (showTeamIntegrations.value) {
+    const check = validateTeamIntegrations({
+      meetingTool: meetingTool.value,
+      usesCrm: usesCrm.value,
+      crmProvider: crmProvider.value,
+      crmOther: crmOther.value
+    })
+    if (!check.ok) {
+      error.value = check.error
+      return
+    }
+    integrations = check.value
+  }
+
   submitting.value = true
   const passwordHash = hashPassword(password.value)
 
@@ -92,7 +131,8 @@ async function onSubmit(e) {
       loginPhone: c,
       passwordHash,
       cardType: cardType.value,
-      slug: slug.value
+      slug: slug.value,
+      ...(integrations || {})
     })
 
     let remoteProfileId = ''
@@ -222,6 +262,20 @@ function finish() {
             <span class="material-symbols-outlined text-gray-400 text-[20px]">lock</span>
             <input id="setup-confirm" v-model="confirm" type="password" class="field-input" placeholder="Repeat password" autocomplete="new-password" required />
           </div>
+        </div>
+
+        <div v-if="showTeamIntegrations" class="pt-2">
+          <TeamIntegrationsFields
+            :meeting-tool="meetingTool"
+            :uses-crm="usesCrm"
+            :crm-provider="crmProvider"
+            :crm-other="crmOther"
+            :disabled="submitting"
+            @update:meetingTool="meetingTool = $event"
+            @update:usesCrm="usesCrm = $event"
+            @update:crmProvider="crmProvider = $event"
+            @update:crmOther="crmOther = $event"
+          />
         </div>
 
         <p class="text-xs text-red-400 min-h-[1rem]">{{ error }}</p>

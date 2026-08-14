@@ -1354,6 +1354,10 @@ function mapTeamRow(row) {
     packageCeiling: normalizePersonalType(row.package_ceiling || 'business'),
     shopQuoteRef: row.shop_quote_ref || '',
     shareCatalog: row.share_catalog === true,
+    meetingTool: String(row.meeting_tool || '').trim().toLowerCase(),
+    usesCrm: row.uses_crm === true,
+    crmProvider: String(row.crm_provider || '').trim().toLowerCase(),
+    crmOther: String(row.crm_other || '').trim(),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
@@ -2012,29 +2016,183 @@ function ownerNotifyEmails(owner) {
   return uniqueEmails(owner?.email, owner?.login_email)
 }
 
-function calendarAddLinksHtml({ googleUrl, outlookUrl, icsUrl }) {
-  const gmailLogo = `${CANONICAL_ORIGIN}/images/email/gmail.png`
-  const outlookLogo = `${CANONICAL_ORIGIN}/images/email/outlook.png`
-  const row = (href, logoSrc, label) => {
-    const img = logoSrc
-      ? `<img src="${escapeHtml(logoSrc)}" width="22" height="22" alt="" style="display:inline-block;width:22px;height:22px;vertical-align:middle;margin-right:10px;border:0;" />`
-      : ''
-    return `<p style="margin:0 0 10px;"><a href="${escapeHtml(href)}" style="display:inline-block;padding:10px 14px;border:1px solid #ddd;border-radius:10px;color:#111;text-decoration:none;font-size:14px;font-weight:700;line-height:22px;">${img}<span style="vertical-align:middle;">${escapeHtml(label)}</span></a></p>`
-  }
-  return `
-  <p style="margin:16px 0 10px;font-weight:700;">Add to your calendar</p>
-  ${row(googleUrl, gmailLogo, 'Google Calendar')}
-  ${row(outlookUrl, outlookLogo, 'Outlook')}
-  ${row(icsUrl, '', 'Add to calendar')}`
+const CRM_APP_URLS = {
+  salesforce: 'https://login.salesforce.com',
+  zoho: 'https://crm.zoho.com',
+  hubspot: 'https://app.hubspot.com/contacts',
+  odoo: 'https://www.odoo.com/app/crm',
+  sage: 'https://www.sage.com'
 }
 
-function calendarAddLinksText({ googleUrl, outlookUrl, icsUrl }) {
+const CRM_LOGOS = {
+  salesforce: `${CANONICAL_ORIGIN}/images/email/crm-salesforce.png`,
+  zoho: `${CANONICAL_ORIGIN}/images/email/crm-zoho.png`,
+  hubspot: `${CANONICAL_ORIGIN}/images/email/crm-hubspot.png`,
+  odoo: `${CANONICAL_ORIGIN}/images/email/crm-odoo.png`,
+  sage: `${CANONICAL_ORIGIN}/images/email/crm-sage.png`,
+  other: `${CANONICAL_ORIGIN}/images/email/crm-other.png`
+}
+
+const CRM_LABELS = {
+  salesforce: 'Salesforce',
+  zoho: 'Zoho',
+  hubspot: 'HubSpot',
+  odoo: 'Odoo',
+  sage: 'Sage',
+  other: 'Others'
+}
+
+function parseTeamIntegrationsFromBody(body) {
+  const meetingTool = String(body?.meetingTool || body?.meeting_tool || '')
+    .trim()
+    .toLowerCase()
+  const usesCrm = !!(body?.usesCrm ?? body?.uses_crm)
+  const crmProvider = String(body?.crmProvider || body?.crm_provider || '')
+    .trim()
+    .toLowerCase()
+  const crmOther = String(body?.crmOther || body?.crm_other || '').trim().slice(0, 80)
+  const meetingOk = meetingTool === 'google' || meetingTool === 'microsoft'
+  const crmOk = !usesCrm || ['salesforce', 'zoho', 'hubspot', 'odoo', 'sage', 'other'].includes(crmProvider)
+  return {
+    meetingTool: meetingOk ? meetingTool : '',
+    usesCrm,
+    crmProvider: usesCrm && crmOk ? crmProvider : '',
+    crmOther: usesCrm && crmProvider === 'other' ? crmOther : '',
+    meetingOk,
+    crmOk
+  }
+}
+
+async function applyTeamIntegrations(env, teamId, integrations) {
+  if (!teamId) return
+  await sb(env, `teams?id=eq.${encodeURIComponent(teamId)}`, {
+    method: 'PATCH',
+    body: {
+      meeting_tool: integrations.meetingTool || '',
+      uses_crm: !!integrations.usesCrm,
+      crm_provider: integrations.crmProvider || '',
+      crm_other: integrations.crmOther || '',
+      updated_at: new Date().toISOString()
+    },
+    prefer: 'return=minimal'
+  })
+}
+
+async function teamIntegrationsForProfile(env, profileId) {
+  const id = String(profileId || '').trim()
+  if (!id) return null
+  const mems = await sb(
+    env,
+    `team_members?profile_id=eq.${encodeURIComponent(id)}&deleted=eq.false&status=eq.active&select=team_id&limit=10`
+  )
+  const teamIds = [...new Set((mems || []).map((m) => m.team_id).filter(Boolean))]
+  if (!teamIds.length) {
+    const owned = await sb(
+      env,
+      `teams?owner_profile_id=eq.${encodeURIComponent(id)}&deleted=eq.false&select=*&limit=1`
+    )
+    return owned?.[0] ? mapTeamRow(owned[0]) : null
+  }
+  const teams = await sb(
+    env,
+    `teams?id=in.(${teamIds.map(encodeURIComponent).join(',')})&deleted=eq.false&select=*`
+  )
+  const row = (teams || []).find((t) => t.owner_profile_id === id) || teams?.[0]
+  return row ? mapTeamRow(row) : null
+}
+
+function calendarButtonRow(href, logoSrc, label) {
+  const img = logoSrc
+    ? `<img src="${escapeHtml(logoSrc)}" width="22" height="22" alt="" style="display:inline-block;width:22px;height:22px;vertical-align:middle;margin-right:10px;border:0;" />`
+    : ''
+  return `<p style="margin:0 0 10px;"><a href="${escapeHtml(href)}" style="display:inline-block;padding:10px 14px;border:1px solid #ddd;border-radius:10px;color:#111;text-decoration:none;font-size:14px;font-weight:700;line-height:22px;">${img}<span style="vertical-align:middle;">${escapeHtml(label)}</span></a></p>`
+}
+
+function calendarAddLinksHtml({ googleUrl, outlookUrl, icsUrl, meetingTool = '', isTeam = false }) {
+  const gmailLogo = `${CANONICAL_ORIGIN}/images/email/gmail.png`
+  const outlookLogo = `${CANONICAL_ORIGIN}/images/email/outlook.png`
+  const rows = []
+  if (isTeam && meetingTool === 'microsoft') {
+    rows.push(calendarButtonRow(outlookUrl, outlookLogo, 'Outlook'))
+  } else if (isTeam && meetingTool === 'google') {
+    rows.push(calendarButtonRow(googleUrl, gmailLogo, 'Google Calendar'))
+  } else if (isTeam) {
+    rows.push(calendarButtonRow(googleUrl, gmailLogo, 'Google Calendar'))
+    rows.push(calendarButtonRow(outlookUrl, outlookLogo, 'Outlook'))
+  }
+  rows.push(calendarButtonRow(icsUrl, '', 'Add to calendar'))
+  return `
+  <p style="margin:16px 0 10px;font-weight:700;">Add to your calendar</p>
+  ${rows.join('')}`
+}
+
+function calendarAddLinksText({ googleUrl, outlookUrl, icsUrl, meetingTool = '', isTeam = false }) {
+  const lines = ['Add to your calendar']
+  if (isTeam && meetingTool === 'microsoft') lines.push(`Outlook: ${outlookUrl}`)
+  else if (isTeam && meetingTool === 'google') lines.push(`Google Calendar: ${googleUrl}`)
+  else if (isTeam) {
+    lines.push(`Google Calendar: ${googleUrl}`)
+    lines.push(`Outlook: ${outlookUrl}`)
+  }
+  lines.push(`Add to calendar: ${icsUrl}`)
+  return lines.join('\n')
+}
+
+function crmAddLinksHtml({ usesCrm, crmProvider, crmOther, vcfUrl }) {
+  if (!usesCrm || !crmProvider) return ''
+  const label =
+    crmProvider === 'other'
+      ? String(crmOther || 'Others').trim() || 'Others'
+      : CRM_LABELS[crmProvider] || 'CRM'
+  const href = CRM_APP_URLS[crmProvider] || vcfUrl
+  if (!href) return ''
+  const logo = CRM_LOGOS[crmProvider] || CRM_LOGOS.other
+  return `
+  <p style="margin:16px 0 10px;font-weight:700;">Add to your CRM</p>
+  ${calendarButtonRow(href, logo, label)}`
+}
+
+function crmAddLinksText({ usesCrm, crmProvider, crmOther, vcfUrl }) {
+  if (!usesCrm || !crmProvider) return ''
+  const label =
+    crmProvider === 'other'
+      ? String(crmOther || 'Others').trim() || 'Others'
+      : CRM_LABELS[crmProvider] || 'CRM'
+  const href = CRM_APP_URLS[crmProvider] || vcfUrl
+  if (!href) return ''
+  return ['Add to your CRM', `${label}: ${href}`].join('\n')
+}
+
+function contactAddLinkHtml(vcfUrl) {
+  if (!vcfUrl) return ''
+  return `
+  <p style="margin:16px 0 10px;font-weight:700;">Guest contact</p>
+  ${calendarButtonRow(vcfUrl, '', 'Add contact')}`
+}
+
+function contactAddLinkText(vcfUrl) {
+  if (!vcfUrl) return ''
+  return ['Guest contact', `Add contact: ${vcfUrl}`].join('\n')
+}
+
+function buildGuestVcard({ name, email, phone, note }) {
+  const esc = (v) => String(v || '').replace(/\\/g, '\\\\').replace(/,/g, '\\,').replace(/;/g, '\\;').replace(/\n/g, '\\n')
   return [
-    'Add to your calendar',
-    `Google Calendar: ${googleUrl}`,
-    `Outlook: ${outlookUrl}`,
-    `Add to calendar: ${icsUrl}`
-  ].join('\n')
+    'BEGIN:VCARD',
+    'VERSION:3.0',
+    `FN:${esc(name)}`,
+    name ? `N:${esc(name)};;;;` : '',
+    email ? `EMAIL;TYPE=INTERNET:${esc(email)}` : '',
+    phone ? `TEL;TYPE=CELL:${esc(phone)}` : '',
+    note ? `NOTE:${esc(note)}` : '',
+    'END:VCARD'
+  ]
+    .filter(Boolean)
+    .join('\r\n') + '\r\n'
+}
+
+function meetingContactVcfUrl(meetingId, token) {
+  return `${CANONICAL_ORIGIN}/api/meetings/${encodeURIComponent(meetingId)}/contact.vcf?t=${encodeURIComponent(token)}`
 }
 
 function meetingInvitePayload({
@@ -3179,6 +3337,36 @@ async function handleApi(request, env, url) {
     if (body?.shareCatalog !== undefined || body?.share_catalog !== undefined) {
       patch.share_catalog = !!(body.shareCatalog ?? body.share_catalog)
     }
+    if (
+      body?.meetingTool !== undefined ||
+      body?.meeting_tool !== undefined ||
+      body?.usesCrm !== undefined ||
+      body?.uses_crm !== undefined ||
+      body?.crmProvider !== undefined ||
+      body?.crm_provider !== undefined ||
+      body?.crmOther !== undefined ||
+      body?.crm_other !== undefined
+    ) {
+      const integ = parseTeamIntegrationsFromBody(body)
+      const meetingSpecified = body?.meetingTool !== undefined || body?.meeting_tool !== undefined
+      const crmSpecified =
+        body?.usesCrm !== undefined ||
+        body?.uses_crm !== undefined ||
+        body?.crmProvider !== undefined ||
+        body?.crm_provider !== undefined ||
+        body?.crmOther !== undefined ||
+        body?.crm_other !== undefined
+      if (meetingSpecified) {
+        if (!integ.meetingOk) return bad('Choose Google Meet or Microsoft')
+        patch.meeting_tool = integ.meetingTool
+      }
+      if (crmSpecified) {
+        if (integ.usesCrm && !integ.crmOk) return bad('Choose the CRM you use')
+        patch.uses_crm = integ.usesCrm
+        patch.crm_provider = integ.usesCrm ? integ.crmProvider : ''
+        patch.crm_other = integ.usesCrm ? integ.crmOther : ''
+      }
+    }
     if (Object.keys(patch).length <= 1) return bad('No changes provided')
 
     await sb(env, `teams?id=eq.${encodeURIComponent(team.id)}`, {
@@ -3526,6 +3714,23 @@ async function handleApi(request, env, url) {
     )
     if (existing?.length) return bad('An account with this email already exists', 409)
 
+    const pendingTeamInviteForClaim = claimCard
+      ? await findPendingTeamInviteForCard(env, claimCard.id)
+      : null
+    const claimPersonalType =
+      claimCard?.kind === 'personal'
+        ? normalizePersonalType(claimCard.personal_type || 'business')
+        : ''
+    const isTeamOwnerClaim =
+      !pendingTeamInviteForClaim &&
+      (claimPersonalType === 'business' || claimPersonalType === 'executive_exclusive')
+    let ownerIntegrations = null
+    if (isTeamOwnerClaim) {
+      ownerIntegrations = parseTeamIntegrationsFromBody(body || {})
+      if (!ownerIntegrations.meetingOk) return bad('Choose Google Meet or Microsoft')
+      if (ownerIntegrations.usesCrm && !ownerIntegrations.crmOk) return bad('Choose the CRM you use')
+    }
+
     const id = uid('prof')
     const cardType = claimCard
       ? (claimCard.kind === 'personal' ? 'personal' : 'table')
@@ -3594,6 +3799,25 @@ async function handleApi(request, env, url) {
       }
     }
 
+    const pendingTeamInvite = claimCard
+      ? await findPendingTeamInviteForCard(env, claimCard.id, id)
+      : pendingTeamInviteForClaim
+    if (ownerIntegrations && newProfile) {
+      try {
+        const team = await getOrCreateOwnedTeam(env, newProfile)
+        if (team?.id) await applyTeamIntegrations(env, team.id, ownerIntegrations)
+      } catch (err) {
+        await logAppError(env, {
+          source: 'team_integrations',
+          message: err?.message || String(err),
+          stack: err?.stack || '',
+          path: pathname,
+          method,
+          context: { kind: 'signup_team_integrations' }
+        })
+      }
+    }
+
     const token = uid('tok')
     const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
     await sb(env, 'sessions', {
@@ -3603,9 +3827,6 @@ async function handleApi(request, env, url) {
     })
 
     const pub = await publicProfile(env, newProfile || profiles?.[0])
-    const pendingTeamInvite = claimCard
-      ? await findPendingTeamInviteForCard(env, claimCard.id, id)
-      : null
     // Fire-and-forget welcome email
     sendWelcomeEmail(env, {
       email,
@@ -5423,6 +5644,9 @@ async function handleApi(request, env, url) {
       const whenLabel = new Date(preferredAt).toUTCString()
       const whenHtml = escapeHtml(whenLabel)
       const token = await meetingInviteToken(env, id)
+      const teamInteg = await teamIntegrationsForProfile(env, profileId)
+      const isTeam = !!teamInteg?.id
+      const meetingTool = String(teamInteg?.meetingTool || '').trim().toLowerCase()
       const calendarLinks = {
         googleUrl: googleCalendarUrl({
           title,
@@ -5431,10 +5655,27 @@ async function handleApi(request, env, url) {
           startIso: preferredAt
         }),
         outlookUrl: outlookCalendarUrl(),
-        icsUrl: meetingInviteIcsUrl(id, token)
+        icsUrl: meetingInviteIcsUrl(id, token),
+        isTeam,
+        meetingTool
       }
       const calendarHtml = calendarAddLinksHtml(calendarLinks)
       const calendarText = calendarAddLinksText(calendarLinks)
+      const vcfUrl = isTeam ? meetingContactVcfUrl(id, token) : ''
+      const crmHtml = crmAddLinksHtml({
+        usesCrm: !!teamInteg?.usesCrm,
+        crmProvider: teamInteg?.crmProvider || '',
+        crmOther: teamInteg?.crmOther || '',
+        vcfUrl
+      })
+      const crmText = crmAddLinksText({
+        usesCrm: !!teamInteg?.usesCrm,
+        crmProvider: teamInteg?.crmProvider || '',
+        crmOther: teamInteg?.crmOther || '',
+        vcfUrl
+      })
+      const contactHtml = contactAddLinkHtml(vcfUrl)
+      const contactText = contactAddLinkText(vcfUrl)
       const hostEmails = ownerEmails.length ? ownerEmails : uniqueEmails('welcome@tapnam.com')
       const guestReplyTo = ownerEmail || hostEmails[0]
       const sends = []
@@ -5484,6 +5725,8 @@ async function handleApi(request, env, url) {
                 <p style="margin:0 0 8px;"><strong>Phone:</strong> ${escapeHtml(phone || '—')}</p>
                 ${message ? `<p style="margin:0 0 8px;"><strong>Message:</strong> ${escapeHtml(message)}</p>` : ''}
                 ${calendarHtml}
+                ${crmHtml}
+                ${contactHtml}
                 <p style="margin:12px 0 0;"><a href="${CANONICAL_ORIGIN}/meetings">Open Meetings</a></p>`,
               footerNote: 'Confirm or follow up from your Meetings tab.'
             }),
@@ -5495,6 +5738,8 @@ async function handleApi(request, env, url) {
               message ? `Message: ${message}` : '',
               '',
               calendarText,
+              crmText ? `\n${crmText}` : '',
+              contactText ? `\n${contactText}` : '',
               '',
               `Open: ${CANONICAL_ORIGIN}/meetings`
             ]
@@ -5560,6 +5805,36 @@ async function handleApi(request, env, url) {
       headers: {
         'Content-Type': 'text/calendar; charset=utf-8',
         'Content-Disposition': 'attachment; filename="meeting-invite.ics"',
+        'Cache-Control': 'private, max-age=300',
+        ...CORS_HEADERS
+      }
+    })
+  }
+
+  const meetingVcfMatch = pathname.match(/^\/api\/meetings\/([^/]+)\/contact\.vcf$/)
+  if (meetingVcfMatch && method === 'GET') {
+    const meetingId = decodeURIComponent(meetingVcfMatch[1])
+    const token = String(url.searchParams.get('t') || '').trim()
+    const expected = await meetingInviteToken(env, meetingId)
+    if (!tokensMatch(token, expected)) return bad('Contact not found', 404)
+
+    const rows = await sb(env, 'meetings?id=eq.' + encodeURIComponent(meetingId) + '&select=*')
+    const meeting = rows?.[0]
+    if (!meeting || meeting.deleted === true) return bad('Contact not found', 404)
+
+    const vcf = buildGuestVcard({
+      name: meeting.name || '',
+      email: meeting.email || '',
+      phone: meeting.phone || '',
+      note: meeting.preferred_at
+        ? `Meeting via tap-na · ${meeting.preferred_at}`
+        : 'Meeting via tap-na'
+    })
+    return new Response(vcf, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/vcard; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="contact.vcf"',
         'Cache-Control': 'private, max-age=300',
         ...CORS_HEADERS
       }

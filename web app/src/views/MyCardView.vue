@@ -378,27 +378,6 @@ watch(() => route.path, () => {
                 >
                   <span class="material-symbols-outlined text-[18px]">qr_code_2</span>
                 </button>
-                <button
-                  type="button"
-                  aria-label="Save contact"
-                  class="w-9 h-9 rounded-full bg-white text-black hover:bg-gray-200 flex items-center justify-center transition-colors"
-                  :class="{ 'opacity-40 pointer-events-none': actionsBlocked }"
-                  :disabled="actionsBlocked"
-                  @click="saveContact"
-                >
-                  <span class="material-symbols-outlined text-[18px]">person_add</span>
-                </button>
-                <button
-                  v-if="showBooking"
-                  type="button"
-                  aria-label="Book a meeting"
-                  class="w-9 h-9 rounded-full bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center transition-colors border border-zinc-700"
-                  :class="{ 'opacity-40 pointer-events-none': actionsBlocked }"
-                  :disabled="actionsBlocked"
-                  @click="bookOpen = true"
-                >
-                  <span class="material-symbols-outlined text-[18px]">event</span>
-                </button>
                 <RouterLink
                   v-if="isLoggedIn()"
                   to="/profile"
@@ -562,29 +541,27 @@ watch(() => route.path, () => {
         </section>
 
         <div class="px-6 mt-8 mb-4 space-y-3">
-          <div class="flex flex-col sm:flex-row gap-3">
-            <button
-              type="button"
-              class="flex-1 py-4 rounded-full bg-white text-black font-bold text-lg hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
-              :class="{ 'opacity-40 pointer-events-none': actionsBlocked }"
-              :disabled="actionsBlocked"
-              @click="saveContact"
-            >
-              <span class="material-symbols-outlined">person_add</span>
-              Save to Phone Book
-            </button>
-            <button
-              v-if="showBooking"
-              type="button"
-              class="flex-1 py-4 rounded-full bg-zinc-800 text-white font-bold text-lg hover:bg-zinc-700 transition-all flex items-center justify-center gap-2 border border-zinc-700"
-              :class="{ 'opacity-40 pointer-events-none': actionsBlocked }"
-              :disabled="actionsBlocked"
-              @click="bookOpen = true"
-            >
-              <span class="material-symbols-outlined">event</span>
-              Book a meeting
-            </button>
-          </div>
+          <button
+            type="button"
+            class="w-full py-4 rounded-full bg-white text-black font-bold text-lg hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
+            :class="{ 'opacity-40 pointer-events-none': actionsBlocked }"
+            :disabled="actionsBlocked"
+            @click="saveContact"
+          >
+            <span class="material-symbols-outlined">person_add</span>
+            Save to Phone Book
+          </button>
+          <button
+            v-if="showBooking"
+            type="button"
+            class="w-full py-4 rounded-full bg-zinc-800 text-white font-bold text-lg hover:bg-zinc-700 transition-all flex items-center justify-center gap-2 border border-zinc-700"
+            :class="{ 'opacity-40 pointer-events-none': actionsBlocked }"
+            :disabled="actionsBlocked"
+            @click="bookOpen = true"
+          >
+            <span class="material-symbols-outlined">event</span>
+            Book a meeting
+          </button>
         </div>
         <SecurityMarquee />
       </div>

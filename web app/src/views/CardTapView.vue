@@ -21,9 +21,14 @@ import { LOCAL_ID } from '../lib/adminStore'
 import { hideFloatingChrome } from '../lib/uiChrome'
 import { singleBusinessDestinationHref } from '../lib/businessLinks'
 import { personalTypeLabel, normalizePersonalType, DEFAULT_PERSONAL_TYPE } from '../lib/teamRoles'
+import {
+  isConnectTeamPersonalType,
+  validateTeamIntegrations
+} from '../lib/teamIntegrations'
 import BusinessView from './BusinessView.vue'
 import MyCardView from './MyCardView.vue'
 import JoinTeamPopup from '../components/JoinTeamPopup.vue'
+import TeamIntegrationsFields from '../components/TeamIntegrationsFields.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -41,6 +46,10 @@ const surname = ref('')
 const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
+const meetingTool = ref('')
+const usesCrm = ref(false)
+const crmProvider = ref('')
+const crmOther = ref('')
 const error = ref('')
 const submitting = ref(false)
 
@@ -50,6 +59,13 @@ const serial = computed(() => {
 })
 
 const isPersonalCard = computed(() => cardKind.value === 'personal')
+
+const showTeamIntegrations = computed(
+  () =>
+    isPersonalCard.value &&
+    isConnectTeamPersonalType(personalType.value) &&
+    !pendingTeamInvite.value
+)
 
 const claimCardImage = computed(() =>
   cardImageSrc({
@@ -119,6 +135,21 @@ async function createProfile(e) {
     return
   }
 
+  let integrations = null
+  if (showTeamIntegrations.value) {
+    const check = validateTeamIntegrations({
+      meetingTool: meetingTool.value,
+      usesCrm: usesCrm.value,
+      crmProvider: crmProvider.value,
+      crmOther: crmOther.value
+    })
+    if (!check.ok) {
+      error.value = check.error
+      return
+    }
+    integrations = check.value
+  }
+
   submitting.value = true
   try {
     const cardType = isPersonalCard.value ? 'personal' : 'table'
@@ -129,7 +160,8 @@ async function createProfile(e) {
       passwordHash,
       cardType,
       slug: serial.value,
-      name: fullName || loginEmail
+      name: fullName || loginEmail,
+      ...(integrations || {})
     })
 
     if (!response.ok || !response.data?.profile?.id) {
@@ -458,6 +490,19 @@ onUnmounted(() => setClaimChrome(false))
                 required
               >
             </div>
+          </div>
+          <div v-if="showTeamIntegrations" class="pt-2">
+            <TeamIntegrationsFields
+              :meeting-tool="meetingTool"
+              :uses-crm="usesCrm"
+              :crm-provider="crmProvider"
+              :crm-other="crmOther"
+              :disabled="submitting"
+              @update:meetingTool="meetingTool = $event"
+              @update:usesCrm="usesCrm = $event"
+              @update:crmProvider="crmProvider = $event"
+              @update:crmOther="crmOther = $event"
+            />
           </div>
           <p class="text-xs text-red-400 min-h-[1rem]">{{ error }}</p>
           <button

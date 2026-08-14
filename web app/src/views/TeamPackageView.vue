@@ -138,8 +138,18 @@ function parseCopy(desc) {
   return { about: about.trim(), features: bullets, footer: footer.trim() }
 }
 
-const businessCopy = computed(() => parseCopy(businessProduct.value?.desc))
-const executiveCopy = computed(() => parseCopy(executiveProduct.value?.desc))
+const TEAM_FEATURE_EXTRAS = ['CRM Integration', 'Google & Microsoft Meeting Calendar']
+
+function withTeamFeatures(copy) {
+  const features = [...(copy.features || [])]
+  for (const extra of TEAM_FEATURE_EXTRAS) {
+    if (!features.some((f) => String(f).toLowerCase() === extra.toLowerCase())) features.push(extra)
+  }
+  return { ...copy, features }
+}
+
+const businessCopy = computed(() => withTeamFeatures(parseCopy(businessProduct.value?.desc)))
+const executiveCopy = computed(() => withTeamFeatures(parseCopy(executiveProduct.value?.desc)))
 
 function applyFocus(focusId) {
   const mix = initialTeamMix(focusId)
