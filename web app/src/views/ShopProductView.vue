@@ -6,6 +6,7 @@ import { formatPrice, getMaxQty, getMinQty, getProduct, isTeamCard, loadShopProd
 import { addToCart } from '../lib/cartStore'
 import { youtubeEmbedUrl } from '../lib/shareHelpers'
 import { setPageSeo } from '../lib/seo'
+import ShopFooterCredit from '../components/ShopFooterCredit.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -241,6 +242,7 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
+        <ShopFooterCredit />
       </div>
     </main>
 

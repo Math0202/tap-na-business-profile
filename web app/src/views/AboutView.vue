@@ -2,6 +2,7 @@
 import { RouterLink } from 'vue-router'
 import PageBanner from '../components/PageBanner.vue'
 import BrandMark from '../components/BrandMark.vue'
+import { AUCKMUND_HREF, AUCKMUND_LEGAL_NAME, AUCKMUND_NAME } from '../lib/brandLinks'
 </script>
 
 <template>
@@ -63,6 +64,12 @@ import BrandMark from '../components/BrandMark.vue'
         >
           Browse cards
         </RouterLink>
+        <p class="text-xs text-gray-500 leading-relaxed pt-4">
+          tap-na is a product of
+          <a :href="AUCKMUND_HREF" target="_blank" rel="noopener noreferrer" class="text-gray-300 no-underline hover:text-white">{{ AUCKMUND_LEGAL_NAME }}</a>.
+          Designed and developed by
+          <a :href="AUCKMUND_HREF" target="_blank" rel="noopener noreferrer" class="text-gray-300 no-underline hover:text-white">{{ AUCKMUND_NAME }}</a>.
+        </p>
       </div>
     </main>
   </div>

@@ -18,6 +18,7 @@ import {
 import { loadProfile } from '../lib/profileStore'
 import { apiShopOrderQuote } from '../lib/api'
 import { generateQuotePdf } from '../lib/salesDocuments'
+import ShopFooterCredit from '../components/ShopFooterCredit.vue'
 
 const router = useRouter()
 const menuOpen = ref(false)
@@ -405,6 +406,7 @@ async function placeOrder() {
             </button>
           </aside>
         </div>
+        <ShopFooterCredit />
       </div>
     </main>
 

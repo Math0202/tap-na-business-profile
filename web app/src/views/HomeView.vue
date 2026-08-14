@@ -11,6 +11,7 @@ import {
   loadShopProducts,
 } from '../lib/shopCatalog'
 import { BRAND_SOCIAL_LINKS } from '../lib/brandLinks'
+import ShopFooterCredit from '../components/ShopFooterCredit.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -695,14 +696,11 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-8 border-t border-border-subtle">
+        <ShopFooterCredit>
           <p class="text-xs text-on-surface-variant max-w-xl leading-relaxed">
             tap-na (Tap Namibia) — NFC business cards in Windhoek. Connect business cards, Tap NFC cards, and business cards printing. The NFC cards shop for Namibia.
           </p>
-          <span class="text-[10px] uppercase font-label-caps text-ink-muted tracking-widest">
-            © {{ new Date().getFullYear() }} TAP.NA
-          </span>
-        </div>
+        </ShopFooterCredit>
       </footer>
     </main>
 

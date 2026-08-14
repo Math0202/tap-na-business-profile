@@ -6,6 +6,7 @@ import { tableBrochuresList, formatPrice, loadShopProducts } from '../lib/shopCa
 import { addToCart } from '../lib/cartStore'
 import { BRAND_SOCIAL_LINKS } from '../lib/brandLinks'
 import { setPageSeo } from '../lib/seo'
+import ShopFooterCredit from '../components/ShopFooterCredit.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -280,11 +281,7 @@ onUnmounted(() => {
             </a>
           </div>
         </div>
-        <div class="flex items-center justify-between pt-8 border-t border-border-subtle">
-          <span class="text-[10px] uppercase font-label-caps text-ink-muted tracking-widest">
-            © {{ new Date().getFullYear() }} TAP.NA
-          </span>
-        </div>
+        <ShopFooterCredit />
       </footer>
     </main>
 

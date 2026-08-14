@@ -19,6 +19,7 @@ import {
   validateTeamMix
 } from '../lib/shopCatalog'
 import { setPageSeo } from '../lib/seo'
+import ShopFooterCredit from '../components/ShopFooterCredit.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -544,6 +545,7 @@ onUnmounted(() => {
             </div>
           </section>
         </template>
+        <ShopFooterCredit />
       </div>
     </main>
 

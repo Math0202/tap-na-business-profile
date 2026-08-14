@@ -138,6 +138,11 @@ export function setPageSeo(opts = {}) {
             addressLocality: 'Windhoek',
             addressCountry: 'NA'
           },
+          parentOrganization: {
+            '@type': 'Organization',
+            name: 'Auckmund Investment CC',
+            url: 'https://auckmund.com/'
+          },
           areaServed: [
             { '@type': 'City', name: 'Windhoek' },
             { '@type': 'Country', name: 'Namibia' }

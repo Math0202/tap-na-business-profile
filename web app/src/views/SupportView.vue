@@ -9,6 +9,7 @@ import {
   BRAND_WHATSAPP_DISPLAY,
   BRAND_WHATSAPP_HREF
 } from '../lib/brandLinks'
+import ShopFooterCredit from '../components/ShopFooterCredit.vue'
 
 const SUPPORT_EMAIL = 'welcome@tapnam.com'
 const SUPPORT_WHATSAPP_DISPLAY = BRAND_WHATSAPP_DISPLAY
@@ -243,6 +244,7 @@ onUnmounted(() => {
           ·
           <RouterLink to="/about/business-cards" class="text-primary no-underline">About Connect cards</RouterLink>
         </p>
+        <ShopFooterCredit />
       </div>
     </main>
   </div>

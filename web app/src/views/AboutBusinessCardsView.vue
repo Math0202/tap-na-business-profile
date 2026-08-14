@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import ShopHeader from '../components/ShopHeader.vue'
+import ShopFooterCredit from '../components/ShopFooterCredit.vue'
 
 const router = useRouter()
 const menuOpen = ref(false)
@@ -377,6 +378,7 @@ onUnmounted(() => {
             About Tap-Na
           </RouterLink>
         </p>
+        <ShopFooterCredit />
       </div>
     </main>
   </div>

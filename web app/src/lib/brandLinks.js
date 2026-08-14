@@ -17,3 +17,7 @@ export const BRAND_SOCIAL_LINKS = [
   { id: 'facebook', label: 'Facebook', href: BRAND_FACEBOOK_HREF, icon: 'public' },
   { id: 'whatsapp', label: 'WhatsApp', href: BRAND_WHATSAPP_HREF, icon: 'chat' }
 ]
+
+export const AUCKMUND_HREF = 'https://auckmund.com/'
+export const AUCKMUND_NAME = 'Auckmund'
+export const AUCKMUND_LEGAL_NAME = 'Auckmund Investment CC'
