@@ -698,7 +698,6 @@ onUnmounted(() => {
         </div>
         <ShopFooterCredit>
           <p class="text-xs text-on-surface-variant max-w-xl leading-relaxed">
-            tap-na (Tap Namibia) — NFC business cards in Windhoek. Connect business cards, Tap NFC cards, and business cards printing. The NFC cards shop for Namibia.
           </p>
         </ShopFooterCredit>
       </footer>
