@@ -13,6 +13,7 @@ import {
   staffCanAccessAdminPath
 } from '../lib/staffAuth'
 import { ROUTE_SEO, setPageSeo } from '../lib/seo'
+import { syncPosthogForRoute } from '../lib/posthog'
 
 const routes = [
   {
@@ -252,6 +253,7 @@ router.beforeEach((to) => {
 })
 
 router.afterEach((to) => {
+  syncPosthogForRoute(to)
   const key = to.meta?.seoKey
   const preset = key ? ROUTE_SEO[key] : null
   if (!preset) return

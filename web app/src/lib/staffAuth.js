@@ -121,6 +121,9 @@ export async function staffLogin(email, password) {
     return { ok: false, error: res.error || 'Login failed' }
   }
   const session = saveFromResponse(res.data)
+  import('./posthog.js')
+    .then((m) => m.identifyStaff())
+    .catch(() => {})
   return { ok: true, session, user: session.user }
 }
 
@@ -131,6 +134,9 @@ export async function staffLogout() {
     /* ignore */
   }
   writeSession(null)
+  import('./posthog.js')
+    .then((m) => m.resetPosthog())
+    .catch(() => {})
 }
 
 export async function refreshStaffSession() {

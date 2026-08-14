@@ -3,6 +3,9 @@ import App from './App.vue'
 import router from './router'
 import './style.css'
 import { apiReportClientError } from './lib/api'
+import { capturePosthogException, initPosthog } from './lib/posthog'
+
+initPosthog()
 
 function reportUnhandled(message, stack, context = {}) {
   try {
@@ -22,6 +25,7 @@ const app = createApp(App)
 
 app.config.errorHandler = (err, instance, info) => {
   console.error(err)
+  capturePosthogException(err)
   reportUnhandled(err?.message || String(err), err?.stack || '', {
     vueInfo: String(info || ''),
     component: instance?.$options?.name || instance?.type?.name || ''

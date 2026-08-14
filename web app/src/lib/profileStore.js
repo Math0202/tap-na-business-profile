@@ -198,15 +198,24 @@ export function login(identifier, password) {
     return { ok: false, error: 'Incorrect password.' }
   }
   localStorage.setItem(SESSION_KEY, JSON.stringify({ loggedIn: true, at: Date.now() }))
+  import('./posthog.js')
+    .then((m) => m.identifyOwner())
+    .catch(() => {})
   return { ok: true }
 }
 
 export function markLoggedIn() {
   localStorage.setItem(SESSION_KEY, JSON.stringify({ loggedIn: true, at: Date.now() }))
+  import('./posthog.js')
+    .then((m) => m.identifyOwner())
+    .catch(() => {})
 }
 
 export function logout() {
   localStorage.removeItem(SESSION_KEY)
+  import('./posthog.js')
+    .then((m) => m.resetPosthog())
+    .catch(() => {})
 }
 
 /**
