@@ -7,6 +7,7 @@ import { addToCart } from '../lib/cartStore'
 import { BRAND_SOCIAL_LINKS } from '../lib/brandLinks'
 import { setPageSeo } from '../lib/seo'
 import ShopFooterCredit from '../components/ShopFooterCredit.vue'
+import { openLegalRequest } from '../lib/legalRequest'
 
 const route = useRoute()
 const router = useRouter()
@@ -268,8 +269,12 @@ onUnmounted(() => {
           </div>
           <div class="flex flex-col gap-2">
             <span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Legal</span>
-            <RouterLink to="/privacy" class="text-on-surface no-underline hover:opacity-70">Privacy</RouterLink>
-            <RouterLink to="/terms" class="text-on-surface no-underline hover:opacity-70">Terms</RouterLink>
+            <button type="button" class="text-left text-on-surface hover:opacity-70" @click="openLegalRequest('privacy')">
+              Privacy
+            </button>
+            <button type="button" class="text-left text-on-surface hover:opacity-70" @click="openLegalRequest('terms')">
+              Terms
+            </button>
           </div>
           <div class="flex flex-col gap-2">
             <span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Social</span>

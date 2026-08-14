@@ -15,6 +15,7 @@ import {
 import { ROUTE_SEO, setPageSeo } from '../lib/seo'
 import { syncPosthogForRoute } from '../lib/posthog'
 import { personalPagePath, slugForLegacyPersonalRedirect } from '../lib/profilePaths'
+import { openLegalRequest } from '../lib/legalRequest'
 
 const routes = [
   {
@@ -102,14 +103,18 @@ const routes = [
   {
     path: '/privacy',
     name: 'privacy',
-    component: () => import('../views/LegalView.vue'),
-    meta: { seoKey: 'privacy' }
+    redirect: () => {
+      openLegalRequest('privacy')
+      return '/'
+    }
   },
   {
     path: '/terms',
     name: 'terms',
-    component: () => import('../views/LegalView.vue'),
-    meta: { seoKey: 'terms' }
+    redirect: () => {
+      openLegalRequest('terms')
+      return '/'
+    }
   },
   {
     path: '/business',
