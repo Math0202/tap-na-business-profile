@@ -347,7 +347,7 @@ onUnmounted(() => {
                 <h3 class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">About</h3>
                 <p class="text-on-surface-variant text-sm leading-relaxed whitespace-pre-wrap">{{ businessCopy.about }}</p>
               </div>
-              <div v-if="businessCopy.features.length" class="flex flex-col gap-2">
+              <div v-if="businessCopy.features.length" class="flex flex-col gap-2 bg-surface-container rounded-xl p-4">
                 <h3 class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">Features</h3>
                 <ul class="list-none p-0 m-0 flex flex-col gap-2">
                   <li
@@ -397,7 +397,7 @@ onUnmounted(() => {
                 <h3 class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">About</h3>
                 <p class="text-on-surface-variant text-sm leading-relaxed whitespace-pre-wrap">{{ executiveCopy.about }}</p>
               </div>
-              <div v-if="executiveCopy.features.length" class="flex flex-col gap-2">
+              <div v-if="executiveCopy.features.length" class="flex flex-col gap-2 bg-surface-container rounded-xl p-4">
                 <h3 class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">Features</h3>
                 <ul class="list-none p-0 m-0 flex flex-col gap-2">
                   <li

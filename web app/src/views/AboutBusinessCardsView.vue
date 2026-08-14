@@ -221,7 +221,7 @@ onUnmounted(() => {
             <div class="h-1 w-12 bg-primary" />
             
           </div>
-          <div class="overflow-x-auto -mx-1 px-1">
+          <div class="overflow-x-auto -mx-1 px-1 bg-surface-container rounded-xl p-4 md:p-6">
             <table class="w-full min-w-[560px] text-left text-sm border-collapse">
               <thead>
                 <tr class="border-b border-border-subtle">
