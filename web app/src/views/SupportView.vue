@@ -106,13 +106,7 @@ onUnmounted(() => {
     <main class="pt-16 min-h-screen bg-surface pb-10">
       <div class="max-w-3xl mx-auto px-margin-mobile md:px-margin-desktop py-10 flex flex-col gap-10">
         <header class="flex flex-col gap-3">
-          <p class="font-label-caps text-[11px] uppercase tracking-[0.2em] text-ink-muted">Support</p>
-          <h1 class="font-headline-lg-mobile md:font-headline-lg text-[32px] md:text-[40px] font-semibold leading-tight">
-            We’re here to help
-          </h1>
-          <p class="text-on-surface-variant text-base leading-relaxed max-w-xl">
-            Questions about NFC business cards, Connect cards, Tap NFC orders, or your profile? Send a message, WhatsApp us, or email Tap Namibia in Windhoek.
-          </p>
+          
         </header>
 
         <section class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -154,7 +148,7 @@ onUnmounted(() => {
           </a>
         </section>
 
-        <section class="flex flex-col gap-4">
+        <section class="flex flex-col gap-4 bg-surface-container rounded-xl p-4 md:p-6">
           <div class="flex flex-col gap-1">
             <h2 class="font-headline-lg-mobile text-[22px] uppercase font-semibold">Send a message</h2>
             <div class="h-1 w-12 bg-primary" />
@@ -177,7 +171,7 @@ onUnmounted(() => {
                 id="support-name"
                 v-model="name"
                 type="text"
-                class="field-input w-full bg-surface-container border-0"
+                class="field-input w-full bg-surface border-0"
                 autocomplete="name"
                 maxlength="120"
                 required
@@ -189,7 +183,7 @@ onUnmounted(() => {
                 id="support-email"
                 v-model="email"
                 type="email"
-                class="field-input w-full bg-surface-container border-0"
+                class="field-input w-full bg-surface border-0"
                 autocomplete="email"
                 maxlength="160"
                 required
@@ -201,7 +195,7 @@ onUnmounted(() => {
                 id="support-phone"
                 v-model="phone"
                 type="tel"
-                class="field-input w-full bg-surface-container border-0"
+                class="field-input w-full bg-surface border-0"
                 autocomplete="tel"
                 maxlength="40"
               >
@@ -212,7 +206,7 @@ onUnmounted(() => {
                 id="support-subject"
                 v-model="subject"
                 type="text"
-                class="field-input w-full bg-surface-container border-0"
+                class="field-input w-full bg-surface border-0"
                 maxlength="160"
                 placeholder="Orders, claiming, profile…"
               >
@@ -223,7 +217,7 @@ onUnmounted(() => {
                 id="support-message"
                 v-model="message"
                 rows="5"
-                class="field-input w-full bg-surface-container border-0 resize-y min-h-[120px]"
+                class="field-input w-full bg-surface border-0 resize-y min-h-[120px]"
                 maxlength="4000"
                 required
               />
@@ -238,12 +232,6 @@ onUnmounted(() => {
           </form>
         </section>
 
-        <p class="text-sm text-ink-muted">
-          Prefer shopping first?
-          <RouterLink to="/" class="text-primary no-underline">Back to shop</RouterLink>
-          ·
-          <RouterLink to="/about/business-cards" class="text-primary no-underline">About Connect cards</RouterLink>
-        </p>
         <ShopFooterCredit />
       </div>
     </main>
