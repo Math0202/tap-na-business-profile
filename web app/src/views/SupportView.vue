@@ -32,7 +32,10 @@ function shopAll() {
 
 const mailtoHref = `mailto:${SUPPORT_EMAIL}`
 const whatsappHref = BRAND_WHATSAPP_HREF
-const socialLinks = BRAND_SOCIAL_LINKS.filter((l) => l.id !== 'whatsapp')
+const socialLinks = [
+  ...BRAND_SOCIAL_LINKS.filter((l) => l.id !== 'whatsapp'),
+  { id: 'x', label: 'X', href: '' }
+]
 
 async function onSubmit() {
   if (submitting.value) return
@@ -132,20 +135,31 @@ onUnmounted(() => {
               <p class="text-sm text-on-surface-variant mt-1">{{ SUPPORT_EMAIL }}</p>
             </div>
           </a>
-          <a
+          <component
+            :is="link.href ? 'a' : 'div'"
             v-for="link in socialLinks"
             :key="link.id"
-            :href="link.href"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="bg-surface-container rounded-xl p-5 no-underline text-inherit flex gap-3 hover:opacity-90 transition-opacity"
+            :href="link.href || undefined"
+            :target="link.href ? '_blank' : undefined"
+            :rel="link.href ? 'noopener noreferrer' : undefined"
+            class="bg-surface-container rounded-xl p-5 no-underline text-inherit flex gap-3"
+            :class="link.href ? 'hover:opacity-90 transition-opacity' : 'cursor-default'"
           >
-            <span class="material-symbols-outlined text-primary shrink-0">{{ link.icon }}</span>
+            <svg
+              v-if="link.id === 'x'"
+              class="shrink-0 text-primary w-6 h-6"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.74l7.727-8.835L1.254 2.25H8.08l4.253 5.622L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+            </svg>
+            <span v-else class="material-symbols-outlined text-primary shrink-0">{{ link.icon }}</span>
             <div>
               <p class="font-medium text-sm">{{ link.label }}</p>
               <p class="text-sm text-on-surface-variant mt-1">Follow tap-na</p>
             </div>
-          </a>
+          </component>
         </section>
 
         <section class="flex flex-col gap-4 bg-surface-container rounded-xl p-4 md:p-6">
