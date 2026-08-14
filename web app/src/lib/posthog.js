@@ -63,7 +63,18 @@ export function audienceForPath(path, searchOrQuery = '') {
     return 'shop'
   }
 
-  if (p.startsWith('/c/') || p === '/setup') return 'guest'
+  if (p === '/setup') return 'guest'
+
+  if (p.startsWith('/c/')) {
+    if (isLoggedIn()) {
+      const viewed = loadViewedProfile()
+      const mine = loadProfile()
+      const viewedId = String(viewed?.id || viewed?.remoteProfileId || '')
+      const myId = String(mine.remoteProfileId || '')
+      if (viewedId && myId && viewedId === myId) return 'owner'
+    }
+    return 'guest'
+  }
 
   if (isLoggedIn()) {
     const viewed = loadViewedProfile()

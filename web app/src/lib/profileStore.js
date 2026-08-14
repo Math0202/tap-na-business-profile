@@ -322,7 +322,9 @@ export function logoUrl(profile) {
 }
 
 export function publicPage(profile) {
-  return isTableBusiness(profile) ? '/business' : '/me'
+  if (isTableBusiness(profile)) return '/business'
+  const slug = String(profile?.shareSlug || '').trim()
+  return slug ? `/c/${encodeURIComponent(slug)}` : '/me'
 }
 
 export function normalizeMenuImages(value) {

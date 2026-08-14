@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import BrandMark from '../components/BrandMark.vue'
 import BookMeetingPopup from '../components/BookMeetingPopup.vue'
 import {
@@ -28,7 +28,9 @@ import {
   setCatalogCartProfile,
   setCatalogCartQty
 } from '../lib/profileCatalogCart'
+import { browsingPersonalSlug, ensureViewedProfileFromSlug, personalPagePath } from '../lib/profilePaths'
 
+const route = useRoute()
 const router = useRouter()
 const loggedIn = ref(isLoggedIn())
 const loading = ref(true)
@@ -49,6 +51,9 @@ const guestCartBadge = ref(anyCatalogCartCount())
 const showDeleted = ref(false)
 
 const isOwnerMode = computed(() => loggedIn.value && !isTableBusiness(loadProfile()))
+const catalogPath = computed(() =>
+  personalPagePath(String(route.params.serial || browsingPersonalSlug(route) || ''), 'catalog')
+)
 
 function flash(msg) {
   toast.value = msg
@@ -236,6 +241,8 @@ onMounted(async () => {
     router.replace('/venue')
     return
   }
+  const serial = String(route.params.serial || '').trim()
+  if (serial) await ensureViewedProfileFromSlug(serial)
   const mine = loadProfile()
   const pub = loadPublicProfile()
   if (mine?.name || pub?.name) guestName.value = mine?.name || displayName(pub) || ''
@@ -284,7 +291,7 @@ onUnmounted(() => {
         <div v-if="!visibleOwnerCarts.length" class="card-item-bg rounded-2xl px-4 py-10 text-center">
           <span class="material-symbols-outlined text-gray-500 text-[32px]">shopping_cart</span>
           <p class="text-sm text-gray-300 mt-3">No catalog cart activity yet</p>
-          <RouterLink to="/catalog" class="inline-block mt-4 text-sm text-emerald-400 no-underline">
+          <RouterLink :to="catalogPath" class="inline-block mt-4 text-sm text-emerald-400 no-underline">
             Manage catalog
           </RouterLink>
         </div>
@@ -359,7 +366,7 @@ onUnmounted(() => {
         <div v-if="!guestLines.length" class="card-item-bg rounded-2xl px-4 py-10 text-center">
           <span class="material-symbols-outlined text-gray-500 text-[32px]">shopping_cart</span>
           <p class="text-sm text-gray-300 mt-3">Your cart is empty</p>
-          <RouterLink to="/catalog" class="inline-block mt-4 text-sm text-emerald-400 no-underline">
+          <RouterLink :to="catalogPath" class="inline-block mt-4 text-sm text-emerald-400 no-underline">
             Browse catalog
           </RouterLink>
         </div>

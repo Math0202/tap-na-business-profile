@@ -30,6 +30,7 @@ import {
   clearCatalogCart,
   refreshCatalogCart
 } from '../lib/profileCatalogCart'
+import { browsingPersonalSlug, ensureViewedProfileFromSlug, personalPagePath } from '../lib/profilePaths'
 
 const route = useRoute()
 const router = useRouter()
@@ -101,6 +102,12 @@ const detailItem = computed(() => {
 const cartCount = catalogCartCount
 const cartLines = computed(() => catalogCartLines(items.value))
 const showGuestCart = computed(() => !isOwner.value)
+const catalogPath = computed(() =>
+  personalPagePath(String(route.params.serial || browsingPersonalSlug(route) || ''), 'catalog')
+)
+const catalogCartPath = computed(() =>
+  personalPagePath(String(route.params.serial || browsingPersonalSlug(route) || ''), 'catalog-cart')
+)
 
 function flash(msg) {
   toast.value = msg
@@ -152,14 +159,14 @@ function openDetail(item) {
   if (!item?.id) return
   detailId.value = String(item.id)
   const nextQuery = { ...route.query, item: detailId.value }
-  router.replace({ path: '/catalog', query: nextQuery })
+  router.replace({ path: catalogPath.value, query: nextQuery })
 }
 
 function closeDetail() {
   detailId.value = ''
   const nextQuery = { ...route.query }
   delete nextQuery.item
-  router.replace({ path: '/catalog', query: nextQuery })
+  router.replace({ path: catalogPath.value, query: nextQuery })
 }
 
 function editFromDetail() {
@@ -504,12 +511,22 @@ watch(
   }
 )
 
-onMounted(() => {
+watch(
+  () => route.params.serial,
+  async (serial) => {
+    if (serial) await ensureViewedProfileFromSlug(serial)
+    refresh()
+  }
+)
+
+onMounted(async () => {
   document.title = 'Catalog - tap-na'
   if (isTableBusiness(loadProfile()) && isLoggedIn() && !loadPublicProfile()?.remoteProfileId) {
     router.replace('/venue')
     return
   }
+  const serial = String(route.params.serial || '').trim()
+  if (serial) await ensureViewedProfileFromSlug(serial)
   const mine = loadProfile()
   if (mine?.name) guestName.value = mine.name
   if (mine?.email) guestEmail.value = mine.email
@@ -923,7 +940,7 @@ onUnmounted(() => {
                 Book a meeting
               </button>
               <RouterLink
-                to="/catalog-cart"
+                :to="catalogCartPath"
                 class="block w-full py-3 rounded-full bg-zinc-900 text-sm font-semibold text-center no-underline text-inherit"
                 @click="cartOpen = false"
               >

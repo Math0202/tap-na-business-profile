@@ -16,7 +16,9 @@ const loggedIn = ref(isLoggedIn())
 const isTable = ref(isTableBusiness(loadProfile()))
 const viewedIsTable = ref(isTableBusiness(loadViewedProfile()))
 
-const isHome = computed(() => route.path === '/' || route.path === '/me' || route.path === '/business')
+const isHome = computed(
+  () => route.path === '/' || route.path === '/me' || route.path === '/business' || /^\/c\/[^/]+$/.test(route.path)
+)
 const isShopHome = computed(
   () =>
     route.path === '/' ||

@@ -21,6 +21,7 @@ import { downloadVcard, profileShareUrl, youtubeEmbedUrl, vcardPhotoLine } from 
 import { preferredShareSlug, listCardsForProfile, cardImageSrc, kindLabel, personalTypeLabel } from '../lib/cardLinkStore'
 import { trackVisit, trackShare, trackClick, LOCAL_ID } from '../lib/adminStore'
 import { apiLogCardEvent, apiPublicCatalog } from '../lib/api'
+import { personalPagePath } from '../lib/profilePaths'
 
 const route = useRoute()
 const router = useRouter()
@@ -101,6 +102,7 @@ const shareSlug = computed(() => {
 const shareUrl = computed(() =>
   profileShareUrl(shareSlug.value, undefined, { cardType: profile.value.cardType || 'personal' })
 )
+const catalogPath = computed(() => personalPagePath(shareSlug.value, 'catalog'))
 
 const ownLinkedCards = computed(() => {
   if (!isLoggedIn()) return []
@@ -512,12 +514,12 @@ watch(() => route.path, () => {
         >
           <div class="flex items-center justify-between px-1">
             <p class="text-[10px] uppercase tracking-wide text-gray-500">Offers</p>
-            <RouterLink to="/catalog" class="text-[11px] text-emerald-400 no-underline">View catalog</RouterLink>
+            <RouterLink :to="catalogPath" class="text-[11px] text-emerald-400 no-underline">View catalog</RouterLink>
           </div>
           <RouterLink
             v-for="item in offerPreviewItems"
             :key="item.id"
-            :to="{ path: '/catalog', query: { item: item.id } }"
+            :to="{ path: catalogPath, query: { item: item.id } }"
             class="card-item-bg rounded-2xl flex items-center p-4 no-underline text-inherit"
           >
             <div class="w-12 h-12 rounded-full bg-white overflow-hidden flex items-center justify-center text-black mr-4 shadow-lg shrink-0">

@@ -2666,13 +2666,14 @@ function destinationFor(card, profile) {
   if (!profile) return null
   if (profile.disabled) {
     return {
-      path: profile.card_type === 'table' ? '/business' : '/me',
+      path: profile.card_type === 'table' ? '/business' : (card.slug ? `/c/${encodeURIComponent(card.slug)}` : '/me'),
       blocked: true
     }
   }
-  // Only two categories: personal → /me, table → /business (never redirect off-site)
+  // Personal cards stay on the slug URL; table cards use /business
   if (profile.card_type === 'personal' || card.kind === 'personal') {
-    return { path: '/me', blocked: false }
+    const slug = String(card.slug || '').trim()
+    return { path: slug ? `/c/${encodeURIComponent(slug)}` : '/me', blocked: false }
   }
   return { path: '/business', blocked: false }
 }

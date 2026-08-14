@@ -361,9 +361,12 @@ export function slugStats(cards = listCards()) {
   }
 }
 
-export function resolveDestinationForKind(kind, profile = loadProfile()) {
+export function resolveDestinationForKind(kind, profile = loadProfile(), serial = '') {
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  if (normalizeKind(kind) === 'personal') return origin + '/me'
+  if (normalizeKind(kind) === 'personal') {
+    const slug = String(serial || profile?.shareSlug || '').trim()
+    return slug ? origin + `/c/${encodeURIComponent(slug)}` : origin + '/me'
+  }
   return origin + '/business'
 }
 
@@ -418,7 +421,7 @@ export function linkCardToProfile(serial, {
     }
   }
 
-  const destinationUrl = resolveDestinationForKind(card.kind, p)
+  const destinationUrl = resolveDestinationForKind(card.kind, p, code)
   const next = normalizeCard({
     ...card,
     profileId,

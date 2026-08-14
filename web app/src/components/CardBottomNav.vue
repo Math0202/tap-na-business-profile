@@ -11,6 +11,7 @@ import {
 import { apiGetMyTeam, setApiToken } from '../lib/api'
 import { anyCatalogCartCount, catalogCartCount } from '../lib/profileCatalogCart'
 import { hideFloatingChrome } from '../lib/uiChrome'
+import { browsingPersonalSlug, personalPagePath } from '../lib/profilePaths'
 
 const route = useRoute()
 const router = useRouter()
@@ -73,7 +74,8 @@ const visible = computed(() => {
     p === '/cards' ||
     p === '/catalog' ||
     p === '/catalog-cart' ||
-    p === '/team'
+    p === '/team' ||
+    /^\/c\/[^/]+(\/catalog(-cart)?)?$/.test(p)
   ) {
     return true
   }
@@ -90,18 +92,22 @@ const showCartNav = computed(() => {
 })
 
 const navItems = computed(() => {
+  const slug = browsingPersonalSlug(route)
+  const profileTo = personalPagePath(slug)
+  const catalogTo = personalPagePath(slug, 'catalog')
+  const cartTo = personalPagePath(slug, 'catalog-cart')
   const items = [
     {
-      to: '/me',
+      to: profileTo,
       label: 'Profile',
       icon: 'badge',
-      match: (p) => p === '/me' || p.startsWith('/c/')
+      match: (p) => p === '/me' || /^\/c\/[^/]+$/.test(p)
     },
     {
-      to: '/catalog',
+      to: catalogTo,
       label: 'Catalog',
       icon: 'inventory_2',
-      match: (p) => p === '/catalog'
+      match: (p) => p === '/catalog' || /\/c\/[^/]+\/catalog$/.test(p)
     },
     {
       action: 'share',
@@ -129,10 +135,10 @@ const navItems = computed(() => {
   if (showCartNav.value) {
     const cartIndex = loggedIn.value ? (canUseTeam.value ? 4 : 3) : 2
     items.splice(cartIndex, 0, {
-      to: '/catalog-cart',
+      to: cartTo,
       label: 'Cart',
       icon: 'shopping_cart',
-      match: (p) => p === '/catalog-cart',
+      match: (p) => p === '/catalog-cart' || /\/c\/[^/]+\/catalog-cart$/.test(p),
       badge: loggedIn.value ? 0 : guestCartCount.value || catalogCartCount.value
     })
   }
@@ -150,11 +156,8 @@ function onShare() {
     window.openShareProfile()
     return
   }
-  if (route.path.startsWith('/c/')) {
-    router.push({ path: route.path, hash: '#share', query: route.query })
-    return
-  }
-  router.push({ path: '/me', hash: '#share' })
+  const slug = browsingPersonalSlug(route)
+  router.push({ path: personalPagePath(slug), hash: '#share', query: route.query })
 }
 
 function onLogout() {

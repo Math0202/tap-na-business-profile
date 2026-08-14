@@ -14,6 +14,7 @@ import {
 } from '../lib/staffAuth'
 import { ROUTE_SEO, setPageSeo } from '../lib/seo'
 import { syncPosthogForRoute } from '../lib/posthog'
+import { personalPagePath, slugForLegacyPersonalRedirect } from '../lib/profilePaths'
 
 const routes = [
   {
@@ -196,6 +197,16 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/c/:serial/catalog',
+    name: 'card-catalog',
+    component: () => import('../views/CatalogView.vue')
+  },
+  {
+    path: '/c/:serial/catalog-cart',
+    name: 'card-catalog-cart',
+    component: () => import('../views/ProfileCatalogCartView.vue')
+  },
+  {
     path: '/c/:serial',
     name: 'card-tap',
     component: () => import('../views/CardTapView.vue')
@@ -224,6 +235,15 @@ router.beforeEach((to) => {
 
   if (to.path === '/me' && isTableBusiness(profile) && !isProfileDeleted(profile)) {
     return '/business'
+  }
+
+  if (to.path === '/me' || to.path === '/catalog' || to.path === '/catalog-cart') {
+    const slug = slugForLegacyPersonalRedirect(to.path)
+    if (slug) {
+      const page =
+        to.path === '/catalog' ? 'catalog' : to.path === '/catalog-cart' ? 'catalog-cart' : 'profile'
+      return { path: personalPagePath(slug, page), query: to.query, hash: to.hash }
+    }
   }
 
   // Staff area — home and /c/:serial stay public
