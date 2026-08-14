@@ -12,7 +12,6 @@ function shopAll() {
 }
 
 onMounted(() => {
-  document.title = 'About Connect Cards — tap-na'
   document.documentElement.classList.add('shop-home')
 })
 
@@ -35,13 +34,13 @@ onUnmounted(() => {
         <!-- Hero -->
         <header class="flex flex-col gap-4">
           <p class="font-label-caps text-[11px] uppercase tracking-[0.2em] text-ink-muted">
-            Tap-Na Connect
+            Tap Namibia Connect
           </p>
           <h1 class="font-headline-lg-mobile md:font-headline-lg text-[36px] md:text-[48px] leading-[1.1] font-semibold tracking-[-0.02em]">
-            Digital Business Cards
+            NFC business cards in Namibia
           </h1>
           <p class="text-on-surface-variant text-base leading-relaxed max-w-2xl">
-            <strong class="text-on-surface font-semibold">Tap - Share:</strong> Phone, Email, Website, Social-links, Products &amp; Services, Get Meeting booking.
+            <strong class="text-on-surface font-semibold">Tap - Share:</strong> Phone, Email, Website, Social-links, Products &amp; Services, Get Meeting booking. Connect business cards and Tap NFC cards from tap-na Windhoek.
           </p>
           <div class="flex flex-wrap gap-3 mt-2">
             <button

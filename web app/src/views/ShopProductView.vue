@@ -69,7 +69,7 @@ async function refresh() {
     title: `${p.name} — tap-na`,
     description:
       String(p.desc || '').trim().slice(0, 160) ||
-      `${p.name} NFC Connect card on tap-na. Once-off purchase.`,
+      `${p.name} NFC business cards Namibia. Tap NFC Connect card from tap-na Windhoek. Once-off purchase.`,
     path: `/product/${p.id}`,
     image: p.image || p.images?.[0] || ''
   })

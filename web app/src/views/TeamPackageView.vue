@@ -251,9 +251,9 @@ async function refresh() {
   const focus = String(route.query.focus || '').trim()
   applyFocus(focus)
   setPageSeo({
-    title: 'Connect Teams package — tap-na',
+    title: 'Connect Teams business cards — tap-na Namibia',
     description:
-      'Combine Business and Executive Connect cards. Business alone max 10. Free mix to 10. Cards 11–15 must be Executive, then mix freely.',
+      'Connect business cards for teams in Namibia. Combine Business and Executive Tap NFC cards. Once-off purchase. Free delivery in Windhoek.',
     path: '/package/team'
   })
   await nextTick()

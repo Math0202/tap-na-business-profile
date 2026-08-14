@@ -69,9 +69,9 @@ watch(
 onMounted(async () => {
   document.documentElement.classList.add('shop-home')
   setPageSeo({
-    title: 'Venue Display — tap-na',
+    title: 'Venue Display NFC cards — tap-na Windhoek',
     description:
-      'NFC Venue Display cards for restaurants and businesses. Menus, reviews, Wi-Fi, and guest check-in — tap once at the table.',
+      'NFC Venue Display cards in Namibia for restaurants and businesses. Menus, reviews, Wi-Fi, and guest check-in — tap once at the table. Free Windhoek delivery.',
     path: '/venue-display'
   })
   await refreshCatalog()

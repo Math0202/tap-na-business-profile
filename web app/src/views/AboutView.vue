@@ -1,12 +1,7 @@
 <script setup>
-import { onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import PageBanner from '../components/PageBanner.vue'
 import BrandMark from '../components/BrandMark.vue'
-
-onMounted(() => {
-  document.title = 'About Us - tap-na'
-})
 </script>
 
 <template>
@@ -18,15 +13,15 @@ onMounted(() => {
         <div class="space-y-3">
           <BrandMark size="md" :to="'/'" />
           <div>
-            <h1 class="text-2xl font-bold tracking-tight">About Us</h1>
-            <p class="text-sm text-gray-400 mt-1">NFC business cards &amp; digital profiles</p>
+            <h1 class="text-2xl font-bold tracking-tight">About Tap Namibia</h1>
+            <p class="text-sm text-gray-400 mt-1">NFC business cards &amp; digital profiles in Windhoek</p>
           </div>
         </div>
 
         <section class="card-item-bg rounded-2xl p-5 space-y-3">
           <h2 class="text-lg font-semibold">Tap. Share. Connect Smarter</h2>
           <p class="text-sm text-gray-400 leading-relaxed">
-            tap-na makes networking frictionless with NFC business cards and digital profiles.
+            tap-na (Tap Namibia) makes networking frictionless with NFC business cards, Connect business cards, and digital profiles in Windhoek.
             Share your details instantly — no typing, no friction.
           </p>
         </section>

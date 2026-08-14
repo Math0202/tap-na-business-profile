@@ -3,9 +3,29 @@
  */
 
 const SITE_NAME = 'tap-na'
-const DEFAULT_TITLE = 'tap-na — NFC business cards & digital profiles'
+const DEFAULT_TITLE = 'tap-na — NFC business cards Namibia | Windhoek'
 const DEFAULT_DESCRIPTION =
-  'NFC Connect business cards for professionals and teams. Tap once to share your live digital profile, catalogue, and meeting booking. Once-off purchase. Free delivery in Windhoek.'
+  'Tap Namibia (tap-na) NFC business cards in Windhoek. Connect business cards, Tap NFC cards, and digital profiles. Once-off purchase. Free delivery in Windhoek.'
+const DEFAULT_KEYWORDS = [
+  'tap nam',
+  'Tap Namibia',
+  'Tap na business cards',
+  'Tap NFC',
+  'Business cards Namibia',
+  'Business cards printing',
+  'Best business cards shop',
+  'business cards',
+  'NFC business cards Namibia',
+  'Tap na Windhoek',
+  'Nap nam nfc',
+  'NFC cards',
+  'Connect business cards',
+  'Tap connect cards',
+  'tap-na',
+  'tapnam',
+  'NFC business cards Windhoek',
+  'digital business cards Namibia'
+].join(', ')
 const DEFAULT_IMAGE = 'https://tapnam.com/profile_image.png'
 const DEFAULT_ORIGIN = 'https://tapnam.com'
 
@@ -32,6 +52,18 @@ function ensureLink(rel, href) {
   el.setAttribute('href', href)
 }
 
+function ensureJsonLd(data) {
+  if (typeof document === 'undefined') return
+  let el = document.getElementById('tapna-jsonld')
+  if (!el) {
+    el = document.createElement('script')
+    el.id = 'tapna-jsonld'
+    el.type = 'application/ld+json'
+    document.head.appendChild(el)
+  }
+  el.textContent = JSON.stringify(data)
+}
+
 export function absoluteUrl(path = '/') {
   const origin =
     typeof window !== 'undefined' && window.location?.origin
@@ -43,11 +75,12 @@ export function absoluteUrl(path = '/') {
 }
 
 /**
- * @param {{ title?: string, description?: string, path?: string, image?: string, noindex?: boolean }} opts
+ * @param {{ title?: string, description?: string, keywords?: string, path?: string, image?: string, noindex?: boolean }} opts
  */
 export function setPageSeo(opts = {}) {
   const title = String(opts.title || DEFAULT_TITLE).trim() || DEFAULT_TITLE
   const description = String(opts.description || DEFAULT_DESCRIPTION).trim() || DEFAULT_DESCRIPTION
+  const keywords = String(opts.keywords || DEFAULT_KEYWORDS).trim() || DEFAULT_KEYWORDS
   const path = opts.path || (typeof window !== 'undefined' ? window.location.pathname : '/')
   const url = absoluteUrl(path)
   const image = absoluteUrl(opts.image || DEFAULT_IMAGE)
@@ -58,8 +91,14 @@ export function setPageSeo(opts = {}) {
   }
 
   ensureMeta('name', 'description', description)
+  ensureMeta('name', 'keywords', keywords)
   ensureMeta('name', 'robots', robots)
   ensureMeta('name', 'theme-color', '#0a0a0a')
+  ensureMeta('name', 'geo.region', 'NA-WH')
+  ensureMeta('name', 'geo.placename', 'Windhoek')
+  ensureMeta('name', 'geo.position', '-22.5609;17.0658')
+  ensureMeta('name', 'ICBM', '-22.5609, 17.0658')
+  ensureMeta('property', 'og:locale', 'en_NA')
   ensureMeta('property', 'og:type', 'website')
   ensureMeta('property', 'og:site_name', SITE_NAME)
   ensureMeta('property', 'og:title', title)
@@ -73,46 +112,99 @@ export function setPageSeo(opts = {}) {
   ensureMeta('name', 'twitter:description', description)
   ensureMeta('name', 'twitter:image', image)
   ensureLink('canonical', url)
+
+  if (!opts.noindex) {
+    ensureJsonLd({
+      '@context': 'https://schema.org',
+      '@graph': [
+        {
+          '@type': 'LocalBusiness',
+          '@id': `${DEFAULT_ORIGIN}/#business`,
+          name: 'tap-na',
+          alternateName: [
+            'Tap Namibia',
+            'Tap Nam',
+            'Tap Na',
+            'Tap NFC',
+            'tapnam',
+            'Nap nam nfc'
+          ],
+          url: DEFAULT_ORIGIN,
+          image,
+          description,
+          keywords,
+          address: {
+            '@type': 'PostalAddress',
+            addressLocality: 'Windhoek',
+            addressCountry: 'NA'
+          },
+          areaServed: [
+            { '@type': 'City', name: 'Windhoek' },
+            { '@type': 'Country', name: 'Namibia' }
+          ]
+        },
+        {
+          '@type': 'WebSite',
+          '@id': `${DEFAULT_ORIGIN}/#website`,
+          name: 'tap-na',
+          alternateName: ['Tap Namibia', 'Tap Nam', 'tapnam.com'],
+          url: DEFAULT_ORIGIN,
+          description,
+          publisher: { '@id': `${DEFAULT_ORIGIN}/#business` }
+        },
+        {
+          '@type': 'WebPage',
+          '@id': `${url}#webpage`,
+          url,
+          name: title,
+          description,
+          isPartOf: { '@id': `${DEFAULT_ORIGIN}/#website` }
+        }
+      ]
+    })
+  }
 }
 
 export const ROUTE_SEO = {
   home: {
-    title: 'tap-na — NFC Connect business cards',
+    title: 'tap-na — NFC business cards Namibia | Windhoek',
     description:
-      'Shop NFC Connect business cards for professionals and teams. Professional, Business, and Executive classes. Once-off purchase. Free delivery in Windhoek in 1-3 working days.',
+      'Tap Namibia (tap-na) is the NFC business cards shop in Windhoek. Buy Connect business cards, Tap NFC cards, and digital profiles. Once-off. Free delivery in Windhoek.',
     image: '/profile_image.png'
   },
   'venue-display': {
-    title: 'Venue Display — tap-na',
+    title: 'Venue Display NFC cards — tap-na Windhoek',
     description:
-      'NFC Venue Display cards for restaurants and businesses. Menus, reviews, Wi-Fi, and guest check-in — tap once at the table.'
+      'NFC Venue Display cards in Namibia for restaurants and businesses. Menus, reviews, Wi-Fi, and guest check-in — tap once at the table. Free Windhoek delivery.'
   },
   'team-package': {
-    title: 'Connect Teams package — tap-na',
+    title: 'Connect Teams business cards — tap-na Namibia',
     description:
-      'Combine Business and Executive Connect cards. Business alone max 10. Cards 11–15 must be Executive, then free mix.'
+      'Connect business cards for teams in Namibia. Combine Business and Executive Tap NFC cards. Once-off purchase. Free delivery in Windhoek.'
   },
   cart: {
-    title: 'Cart — tap-na',
-    description: 'Review your Tap-Na Connect card order and request a quote.'
+    title: 'Cart — tap-na NFC business cards',
+    description: 'Review your Tap Namibia Connect card order. NFC business cards and Tap connect cards for Windhoek delivery.'
   },
   'shop-product': {
-    title: 'Product — tap-na',
-    description: 'NFC Connect business card details, features, and pricing on tap-na.'
+    title: 'NFC Connect card — tap-na Namibia',
+    description:
+      'NFC business cards Namibia. Connect business cards and Tap NFC card details, features, and pricing from tap-na Windhoek.'
   },
   'about-business-cards': {
-    title: 'About Connect Cards — tap-na',
+    title: 'NFC business cards Namibia — How Connect cards work',
     description:
-      'How Tap-Na NFC Connect cards work: claim, tap to share, catalogue, meetings, teams, and once-off pricing. Free Windhoek delivery.'
+      'How Tap Namibia NFC Connect cards work: claim, tap to share, catalogue, meetings, and teams. Business cards printing and once-off pricing. Free Windhoek delivery.'
   },
   support: {
-    title: 'Support — tap-na',
+    title: 'Support — Tap na Windhoek',
     description:
-      'Contact Tap-Na support by form, WhatsApp, or email. Help with NFC Connect cards, orders, and profiles.'
+      'Contact Tap Namibia (tap-na) in Windhoek. Help with NFC business cards, Connect cards, Tap NFC orders, and digital profiles.'
   },
   about: {
-    title: 'About Us — tap-na',
-    description: 'Tap-Na makes NFC business cards and digital profiles for smarter networking.'
+    title: 'About Tap Namibia — tap-na NFC business cards',
+    description:
+      'Tap Namibia (tap-na) makes NFC business cards, Connect business cards, and digital profiles in Windhoek. The NFC cards shop for Namibia.'
   },
   login: {
     title: 'Login — tap-na',
@@ -126,4 +218,4 @@ export const ROUTE_SEO = {
   }
 }
 
-export { DEFAULT_DESCRIPTION, DEFAULT_TITLE, SITE_NAME }
+export { DEFAULT_DESCRIPTION, DEFAULT_KEYWORDS, DEFAULT_TITLE, SITE_NAME }

@@ -81,9 +81,9 @@ async function onSubmit() {
 onMounted(() => {
   document.documentElement.classList.add('shop-home')
   setPageSeo({
-    title: 'Support — tap-na',
+    title: 'Support — Tap na Windhoek',
     description:
-      'Contact Tap-Na support by form, WhatsApp, or email. Help with NFC Connect cards, orders, and profiles.',
+      'Contact Tap Namibia (tap-na) in Windhoek. Help with NFC business cards, Connect cards, Tap NFC orders, and digital profiles.',
     path: '/support'
   })
 })
@@ -110,7 +110,7 @@ onUnmounted(() => {
             We’re here to help
           </h1>
           <p class="text-on-surface-variant text-base leading-relaxed max-w-xl">
-            Questions about Connect cards, orders, claiming, or your profile? Send a message, WhatsApp us, or email directly.
+            Questions about NFC business cards, Connect cards, Tap NFC orders, or your profile? Send a message, WhatsApp us, or email Tap Namibia in Windhoek.
           </p>
         </header>
 

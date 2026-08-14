@@ -154,7 +154,6 @@ watch(
 )
 
 onMounted(async () => {
-  document.title = 'tap-na — Connect business cards'
   document.documentElement.classList.add('shop-home')
   if (route.hash === '#table-brochures') {
     router.replace('/venue-display')
@@ -258,7 +257,7 @@ onUnmounted(() => {
               <span
                 class="font-label-caps text-label-caps text-secondary-fixed-dim uppercase tracking-[0.2em]"
               >
-                Connect digital business cards
+                NFC business cards · Namibia
               </span>
               <h1
                 class="font-display-lg text-[42px] md:text-[64px] leading-[1.1] md:leading-[1.05] text-on-primary tracking-[-0.02em] font-semibold"
@@ -266,7 +265,7 @@ onUnmounted(() => {
                 Tap. Connect. <br> Share.
               </h1>
               <p class="text-on-tertiary-container max-w-[90%] md:max-w-md text-body-md">
-                One tap — for professionals, founders, and teams.
+                Tap Namibia (tap-na) — NFC Connect business cards for professionals, founders, and teams in Windhoek.
               </p>
               <div class="mt-4 flex flex-wrap gap-3">
                 <button
@@ -457,7 +456,7 @@ onUnmounted(() => {
             <figure class="pt-2 md:pt-4 m-0">
               <img
                 src="/profile_image.png"
-                alt="Connect Business digital profile on phone with NFC Connect cards"
+                alt="tap-na NFC business cards Namibia — Connect Business digital profile"
                 class="w-full h-auto rounded-xl object-cover"
                 loading="lazy"
                 width="1254"
@@ -696,7 +695,10 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
-        <div class="flex items-center justify-between pt-8 border-t border-border-subtle">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-8 border-t border-border-subtle">
+          <p class="text-xs text-on-surface-variant max-w-xl leading-relaxed">
+            tap-na (Tap Namibia) — NFC business cards in Windhoek. Connect business cards, Tap NFC cards, and business cards printing. The NFC cards shop for Namibia.
+          </p>
           <span class="text-[10px] uppercase font-label-caps text-ink-muted tracking-widest">
             © {{ new Date().getFullYear() }} TAP.NA
           </span>
