@@ -250,7 +250,7 @@ onUnmounted(() => {
       </div>
 
       <footer class="mt-stack-lg px-margin-mobile md:px-margin-desktop pb-stack-lg flex flex-col gap-8 max-w-6xl mx-auto">
-        <div class="grid grid-cols-2 md:grid-cols-3 gap-y-6 gap-x-8">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-y-6 gap-x-8">
           <div class="flex flex-col gap-2">
             <span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Shop</span>
             <RouterLink to="/" class="text-on-surface no-underline hover:opacity-70">Connect cards</RouterLink>
@@ -265,6 +265,11 @@ onUnmounted(() => {
               About Connect cards
             </RouterLink>
             <RouterLink to="/support" class="text-on-surface no-underline hover:opacity-70">Support</RouterLink>
+          </div>
+          <div class="flex flex-col gap-2">
+            <span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Legal</span>
+            <RouterLink to="/privacy" class="text-on-surface no-underline hover:opacity-70">Privacy</RouterLink>
+            <RouterLink to="/terms" class="text-on-surface no-underline hover:opacity-70">Terms</RouterLink>
           </div>
           <div class="flex flex-col gap-2">
             <span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Social</span>

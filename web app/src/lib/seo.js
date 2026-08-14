@@ -206,6 +206,16 @@ export const ROUTE_SEO = {
     description:
       'Contact Tap Namibia (tap-na) in Windhoek. Help with NFC business cards, Connect cards, Tap NFC orders, and digital profiles.'
   },
+  privacy: {
+    title: 'Privacy policy — tap-na Namibia',
+    description:
+      'How tap-na in Windhoek collects and uses information for NFC Connect cards, Venue Display, digital profiles, and shop orders.'
+  },
+  terms: {
+    title: 'Terms of use — tap-na Namibia',
+    description:
+      'Terms for buying Connect cards and using tap-na digital profiles. A division of Auckmund Technology, Windhoek.'
+  },
   about: {
     title: 'About Tap Namibia — tap-na NFC business cards',
     description:

@@ -100,6 +100,18 @@ const routes = [
     meta: { seoKey: 'support' }
   },
   {
+    path: '/privacy',
+    name: 'privacy',
+    component: () => import('../views/LegalView.vue'),
+    meta: { seoKey: 'privacy' }
+  },
+  {
+    path: '/terms',
+    name: 'terms',
+    component: () => import('../views/LegalView.vue'),
+    meta: { seoKey: 'terms' }
+  },
+  {
     path: '/business',
     name: 'business',
     component: () => import('../views/BusinessView.vue')
