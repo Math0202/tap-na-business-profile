@@ -47,10 +47,10 @@ export const COMPANY = {
 
 /** Bank details for EFT on quotes and unpaid invoices */
 export const BANKING_DETAILS = {
-  accountHolder: 'Tangeni Matheus',
-  accountType: 'FUTURE FORWARD',
-  accountNumber: '62272845812',
-  branchCode: '280873',
+  accountHolder: 'AUCKMUND INVESTMENT CC',
+  accountType: 'GOLD BUSINESS ACCOUNT',
+  accountNumber: '64292796992',
+  branchCode: '282273',
   swiftCode: 'FIRNNANX'
 }
 
@@ -73,7 +73,7 @@ export function bankingReferenceAdvice(docNumber, { kind } = {}) {
 export function bankingDetailsLines(_docNumber, { kind: _kind } = {}) {
   const b = BANKING_DETAILS
   return [
-    `Account Holder ${b.accountHolder}`,
+    `Account Name ${b.accountHolder}`,
     `Account Type ${b.accountType}`,
     `Account Number ${b.accountNumber}`,
     `Branch Code ${b.branchCode}`,
@@ -86,7 +86,7 @@ export function bankingDetailsHtml(docNumber, { kind } = {}) {
   void kind
   const b = BANKING_DETAILS
   const rows = [
-    ['Account Holder', b.accountHolder],
+    ['Account Name', b.accountHolder],
     ['Account Type', b.accountType],
     ['Account Number', b.accountNumber],
     ['Branch Code', b.branchCode],

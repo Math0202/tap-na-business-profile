@@ -6102,10 +6102,10 @@ async function handleApi(request, env, url) {
     const origin = 'https://tapnam.com'
     const logoUrl = `${origin}/images/tap-na_logo.png`
     const banking = {
-      accountHolder: 'Tangeni Matheus',
-      accountType: 'FUTURE FORWARD',
-      accountNumber: '62272845812',
-      branchCode: '280873',
+      accountHolder: 'AUCKMUND INVESTMENT CC',
+      accountType: 'GOLD BUSINESS ACCOUNT',
+      accountNumber: '64292796992',
+      branchCode: '282273',
       swiftCode: 'FIRNNANX'
     }
 
@@ -6149,7 +6149,7 @@ async function handleApi(request, env, url) {
     const billToAddress = [company, town].filter(Boolean).join(', ') || town
     const bankingHtml = `
   <div style="margin:16px 0 0;font-size:13px;line-height:1.6;">
-    <div><span style="color:#777;">Account Holder</span> ${escapeHtml(banking.accountHolder)}</div>
+    <div><span style="color:#777;">Account Name</span> ${escapeHtml(banking.accountHolder)}</div>
     <div><span style="color:#777;">Account Type</span> ${escapeHtml(banking.accountType)}</div>
     <div><span style="color:#777;">Account Number</span> ${escapeHtml(banking.accountNumber)}</div>
     <div><span style="color:#777;">Branch Code</span> ${escapeHtml(banking.branchCode)}</div>
@@ -6215,7 +6215,7 @@ async function handleApi(request, env, url) {
       `Quoted total: ${money(subtotal)}`,
       'Payment method: eft',
       '',
-      `Account Holder ${banking.accountHolder}`,
+      `Account Name ${banking.accountHolder}`,
       `Account Type ${banking.accountType}`,
       `Account Number ${banking.accountNumber}`,
       `Branch Code ${banking.branchCode}`,
@@ -6244,7 +6244,7 @@ async function handleApi(request, env, url) {
       `Quoted total: ${money(subtotal)}`,
       'Payment method: eft',
       '',
-      `Account Holder ${banking.accountHolder}`,
+      `Account Name ${banking.accountHolder}`,
       `Account Type ${banking.accountType}`,
       `Account Number ${banking.accountNumber}`,
       `Branch Code ${banking.branchCode}`,

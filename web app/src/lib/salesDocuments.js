@@ -211,7 +211,7 @@ function drawBanking(doc, y) {
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(10)
   const rows = [
-    ['Account Holder', BANKING_DETAILS.accountHolder],
+    ['Account Name', BANKING_DETAILS.accountHolder],
     ['Account Type', BANKING_DETAILS.accountType],
     ['Account Number', BANKING_DETAILS.accountNumber],
     ['Branch Code', BANKING_DETAILS.branchCode],
