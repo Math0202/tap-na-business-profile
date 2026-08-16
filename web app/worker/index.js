@@ -973,6 +973,23 @@ async function restoreSalesEntity(env, {
   return json({ ok: true, id, deleted: false })
 }
 
+const DELETED_SALES_TABLES = [
+  ['sales_cashflow', 'cash'],
+  ['sales_invoices', 'invoice'],
+  ['sales_quotes', 'quote'],
+  ['sales_orders', 'order'],
+  ['sales_products', 'product'],
+  ['sales_agents', 'agent']
+]
+
+async function purgeDeletedSalesRows(env, table) {
+  const rows = await sb(env, `${table}?deleted=eq.true`, {
+    method: 'DELETE',
+    prefer: 'return=representation'
+  })
+  return Array.isArray(rows) ? rows.length : 0
+}
+
 
 async function softDeleteRow(env, {
   table,
@@ -4672,6 +4689,29 @@ async function handleApi(request, env, url) {
         createdAt: row.created_at || ''
       }
     })
+  }
+
+  if (pathname === '/api/admin/deleted/purge' && method === 'POST') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
+    const counts = {}
+    let total = 0
+    for (const [table, key] of DELETED_SALES_TABLES) {
+      const n = await purgeDeletedSalesRows(env, table)
+      counts[key] = n
+      total += n
+    }
+    await writeSalesChangeLog(env, {
+      staff: gate.staff,
+      action: 'delete',
+      entityType: 'deleted_records',
+      entityId: 'purge',
+      entityLabel: 'Deleted records',
+      summary: `Permanently cleared ${total} deleted sales record(s)`,
+      before: counts,
+      after: { purged: total }
+    })
+    return json({ ok: true, purged: total, counts })
   }
 
   if (pathname === '/api/admin/overview' && method === 'GET') {

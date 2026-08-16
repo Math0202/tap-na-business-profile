@@ -14,9 +14,11 @@ import {
   apiRestoreSalesQuote,
   apiRestoreSalesInvoice,
   apiRestoreSalesCash,
-  apiRestoreSalesProduct
+  apiRestoreSalesProduct,
+  apiAdminPurgeDeleted
 } from '../lib/api'
 import { cardImageSrc } from '../lib/cardLinkStore'
+import { purgeLocalDeletedRecords } from '../lib/salesStore'
 
 const route = useRoute()
 const router = useRouter()
@@ -34,6 +36,8 @@ const errorLog = ref([])
 const errorSourceFilter = ref('')
 const deletedItems = ref([])
 const restoringId = ref('')
+const clearingDeleted = ref(false)
+const deletedNotice = ref('')
 
 const panels = [
   { id: 'profiles', label: 'Profiles', icon: 'group' },
@@ -184,6 +188,29 @@ async function restoreDeleted(item) {
   } finally {
     restoringId.value = ''
     await refresh()
+  }
+}
+
+async function clearDeletedBox() {
+  const n = deletedItems.value.length
+  if (!n || clearingDeleted.value) return
+  if (!confirm(`Permanently remove ${n} deleted record${n === 1 ? '' : 's'}? This cannot be undone.`)) {
+    return
+  }
+  clearingDeleted.value = true
+  deletedNotice.value = ''
+  try {
+    const res = await apiAdminPurgeDeleted()
+    if (!res.ok) {
+      deletedNotice.value = res.error || 'Could not clear deleted records'
+      return
+    }
+    purgeLocalDeletedRecords()
+    deletedItems.value = []
+    deletedNotice.value = `Cleared ${res.data?.purged ?? n} deleted record${(res.data?.purged ?? n) === 1 ? '' : 's'}`
+    await refresh()
+  } finally {
+    clearingDeleted.value = false
   }
 }
 
@@ -602,10 +629,23 @@ onMounted(() => {
 
       <!-- Deleted panel -->
       <section v-else-if="panel === 'deleted'" class="mb-8 space-y-4">
-        <div>
-          <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-400">Deleted records</h2>
-          <p class="text-xs text-gray-500 mt-1">Soft-deleted sales agents, orders, quotes, invoices, cash, and products. Restore anytime.</p>
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-400">Deleted records</h2>
+            <p class="text-xs text-gray-500 mt-1">Soft-deleted sales agents, orders, quotes, invoices, cash, and products. Restore anytime.</p>
+          </div>
+          <button
+            type="button"
+            class="shrink-0 px-4 py-2 rounded-full text-xs font-semibold border border-red-500/40 text-red-300 hover:bg-red-500/10 disabled:opacity-40"
+            :disabled="!deletedItems.length || clearingDeleted || loading"
+            @click="clearDeletedBox"
+          >
+            {{ clearingDeleted ? 'Clearing…' : 'Clear all' }}
+          </button>
         </div>
+        <p v-if="deletedNotice" class="text-xs" :class="deletedNotice.startsWith('Cleared') ? 'text-emerald-300' : 'text-amber-300'">
+          {{ deletedNotice }}
+        </p>
         <div v-if="loading" class="card-item-bg rounded-2xl p-6 text-sm text-gray-400 text-center">Loading…</div>
         <div v-else-if="loadError" class="card-item-bg rounded-2xl p-6 text-sm text-amber-300">{{ loadError }}</div>
         <ul v-else class="space-y-2">

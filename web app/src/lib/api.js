@@ -444,6 +444,11 @@ export function apiAdminDeleteProfile(profileId) {
   })
 }
 
+/** Permanently remove all soft-deleted sales records (admin only) */
+export function apiAdminPurgeDeleted() {
+  return request('/api/admin/deleted/purge', { method: 'POST', timeoutMs: 30000 })
+}
+
 
 /** Upload an image/video to the Supabase "assets bucket" via the Worker */
 export async function apiUploadAsset(file, { kind = "avatar" } = {}) {

@@ -496,6 +496,22 @@ function markLocalDeleted(key, id, normalize) {
   writeJson(key, list)
 }
 
+/** Drop locally cached soft-deleted sales rows after a recycle-bin purge. */
+export function purgeLocalDeletedRecords() {
+  const strip = (key, normalize) => {
+    const kept = readJson(key, []).map(normalize).filter((item) => item.deleted !== true)
+    writeJson(key, kept)
+    return kept
+  }
+  strip(AGENTS_KEY, normalizeAgent)
+  strip(SALES_KEY, normalizeSale)
+  strip(QUOTES_KEY, normalizeQuote)
+  strip(INVOICES_KEY, normalizeInvoice)
+  strip(CASH_KEY, normalizeCash)
+  const products = strip(PRODUCTS_KEY, normalizeProduct)
+  productsCache = products
+}
+
 function markLocalRestored(key, id, normalize, remote = null) {
   const list = readJson(key, []).map(normalize)
   const idx = list.findIndex((item) => item.id === id)
