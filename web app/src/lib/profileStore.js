@@ -44,7 +44,8 @@ export const DEFAULT_PROFILE = {
   loginPhone: '',
   passwordHash: '',
   shareSlug: '',
-  remoteProfileId: ''
+  remoteProfileId: '',
+  personalType: ''
 }
 
 export function hashPassword(password) {

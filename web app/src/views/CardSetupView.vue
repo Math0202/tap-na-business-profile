@@ -152,14 +152,16 @@ async function onSubmit(e) {
       loginPhone: c,
       passwordHash,
       remoteProfileId,
-      shareSlug: slug.value
+      shareSlug: slug.value,
+      personalType: personalType.value || ''
     })
     markLoggedIn()
 
     if (slug.value) {
       linkCardToProfile(slug.value, {
         profileId: LOCAL_ID,
-        profileName: company.value.trim() || n
+        profileName: company.value.trim() || n,
+        personalType: personalType.value
       })
     }
 

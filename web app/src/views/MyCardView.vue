@@ -18,7 +18,7 @@ import {
   isLoggedIn
 } from '../lib/profileStore'
 import { downloadVcard, profileShareUrl, youtubeEmbedUrl, vcardPhotoLine } from '../lib/shareHelpers'
-import { preferredShareSlug, listCardsForProfile, cardImageSrc, kindLabel, personalTypeLabel } from '../lib/cardLinkStore'
+import { preferredShareSlug, listCardsForAccount, cardImageSrc, kindLabel, personalTypeLabel } from '../lib/cardLinkStore'
 import { trackVisit, trackShare, trackClick, LOCAL_ID } from '../lib/adminStore'
 import { apiLogCardEvent, apiPublicCatalog } from '../lib/api'
 import { personalPagePath } from '../lib/profilePaths'
@@ -106,8 +106,7 @@ const catalogPath = computed(() => personalPagePath(shareSlug.value, 'catalog'))
 
 const ownLinkedCards = computed(() => {
   if (!isLoggedIn()) return []
-  const pid = profile.value.remoteProfileId || profile.value.id || LOCAL_ID
-  return listCardsForProfile(pid)
+  return listCardsForAccount(profile.value)
 })
 const ownCardPreview = computed(() => {
   if (!isLoggedIn()) return null
@@ -123,9 +122,15 @@ const ownCardPreview = computed(() => {
     }
   }
   const kind = profile.value.cardType === 'table' ? 'table' : 'personal'
+  const personalType = kind === 'personal' ? profile.value.personalType || 'business' : ''
   return {
-    src: cardImageSrc({ kind, personalType: kind === 'personal' ? 'business' : '' }),
-    label: kind === 'table' ? 'Table card' : 'Personal card',
+    src: cardImageSrc({ kind, personalType }),
+    label:
+      kind === 'personal' && personalType
+        ? `${kindLabel(kind)} · ${personalTypeLabel(personalType)}`
+        : kind === 'table'
+          ? 'Table card'
+          : 'Personal card',
     serial: shareSlug.value || ''
   }
 })

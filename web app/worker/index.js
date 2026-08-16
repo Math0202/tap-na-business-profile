@@ -1098,12 +1098,34 @@ async function preferredShareSlug(env, profileId, cardType = 'personal') {
   return cards[0].slug || ''
 }
 
-async function publicProfile(env, row) {
+function mapPublicCardRow(c) {
+  const kind = c?.kind === 'personal' ? 'personal' : 'table'
+  return {
+    slug: c.slug || '',
+    kind,
+    personalType: kind === 'personal' ? normalizePersonalType(c.personal_type || 'business') : '',
+    productId: c.product_id || '',
+    status: c.status || ''
+  }
+}
+
+async function publicProfile(env, row, { includeCards = false } = {}) {
   if (!row) return null
-  const shareSlug = await preferredShareSlug(env, row.id, row.card_type)
+  const cardRows =
+    (await sb(
+      env,
+      `cards?profile_id=eq.${encodeURIComponent(row.id)}&deleted=eq.false&select=slug,kind,personal_type,product_id,status,linked_at&order=linked_at.desc.nullslast`
+    )) || []
+  const mapped = cardRows.map(mapPublicCardRow)
+  const linked = mapped.filter((c) => !c.status || c.status === 'linked')
+  const want = row.card_type === 'table' ? 'table' : 'personal'
+  const shareHit = linked.find((c) => c.kind === want) || linked[0]
+  const personalHit = linked.find((c) => c.kind === 'personal') || mapped.find((c) => c.kind === 'personal')
+  const personalType = row.card_type === 'table' ? '' : personalHit?.personalType || 'business'
   return {
     id: row.id,
     cardType: row.card_type,
+    personalType,
     name: row.name,
     title: row.title,
     company: row.company,
@@ -1136,7 +1158,8 @@ async function publicProfile(env, row) {
     logo: row.logo,
     video: row.video,
     disabled: !!row.disabled,
-    shareSlug
+    shareSlug: shareHit?.slug || '',
+    ...(includeCards ? { cards: mapped } : {})
   }
 }
 
@@ -3827,7 +3850,7 @@ async function handleApi(request, env, url) {
       prefer: 'return=minimal'
     })
 
-    const pub = await publicProfile(env, newProfile || profiles?.[0])
+    const pub = await publicProfile(env, newProfile || profiles?.[0], { includeCards: true })
     // Fire-and-forget welcome email
     sendWelcomeEmail(env, {
       email,
@@ -3883,7 +3906,7 @@ async function handleApi(request, env, url) {
         context: { kind: 'login_alert_email' }
       }))
     }
-    return json({ ok: true, token, profile: await publicProfile(env, profile) })
+    return json({ ok: true, token, profile: await publicProfile(env, profile, { includeCards: true }) })
   }
 
   if (pathname === '/api/auth/forgot-password' && method === 'POST') {
@@ -4984,7 +5007,7 @@ async function handleApi(request, env, url) {
   if (pathname === '/api/me' && method === 'GET') {
     const profile = await getSessionProfile(env, request)
     if (!profile) return bad('Unauthorized', 401)
-    return json({ ok: true, profile: await publicProfile(env, profile) })
+    return json({ ok: true, profile: await publicProfile(env, profile, { includeCards: true }) })
   }
 
   if (pathname === '/api/me' && method === 'PUT') {

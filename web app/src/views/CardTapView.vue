@@ -6,7 +6,8 @@ import {
   extractSerialFromScan,
   kindLabel,
   cardImageSrc,
-  linkCardToProfile
+  linkCardToProfile,
+  hydrateLinkedCardsFromApi
 } from '../lib/cardLinkStore'
 import {
   setViewedProfile,
@@ -172,7 +173,8 @@ async function createProfile(e) {
     const profile = response.data.profile
     linkCardToProfile(serial.value, {
       profileId: LOCAL_ID,
-      profileName: fullName || loginEmail
+      profileName: fullName || loginEmail,
+      personalType: personalType.value
     })
 
     // Log into THIS card's new account (never keep a previous session)
@@ -202,10 +204,14 @@ async function createProfile(e) {
       loginPhone: '',
       passwordHash,
       remoteProfileId: profile.id,
-      shareSlug: serial.value
+      shareSlug: serial.value,
+      personalType: personalType.value || ''
     })
     if (response.data.token) setApiToken(response.data.token)
     markLoggedIn()
+    if (profile.id && Array.isArray(profile.cards) && profile.cards.length) {
+      hydrateLinkedCardsFromApi(profile.id, profile.cards)
+    }
     if (response.data.pendingTeamInvite) {
       pendingTeamInvite.value = response.data.pendingTeamInvite
       joinTeamOpen.value = true
@@ -257,12 +263,13 @@ onMounted(async () => {
       setViewedProfile({ ...remote.profile, shareSlug: remote.card.slug || serial.value })
       try {
         const mine = loadProfile()
-        if (
-          remote.profile.id &&
-          (mine.remoteProfileId === remote.profile.id || !mine.remoteProfileId) &&
-          !mine.shareSlug
-        ) {
-          saveProfile({ shareSlug: remote.card.slug || serial.value })
+        if (remote.profile.id && (mine.remoteProfileId === remote.profile.id || !mine.remoteProfileId)) {
+          const patch = {}
+          if (!mine.shareSlug) patch.shareSlug = remote.card.slug || serial.value
+          if (remote.profile.personalType || personalType.value) {
+            patch.personalType = remote.profile.personalType || personalType.value
+          }
+          if (Object.keys(patch).length) saveProfile(patch)
         }
       } catch {
         /* ignore */

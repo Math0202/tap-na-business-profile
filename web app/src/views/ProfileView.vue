@@ -18,15 +18,16 @@ import {
   normalizeMenuImages
 } from '../lib/profileStore'
 import {
-  listCardsForProfile,
+  listCardsForAccount,
   preferredShareSlug,
   kindLabel,
   cardImageSrc,
-  personalTypeLabel
+  personalTypeLabel,
+  hydrateLinkedCardsFromApi
 } from '../lib/cardLinkStore'
 import { LOCAL_ID } from '../lib/adminStore'
 import { profileShareUrl } from '../lib/shareHelpers'
-import { apiUploadAsset, apiUpdateMe, ensureApiSession, getApiToken } from '../lib/api'
+import { apiUploadAsset, apiUpdateMe, apiGetMe, ensureApiSession, getApiToken } from '../lib/api'
 import {
   BUSINESS_LINK_DEFS,
   normalizeLinkOrder,
@@ -118,13 +119,18 @@ const previewSrc = computed(() => {
 const hasVideo = computed(() => !!(videoData.value && String(videoData.value).trim()))
 const isDataVideo = computed(() => String(videoData.value || '').startsWith('data:video'))
 const shareSlug = ref('')
-const linkedCards = computed(() => listCardsForProfile(LOCAL_ID))
+const personalType = ref('')
+const cardsTick = ref(0)
+const linkedCards = computed(() => {
+  cardsTick.value
+  return listCardsForAccount(loadProfile())
+})
 const primaryLinkedCard = computed(() => linkedCards.value[0] || null)
 const linkedCardPreviewSrc = computed(() => {
   if (primaryLinkedCard.value) return cardImageSrc(primaryLinkedCard.value)
   return cardImageSrc({
     kind: isTable.value ? 'table' : 'personal',
-    personalType: cardType.value === 'table' ? '' : 'business'
+    personalType: isTable.value ? '' : personalType.value || 'business'
   })
 })
 const linkedCardPreviewLabel = computed(() => {
@@ -186,6 +192,7 @@ function fillForm(profile) {
     videoData.value = ''
     cardType.value = 'personal'
     shareSlug.value = ''
+    personalType.value = ''
   } else {
     name.value = profile.name || ''
     title.value = profile.title || ''
@@ -224,6 +231,7 @@ function fillForm(profile) {
     videoData.value = profile.video || ''
     cardType.value = profile.cardType === 'table' ? 'table' : 'personal'
     shareSlug.value = profile.shareSlug || ''
+    personalType.value = profile.personalType || ''
   }
   updateVideoUI()
 }
@@ -744,9 +752,24 @@ watch(isDataVideo, (val) => {
   }
 })
 
-onMounted(() => {
+onMounted(async () => {
   document.title = 'Edit Profile'
   fillForm(loadProfile())
+  try {
+    await ensureApiSession()
+    const me = await apiGetMe()
+    if (me.ok && me.data?.profile) {
+      const p = me.data.profile
+      if (p.personalType) saveProfile({ personalType: p.personalType })
+      if (p.id && Array.isArray(p.cards) && p.cards.length) {
+        hydrateLinkedCardsFromApi(p.id, p.cards)
+      }
+      fillForm(loadProfile())
+      cardsTick.value += 1
+    }
+  } catch {
+    /* keep local preview */
+  }
 })
 </script>
 

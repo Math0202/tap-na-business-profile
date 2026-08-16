@@ -199,6 +199,54 @@ export function listCardsForProfile(profileId) {
   return listCards().filter((c) => c.profileId === profileId)
 }
 
+/** Cards linked to this device profile and/or the signed-in remote account. */
+export function accountProfileIds(profile = loadProfile()) {
+  return [...new Set([LOCAL_ID, profile.remoteProfileId, profile.id].filter(Boolean).map(String))]
+}
+
+export function listCardsForAccount(profile = loadProfile()) {
+  const ids = new Set(accountProfileIds(profile))
+  const seen = new Set()
+  return listCards().filter((c) => {
+    if (!ids.has(String(c.profileId || ''))) return false
+    const key = String(c.serial || '').toLowerCase()
+    if (!key || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+/**
+ * After login, write the server's linked cards (and their colour/tier) into local storage.
+ */
+export function hydrateLinkedCardsFromApi(profileId, remoteCards = []) {
+  const pid = String(profileId || '').trim()
+  if (!pid || !Array.isArray(remoteCards) || !remoteCards.length) return []
+  const list = listCards()
+  const updated = []
+  for (const remote of remoteCards) {
+    const serial = String(remote.slug || remote.serial || '').trim()
+    if (!serial) continue
+    const idx = list.findIndex((c) => c.serial.toLowerCase() === serial.toLowerCase())
+    const prev = idx >= 0 ? list[idx] : {}
+    const next = normalizeCard({
+      ...prev,
+      serial,
+      kind: remote.kind || prev.kind || 'personal',
+      personalType: remote.personalType || remote.personal_type || prev.personalType || '',
+      productId: remote.productId || remote.product_id || prev.productId || '',
+      profileId: pid,
+      status: 'linked',
+      linkedAt: prev.linkedAt || new Date().toISOString()
+    })
+    if (idx >= 0) list[idx] = next
+    else list.unshift(next)
+    updated.push(next)
+  }
+  saveAll(list)
+  return updated
+}
+
 function saleLineItems(sale) {
   if (Array.isArray(sale?.lines) && sale.lines.length) {
     return sale.lines.map((line) => ({
@@ -376,7 +424,8 @@ export function resolveDestinationForKind(kind, profile = loadProfile(), serial 
 export function linkCardToProfile(serial, {
   profileId = LOCAL_ID,
   profileName,
-  profile
+  profile,
+  personalType = ''
 } = {}) {
   const code = String(serial || '').trim()
   if (!code) return { ok: false, error: 'Enter or scan a card code' }
@@ -396,6 +445,7 @@ export function linkCardToProfile(serial, {
     card = normalizeCard({
       serial: code,
       kind: isTableBusiness(p) ? 'table' : 'personal',
+      personalType: personalType || '',
       productName: 'Claimed card'
     })
     list.unshift(card)
@@ -424,6 +474,7 @@ export function linkCardToProfile(serial, {
   const destinationUrl = resolveDestinationForKind(card.kind, p, code)
   const next = normalizeCard({
     ...card,
+    personalType: personalType || card.personalType || '',
     profileId,
     profileName: name,
     destinationUrl,

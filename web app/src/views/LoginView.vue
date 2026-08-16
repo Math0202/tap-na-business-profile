@@ -17,6 +17,7 @@ import {
   staffLogin
 } from '../lib/staffAuth'
 import { resolvePostLoginPath, profileHomePath, staffHomePath } from '../lib/authRedirect'
+import { hydrateLinkedCardsFromApi } from '../lib/cardLinkStore'
 
 const route = useRoute()
 const router = useRouter()
@@ -88,10 +89,14 @@ function applyProfileSession(p, passwordHash, token) {
     loginPhone: p.phone || '',
     passwordHash,
     remoteProfileId: p.id,
-    shareSlug: p.shareSlug || ''
+    shareSlug: p.shareSlug || '',
+    personalType: p.personalType || p.personal_type || ''
   })
   markLoggedIn()
   if (token) setApiToken(token)
+  if (p.id && Array.isArray(p.cards) && p.cards.length) {
+    hydrateLinkedCardsFromApi(p.id, p.cards)
+  }
 }
 
 async function onSubmit(e) {
