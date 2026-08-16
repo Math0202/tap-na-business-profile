@@ -9,7 +9,10 @@ import {
   normalizeLines,
   resolveProductImage,
   BANKING_DETAILS,
-  shouldIncludeBankingDetails
+  shouldIncludeBankingDetails,
+  invoicePaidAmount,
+  invoiceRemaining,
+  formatSalesStatus
 } from './salesStore'
 
 const LOGO_SRC = '/images/tap-na_logo.png'
@@ -186,20 +189,37 @@ function drawMinimalTable(doc, lines, y) {
 }
 
 function drawTotals(doc, row, isInvoice, y) {
-  y = ensureSpace(doc, y, 18)
+  const paid = isInvoice ? invoicePaidAmount(row) : 0
+  const due = isInvoice ? invoiceRemaining(row) : 0
+  y = ensureSpace(doc, y, paid > 0.004 ? 32 : 18)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(12)
   doc.setTextColor(17, 17, 17)
-  doc.text(
-    isInvoice ? `Amount due: ${formatMoney(row.amount)}` : `Quoted total: ${formatMoney(row.amount)}`,
-    20,
-    y
-  )
-  y += 7
+  if (!isInvoice) {
+    doc.text(`Quoted total: ${formatMoney(row.amount)}`, 20, y)
+    y += 7
+  } else {
+    doc.text(`Invoice total: ${formatMoney(row.amount)}`, 20, y)
+    y += 6
+    if (paid > 0.004) {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(11)
+      doc.text(`Paid: ${formatMoney(paid)}`, 20, y)
+      y += 6
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(12)
+    }
+    doc.text(`Amount due: ${formatMoney(due)}`, 20, y)
+    y += 7
+  }
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(10)
   doc.setTextColor(50, 50, 50)
+  if (isInvoice) {
+    doc.text(`Status: ${formatSalesStatus(row.status)}`, 20, y)
+    y += 6
+  }
   const method = String(row.paymentMethod || 'eft').trim() || 'eft'
   doc.text(`Payment method: ${method}`, 20, y)
   y += 8

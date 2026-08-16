@@ -21,7 +21,7 @@ export const PRODUCT_CATEGORIES = ['personal', 'table', 'other']
 
 export const SALE_STATUSES = ['pending', 'paid', 'fulfilled', 'cancelled']
 export const QUOTE_STATUSES = ['draft', 'sent', 'accepted', 'declined', 'converted', 'expired']
-export const INVOICE_STATUSES = ['draft', 'sent', 'paid', 'void']
+export const INVOICE_STATUSES = ['draft', 'sent', 'partially_settled', 'paid', 'void']
 export const PAYMENT_METHODS = ['cash', 'eft', 'card', 'mobile', 'other']
 export const CASH_CATEGORIES = [
   'sale',
@@ -54,12 +54,47 @@ export const BANKING_DETAILS = {
   swiftCode: 'FIRNNANX'
 }
 
-/** Show banking block on invoices only when not yet paid (and not void). */
+export function moneyRound(n) {
+  return Math.round((Number(n) || 0) * 100) / 100
+}
+
+/** Amount already received on an invoice. Paid invoices with no ledger default to the full total. */
+export function invoicePaidAmount(inv) {
+  const total = moneyRound(inv?.amount)
+  const paid = moneyRound(inv?.paidAmount ?? inv?.paid_amount ?? 0)
+  const status = String(inv?.status || '').toLowerCase()
+  if (status === 'paid' && paid <= 0) return total
+  return Math.max(0, Math.min(total, paid))
+}
+
+export function invoiceRemaining(inv) {
+  return Math.max(0, moneyRound(moneyRound(inv?.amount) - invoicePaidAmount(inv)))
+}
+
+export function invoiceSettlementStatus(inv, { paidAmount, previousStatus } = {}) {
+  const prev = String(previousStatus || inv?.status || 'draft').toLowerCase()
+  if (prev === 'void') return 'void'
+  const total = moneyRound(inv?.amount)
+  const paid = moneyRound(paidAmount != null ? paidAmount : invoicePaidAmount(inv))
+  if (total > 0 && paid >= total) return 'paid'
+  if (paid > 0) return 'partially_settled'
+  if (INVOICE_STATUSES.includes(prev) && prev !== 'paid' && prev !== 'partially_settled') return prev
+  return 'draft'
+}
+
+export function formatSalesStatus(status) {
+  const raw = String(status || '').trim()
+  if (raw === 'partially_settled') return 'Partially settled'
+  return raw.replace(/_/g, ' ')
+}
+
+/** Show banking block on invoices only while an amount is still due (and not void). */
 export function shouldIncludeBankingDetails(doc, { kind } = {}) {
   if (kind === 'quote') return true
   if (kind === 'invoice') {
     const status = String(doc?.status || '').toLowerCase()
-    return status !== 'paid' && status !== 'void'
+    if (status === 'void') return false
+    return invoiceRemaining(doc) > 0.004
   }
   return false
 }
@@ -345,6 +380,14 @@ function normalizeQuote(q) {
 
 function normalizeInvoice(inv) {
   const summary = summarizeLines(inv.lines, inv)
+  const previousStatus = INVOICE_STATUSES.includes(inv.status) ? inv.status : 'draft'
+  let paidAmount = moneyRound(inv.paidAmount ?? inv.paid_amount ?? 0)
+  if (previousStatus === 'paid' && paidAmount <= 0) paidAmount = moneyRound(summary.amount)
+  paidAmount = Math.max(0, Math.min(moneyRound(summary.amount), paidAmount))
+  const status = invoiceSettlementStatus(
+    { ...inv, amount: summary.amount, paidAmount },
+    { paidAmount, previousStatus }
+  )
   return {
     id: inv.id || uid('inv'),
     invoiceNumber: inv.invoiceNumber || '',
@@ -361,7 +404,8 @@ function normalizeInvoice(inv) {
     quantity: summary.quantity,
     unitPrice: summary.unitPrice,
     amount: summary.amount,
-    status: INVOICE_STATUSES.includes(inv.status) ? inv.status : 'draft',
+    paidAmount,
+    status,
     paymentMethod: PAYMENT_METHODS.includes(inv.paymentMethod) ? inv.paymentMethod : 'eft',
     issuedAt: inv.issuedAt || new Date().toISOString(),
     sentAt: inv.sentAt || '',
@@ -808,7 +852,6 @@ export function saveSale(payload, { recordCash = true, createInvoice = true } = 
   })
 
   const list = listSales({ includeDeleted: true })
-  const existing = list.find((s) => s.id === next.id)
   const idx = list.findIndex((s) => s.id === next.id)
   const isNew = idx < 0
   if (idx >= 0) {
@@ -833,38 +876,40 @@ export function saveSale(payload, { recordCash = true, createInvoice = true } = 
   })
 
   const cashCreated = []
-  // Auto cash-in when newly marked paid / fulfilled (idempotent per sale)
+  // Cash-in the remaining unpaid amount when a sale is settled (partial payments already recorded)
   if (recordCash && (next.status === 'paid' || next.status === 'fulfilled')) {
-    const wasPaid = existing && (existing.status === 'paid' || existing.status === 'fulfilled')
-    if (!wasPaid || !cashForSale(next.id, 'sale')) {
-      if (!cashForSale(next.id, 'sale')) {
-        cashCreated.push(
-          addCashEntry({
-            type: 'in',
-            category: 'sale',
-            amount: next.amount,
-            method: next.paymentMethod,
-            description: `Sale · ${next.productName} · ${next.customerName}`,
-            saleId: next.id,
-            agentId: next.agentId,
-            at: next.soldAt
-          })
-        )
-      }
-      if (next.commission > 0 && next.agentId && !cashForSale(next.id, 'commission')) {
-        cashCreated.push(
-          addCashEntry({
-            type: 'out',
-            category: 'commission',
-            amount: next.commission,
-            method: 'eft',
-            description: `Commission · ${agent?.name || 'Agent'} · ${next.productName}`,
-            saleId: next.id,
-            agentId: next.agentId,
-            at: next.soldAt
-          })
-        )
-      }
+    const received = cashInForSale(next.id)
+    const remainder = moneyRound(next.amount - received)
+    if (remainder > 0.004) {
+      cashCreated.push(
+        addCashEntry({
+          type: 'in',
+          category: 'sale',
+          amount: remainder,
+          method: next.paymentMethod,
+          description:
+            received > 0.004
+              ? `Sale balance · ${next.productName} · ${next.customerName}`
+              : `Sale · ${next.productName} · ${next.customerName}`,
+          saleId: next.id,
+          agentId: next.agentId,
+          at: next.soldAt
+        })
+      )
+    }
+    if (next.commission > 0 && next.agentId && !cashForSale(next.id, 'commission')) {
+      cashCreated.push(
+        addCashEntry({
+          type: 'out',
+          category: 'commission',
+          amount: next.commission,
+          method: 'eft',
+          description: `Commission · ${agent?.name || 'Agent'} · ${next.productName}`,
+          saleId: next.id,
+          agentId: next.agentId,
+          at: next.soldAt
+        })
+      )
     }
   }
 
@@ -882,6 +927,7 @@ export function saveSale(payload, { recordCash = true, createInvoice = true } = 
     invoice = getInvoice(next.invoiceId)
     if (invoice) {
       const paidNow = next.status === 'paid' || next.status === 'fulfilled'
+      const paidAmount = paidNow ? moneyRound(next.amount) : invoicePaidAmount(invoice)
       invoice = updateInvoice({
         ...invoice,
         lines: next.lines,
@@ -890,6 +936,7 @@ export function saveSale(payload, { recordCash = true, createInvoice = true } = 
         quantity: next.quantity,
         unitPrice: next.unitPrice,
         amount: next.amount,
+        paidAmount,
         paymentMethod: next.paymentMethod,
         customerName: next.customerName,
         customerPhone: next.customerPhone,
@@ -1095,6 +1142,7 @@ export function createInvoiceFromSale(sale) {
     quantity: sale.quantity,
     unitPrice: sale.unitPrice,
     amount: sale.amount,
+    paidAmount: sale.status === 'paid' || sale.status === 'fulfilled' ? moneyRound(sale.amount) : 0,
     status: sale.status === 'paid' || sale.status === 'fulfilled' ? 'paid' : 'draft',
     paymentMethod: sale.paymentMethod,
     issuedAt: sale.soldAt || new Date().toISOString(),
@@ -1126,6 +1174,73 @@ export function updateInvoice(payload) {
     await apiUpsertSalesInvoice(saved)
   })
   return saved
+}
+
+/**
+ * Record a payment against an invoice. Amounts at or above remaining mark it paid.
+ * Partial amounts set status to partially_settled and keep banking / amount due.
+ */
+export async function recordInvoicePayment(invoiceId, amount, { markFullyPaid = false } = {}) {
+  const invoice = getInvoice(invoiceId)
+  if (!invoice) return { ok: false, error: 'Invoice not found', invoice: null }
+  if (invoice.status === 'void') return { ok: false, error: 'Void invoices cannot take payments', invoice }
+
+  const remaining = invoiceRemaining(invoice)
+  let increment = markFullyPaid ? remaining : moneyRound(amount)
+  if (increment <= 0) return { ok: false, error: 'Enter a payment amount', invoice }
+  if (increment > remaining) increment = remaining
+
+  const paidAmount = moneyRound(invoicePaidAmount(invoice) + increment)
+  const status = invoiceSettlementStatus({ ...invoice, paidAmount }, { paidAmount, previousStatus: invoice.status })
+  const updated = updateInvoice({ ...invoice, paidAmount, status })
+  const cashNeed = updated.saleId
+    ? Math.max(0, moneyRound(updated.amount - cashInForSale(updated.saleId)))
+    : increment
+
+  const cashCreated = []
+  const pushSaleCash = (amt, label) => {
+    const n = Math.min(moneyRound(amt), cashNeed)
+    if (n <= 0.004) return
+    cashCreated.push(
+      addCashEntry({
+        type: 'in',
+        category: 'sale',
+        amount: n,
+        method: updated.paymentMethod,
+        description: `Invoice ${updated.invoiceNumber} · ${label} · ${updated.customerName}`,
+        saleId: updated.saleId || '',
+        agentId: updated.agentId || ''
+      })
+    )
+  }
+
+  let saleResult = null
+  if (updated.saleId && status === 'paid') {
+    const sale = listSales({ includeDeleted: true }).find((s) => s.id === updated.saleId)
+    if (sale && sale.status !== 'paid' && sale.status !== 'fulfilled' && sale.status !== 'cancelled') {
+      saleResult = await saveSaleToCloud({ ...sale, status: 'paid' }, { recordCash: true, createInvoice: false })
+    } else {
+      pushSaleCash(increment, 'settled')
+    }
+  } else if (status === 'paid') {
+    pushSaleCash(increment, 'settled')
+  } else {
+    pushSaleCash(increment, 'partial payment')
+  }
+
+  const { apiUpsertSalesInvoice, apiUpsertSalesCash } = await import('./api.js')
+  const invRes = await apiUpsertSalesInvoice(updated)
+  for (const entry of cashCreated) {
+    await apiUpsertSalesCash(entry)
+  }
+
+  return {
+    ok: invRes.ok !== false && (!saleResult || saleResult.ok !== false),
+    invoice: getInvoice(updated.id) || updated,
+    increment,
+    cashCreated,
+    error: invRes.ok === false ? invRes.error : saleResult?.error
+  }
 }
 
 function escapeHtml(value) {
@@ -1247,7 +1362,14 @@ export function buildInvoiceEmailPayload(invoice, { to } = {}) {
       ${linesTableRowsHtml(invoice)}
     </tbody>
   </table>
-  <p style="font-size:15px;font-weight:700;margin:0 0 6px;">Amount due: ${escapeHtml(formatMoney(invoice.amount))}</p>
+  <p style="font-size:14px;margin:0 0 4px;">Invoice total: ${escapeHtml(formatMoney(invoice.amount))}</p>
+  ${
+    invoicePaidAmount(invoice) > 0.004
+      ? `<p style="font-size:14px;margin:0 0 4px;">Paid: ${escapeHtml(formatMoney(invoicePaidAmount(invoice)))}</p>`
+      : ''
+  }
+  <p style="font-size:15px;font-weight:700;margin:0 0 6px;">Amount due: ${escapeHtml(formatMoney(invoiceRemaining(invoice)))}</p>
+  <p style="font-size:13px;margin:0 0 4px;">Status: ${escapeHtml(formatSalesStatus(invoice.status))}</p>
   <p style="font-size:13px;margin:0 0 16px;">Payment method: ${escapeHtml(paymentMethod)}</p>
   ${
     shouldIncludeBankingDetails(invoice, { kind: 'invoice' })
@@ -1270,7 +1392,10 @@ export function buildInvoiceEmailPayload(invoice, { to } = {}) {
     '',
     linesTextBlock(invoice),
     '',
-    `Amount due: ${formatMoney(invoice.amount)}`,
+    `Invoice total: ${formatMoney(invoice.amount)}`,
+    ...(invoicePaidAmount(invoice) > 0.004 ? [`Paid: ${formatMoney(invoicePaidAmount(invoice))}`] : []),
+    `Amount due: ${formatMoney(invoiceRemaining(invoice))}`,
+    `Status: ${formatSalesStatus(invoice.status)}`,
     `Payment method: ${paymentMethod}`,
     '',
     ...(shouldIncludeBankingDetails(invoice, { kind: 'invoice' })
@@ -1550,6 +1675,15 @@ function cashForSale(saleId, category) {
   if (!saleId) return null
   return listCashFlow().find(
     (c) => c.saleId === saleId && (!category || c.category === category)
+  )
+}
+
+function cashInForSale(saleId) {
+  if (!saleId) return 0
+  return moneyRound(
+    listCashFlow()
+      .filter((c) => c.saleId === saleId && c.category === 'sale' && c.type === 'in' && !c.deleted)
+      .reduce((sum, c) => sum + (Number(c.amount) || 0), 0)
   )
 }
 

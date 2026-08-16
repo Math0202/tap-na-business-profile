@@ -27,7 +27,8 @@ import {
   apiDeleteCard,
   apiBulkDeleteCards,
   apiRestoreCard,
-  apiUpdateCardKind
+  apiUpdateCardKind,
+  apiRenameCardBatch
 } from '../lib/api'
 import { downloadSlugQrPng, downloadSlugsQrZip } from '../lib/qrExport'
 import QRCode from 'qrcode'
@@ -35,6 +36,7 @@ import QRCode from 'qrcode'
 const query = ref('')
 const toast = ref('')
 const allSlugs = ref([])
+const allBatches = ref([])
 const slugQrMap = ref({})
 const slugStatsSummary = ref({ total: 0, linked: 0, unlinked: 0, deleted: 0 })
 const slugFilter = ref('all') // all | linked | unlinked | deleted
@@ -42,12 +44,16 @@ const slugKindFilter = ref('all')
 const slugGenerating = ref(false)
 const slugExporting = ref(false)
 const slugDeleting = ref(false)
-const slugForm = ref({ count: 10, kind: 'table', personalType: 'business' })
+const slugForm = ref({ count: 10, kind: 'table', personalType: 'business', name: '' })
 const dateFrom = ref('')
 const dateTo = ref('')
 const selected = ref(new Set())
 const selectMode = ref(false)
+const expandedFolders = ref(new Set())
+const renamingId = ref('')
+const renameDraft = ref('')
 
+const UNGROUPED_KEY = '__ungrouped__'
 const kindOptions = computed(() => Object.values(CARD_KINDS))
 const personalTypeOptions = computed(() => Object.values(PERSONAL_TYPES))
 
@@ -87,7 +93,7 @@ const filteredSlugs = computed(() => {
     if (from && (!created || created < from)) return false
     if (to && (!created || created > to)) return false
     if (!q) return true
-    return [c.serial, c.kind, c.productName, c.customerName, c.profileName, c.saleId, c.profileId]
+    return [c.serial, c.kind, c.productName, c.customerName, c.profileName, c.saleId, c.profileId, c.batchName]
       .join(' ')
       .toLowerCase()
       .includes(q)
@@ -102,6 +108,99 @@ const exportRows = computed(() => {
   }
   return filteredSlugs.value
 })
+
+function folderKey(id) {
+  return id || UNGROUPED_KEY
+}
+
+function groupTypeLabel(group) {
+  if (!group?.kind) return ''
+  const kind = kindLabel(group.kind)
+  if (group.kind !== 'personal') return kind
+  return `${kind} · ${personalTypeLabel(group.personalType)}`
+}
+
+const slugGroups = computed(() => {
+  const metaById = Object.fromEntries((allBatches.value || []).map((b) => [b.id, b]))
+  const buckets = new Map()
+  for (const card of filteredSlugs.value) {
+    const id = card.batchId || ''
+    if (!buckets.has(id)) buckets.set(id, [])
+    buckets.get(id).push(card)
+  }
+  const named = []
+  let ungrouped = null
+  for (const [id, slugs] of buckets) {
+    if (!id) {
+      ungrouped = {
+        id: '',
+        name: 'Ungrouped',
+        kind: '',
+        personalType: '',
+        createdAt: '',
+        slugs
+      }
+      continue
+    }
+    const meta = metaById[id] || {}
+    named.push({
+      id,
+      name: meta.name || slugs[0]?.batchName || 'Untitled batch',
+      kind: meta.kind || slugs[0]?.kind || 'table',
+      personalType: meta.personalType || slugs[0]?.personalType || '',
+      createdAt: meta.createdAt || slugs[0]?.createdAt || '',
+      slugs
+    })
+  }
+  named.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+  return ungrouped ? [...named, ungrouped] : named
+})
+
+function isFolderExpanded(id) {
+  return expandedFolders.value.has(folderKey(id))
+}
+
+function toggleFolder(id) {
+  const key = folderKey(id)
+  const next = new Set(expandedFolders.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  expandedFolders.value = next
+}
+
+function expandFolder(id) {
+  const key = folderKey(id)
+  const next = new Set(expandedFolders.value)
+  next.add(key)
+  expandedFolders.value = next
+}
+
+function selectedInGroup(group) {
+  return (group?.slugs || []).filter((c) => selected.value.has(c.serial)).length
+}
+
+function selectAllInGroup(group) {
+  const next = new Set(selected.value)
+  for (const c of group?.slugs || []) next.add(c.serial)
+  selected.value = next
+  selectMode.value = next.size > 0
+}
+
+function startRename(group) {
+  if (!group?.id) return
+  renamingId.value = group.id
+  renameDraft.value = group.name || ''
+  expandFolder(group.id)
+}
+
+function cancelRename() {
+  renamingId.value = ''
+  renameDraft.value = ''
+}
+
+function safeFilePart(name) {
+  return String(name || 'slugs').replace(/[^\w.-]+/g, '-').replace(/-+/g, '-').slice(0, 48) || 'slugs'
+}
 
 function isSelected(serial) {
   return selected.value.has(serial)
@@ -161,8 +260,11 @@ async function refresh() {
     deleted: c.deleted === true,
     deletedAt: c.deletedAt || '',
     deletedBy: c.deletedBy || '',
+    batchId: c.batchId || local[c.slug]?.batchId || '',
+    batchName: c.batchName || local[c.slug]?.batchName || '',
     status: c.deleted ? 'disabled' : (c.profileId ? 'linked' : 'unlinked')
   }))
+  allBatches.value = Array.isArray(res.data.batches) ? res.data.batches : []
   applyStats(allSlugs.value)
 }
 
@@ -204,25 +306,62 @@ function copyCardUrl(serial, via) {
 }
 
 async function generateSlugs() {
+  const name = String(slugForm.value.name || '').trim().slice(0, 80)
+  if (!name) {
+    flash('Name this batch first')
+    return
+  }
   const count = Math.min(200, Math.max(1, Number(slugForm.value.count) || 1))
   const kind = slugForm.value.kind === 'personal' ? 'personal' : 'table'
   const personalType = kind === 'personal' ? slugForm.value.personalType || 'business' : ''
   slugGenerating.value = true
   try {
-    const remote = await apiProvisionCards({ count, kind, personalType })
+    const remote = await apiProvisionCards({ count, kind, personalType, name })
+    const batchId = remote.data?.batch?.id || ''
+    const batchName = remote.data?.batch?.name || name
     let created
     if (remote.ok && remote.data?.cards?.length) {
-      created = provisionSlugs({ count, kind, personalType, remoteCards: remote.data.cards })
+      created = provisionSlugs({
+        count,
+        kind,
+        personalType,
+        batchId,
+        batchName,
+        remoteCards: remote.data.cards
+      })
     } else {
-      created = provisionSlugs({ count, kind, personalType })
+      created = provisionSlugs({
+        count,
+        kind,
+        personalType,
+        batchId: batchId || `local-${Date.now().toString(36)}`,
+        batchName
+      })
       flash(remote.error ? `Saved locally (${remote.error})` : '')
     }
-    refresh()
+    expandFolder(created[0]?.batchId || batchId)
+    await refresh()
     await refreshSlugQrs(created)
-    flash(`${created.length} slug${created.length === 1 ? '' : 's'} generated`)
+    flash(`${created.length} slug${created.length === 1 ? '' : 's'} in “${batchName}”`)
   } finally {
     slugGenerating.value = false
   }
+}
+
+async function saveRename(group) {
+  const name = String(renameDraft.value || '').trim().slice(0, 80)
+  if (!group?.id) return
+  if (!name) {
+    flash('Name this batch')
+    return
+  }
+  const res = await apiRenameCardBatch(group.id, name)
+  for (const card of allSlugs.value.filter((c) => c.batchId === group.id)) {
+    updateCard(card.serial, { batchName: name })
+  }
+  cancelRename()
+  await refresh()
+  flash(res.ok ? 'Batch renamed' : `Renamed locally (${res.error || 'offline'})`)
 }
 
 async function changeSlugKind(card, kind) {
@@ -304,17 +443,17 @@ async function removeSelectedSlugs() {
   }
 }
 
-function exportSlugsCsv() {
-  const rows = exportRows.value
+function downloadCsv(rows, filename) {
   if (!rows.length) {
-    flash(selectMode.value ? 'Select at least one slug to export' : 'No slugs to export')
+    flash('No slugs to export')
     return
   }
-  const header = ['slug', 'kind', 'status', 'nfc_url', 'qr_url', 'profile', 'sale_id', 'created_at']
+  const header = ['batch', 'slug', 'kind', 'status', 'nfc_url', 'qr_url', 'profile', 'sale_id', 'created_at']
   const lines = [header.join(',')]
   for (const c of rows) {
     lines.push(
       [
+        c.batchName || '',
         c.serial,
         c.kind,
         c.profileId ? 'linked' : 'unlinked',
@@ -331,10 +470,23 @@ function exportSlugsCsv() {
   const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = `tap-na-slugs-${new Date().toISOString().slice(0, 10)}.csv`
+  a.download = filename
   a.click()
   URL.revokeObjectURL(a.href)
   flash(`Exported ${rows.length} slug(s)`)
+}
+
+function exportSlugsCsv() {
+  const rows = exportRows.value
+  if (!rows.length) {
+    flash(selectMode.value ? 'Select at least one slug to export' : 'No slugs to export')
+    return
+  }
+  downloadCsv(rows, `tap-na-slugs-${new Date().toISOString().slice(0, 10)}.csv`)
+}
+
+function exportGroupCsv(group) {
+  downloadCsv(group?.slugs || [], `tap-na-slugs-${safeFilePart(group?.name)}-${new Date().toISOString().slice(0, 10)}.csv`)
 }
 
 async function downloadOneSlugQr(serial) {
@@ -346,15 +498,16 @@ async function downloadOneSlugQr(serial) {
   }
 }
 
-async function exportSlugsQrZip() {
-  const rows = exportRows.value
-  if (!rows.length) {
+async function exportSlugsQrZip(rows, zipName) {
+  const list = Array.isArray(rows) ? rows : exportRows.value
+  if (!list.length) {
     flash(selectMode.value ? 'Select at least one slug to export' : 'No slugs to export')
     return
   }
   slugExporting.value = true
   try {
-    const n = await downloadSlugsQrZip(rows, {
+    const n = await downloadSlugsQrZip(list, {
+      zipName,
       onProgress: (done, total) => {
         if (done === total || done % 5 === 0) flash(`Building QR ${done}/${total}…`)
       }
@@ -365,6 +518,13 @@ async function exportSlugsQrZip() {
   } finally {
     slugExporting.value = false
   }
+}
+
+async function exportGroupQrZip(group) {
+  await exportSlugsQrZip(
+    group?.slugs || [],
+    `tap-na-qr-${safeFilePart(group?.name)}-${new Date().toISOString().slice(0, 10)}.zip`
+  )
 }
 
 onMounted(() => {
@@ -420,61 +580,46 @@ watch(filteredSlugs, (rows) => {
           <div>
             <p class="text-sm font-semibold">Generate slugs</p>
             <p class="text-[11px] text-gray-500 mt-0.5">
-              Pick personal or table. For personal cards, also choose Executive Exclusive, Business, or Professional.
+              Name the batch, then pick personal or table. For personal cards, choose the tier.
             </p>
           </div>
-          <div class="grid grid-cols-2 gap-2">
+          <div class="field-shell !rounded-2xl">
+            <input
+              v-model="slugForm.name"
+              type="text"
+              maxlength="80"
+              class="field-input"
+              placeholder="Windhoek Aug 16 — 20 Professional"
+              aria-label="Batch name"
+            >
+          </div>
+          <div class="flex flex-wrap gap-2">
             <button
               v-for="k in kindOptions"
               :key="k.id"
               type="button"
-              class="rounded-2xl border p-2 text-left transition-colors"
+              class="px-3 py-2 rounded-full text-xs font-semibold border transition-colors"
               :class="slugForm.kind === k.id
-                ? 'border-white bg-white/10'
-                : 'border-[var(--border)] hover:border-zinc-500'"
+                ? 'bg-white text-black border-transparent'
+                : 'border-[var(--border)] text-gray-300 hover:border-zinc-500'"
               @click="slugForm.kind = k.id"
             >
-              <div class="aspect-[3/4] rounded-xl bg-zinc-900/80 overflow-hidden flex items-center justify-center mb-2">
-                <img
-                  :src="cardImageSrc({
-                    kind: k.id,
-                    personalType: k.id === 'personal' ? slugForm.personalType : ''
-                  })"
-                  :alt="k.label"
-                  class="w-full h-full object-contain p-1"
-                >
-              </div>
-              <p class="text-xs font-semibold">{{ k.label }}</p>
+              {{ k.label }}
             </button>
           </div>
-          <div v-if="slugForm.kind === 'personal'" class="grid grid-cols-3 gap-2">
+          <div v-if="slugForm.kind === 'personal'" class="flex flex-wrap gap-2">
             <button
               v-for="t in personalTypeOptions"
               :key="t.id"
               type="button"
-              class="rounded-xl border p-2 text-center transition-colors"
+              class="px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-colors"
               :class="slugForm.personalType === t.id
-                ? 'border-white bg-white/10'
-                : 'border-[var(--border)] hover:border-zinc-500'"
+                ? 'bg-white text-black border-transparent'
+                : 'border-[var(--border)] text-gray-400 hover:border-zinc-500'"
               @click="slugForm.personalType = t.id"
             >
-              <img
-                :src="cardImageSrc({ kind: 'personal', personalType: t.id })"
-                :alt="t.label"
-                class="w-full max-h-16 object-contain mb-1"
-              >
-              <p class="text-[10px] font-semibold leading-tight">{{ t.label }}</p>
+              {{ t.label }}
             </button>
-          </div>
-          <div class="rounded-2xl border border-[var(--border)] bg-zinc-900/50 p-3 flex justify-center">
-            <img
-              :src="cardImageSrc({
-                kind: slugForm.kind,
-                personalType: slugForm.kind === 'personal' ? slugForm.personalType : ''
-              })"
-              alt="Card preview"
-              class="max-h-36 w-auto object-contain drop-shadow-lg"
-            >
           </div>
           <div class="flex flex-col sm:flex-row gap-2">
             <div class="field-shell sm:w-28 !rounded-2xl">
@@ -516,7 +661,7 @@ watch(filteredSlugs, (rows) => {
             type="button"
             class="px-4 py-2.5 rounded-full text-xs font-bold bg-white text-black shrink-0 disabled:opacity-50"
             :disabled="!exportRows.length || slugExporting"
-            @click="exportSlugsQrZip"
+            @click="exportSlugsQrZip()"
           >
             {{ slugExporting ? 'Packing…' : (selectedCount ? `Export QR ZIP (${selectedCount})` : 'Export QR ZIP') }}
           </button>
@@ -586,9 +731,78 @@ watch(filteredSlugs, (rows) => {
           </template>
         </div>
 
-        <ul class="space-y-2">
+        <div class="space-y-3">
+          <div
+            v-for="group in slugGroups"
+            :key="folderKey(group.id)"
+            class="rounded-2xl border border-[var(--border)] overflow-hidden"
+          >
+            <div class="card-item-bg px-4 py-3 flex items-start gap-3">
+              <button
+                type="button"
+                class="mt-0.5 text-gray-400 hover:text-white"
+                :aria-expanded="isFolderExpanded(group.id)"
+                :aria-label="(isFolderExpanded(group.id) ? 'Collapse ' : 'Expand ') + group.name"
+                @click="toggleFolder(group.id)"
+              >
+                <span class="material-symbols-outlined text-[22px]">{{ isFolderExpanded(group.id) ? 'folder_open' : 'folder' }}</span>
+              </button>
+              <div class="min-w-0 flex-1">
+                <div v-if="renamingId === group.id" class="flex gap-2">
+                  <div class="field-shell !rounded-xl flex-1">
+                    <input
+                      v-model="renameDraft"
+                      type="text"
+                      maxlength="80"
+                      class="field-input"
+                      aria-label="Batch name"
+                      @keydown.enter.prevent="saveRename(group)"
+                      @keydown.esc.prevent="cancelRename"
+                    >
+                  </div>
+                  <button type="button" class="text-[11px] font-semibold text-emerald-300" @click="saveRename(group)">Save</button>
+                  <button type="button" class="text-[11px] font-semibold text-gray-400" @click="cancelRename">Cancel</button>
+                </div>
+                <template v-else>
+                  <button type="button" class="text-left w-full" @click="toggleFolder(group.id)">
+                    <p class="text-sm font-semibold truncate">{{ group.name }}</p>
+                    <p class="text-[11px] text-gray-500 mt-0.5">
+                      {{ group.slugs.length }} slug{{ group.slugs.length === 1 ? '' : 's' }}
+                      <template v-if="groupTypeLabel(group)"> · {{ groupTypeLabel(group) }}</template>
+                      <template v-if="formatSlugDate(group.createdAt)"> · {{ formatSlugDate(group.createdAt) }}</template>
+                      <template v-if="selectedInGroup(group)"> · {{ selectedInGroup(group) }} selected</template>
+                    </p>
+                  </button>
+                  <div class="flex flex-wrap gap-x-3 gap-y-1 mt-2">
+                    <button
+                      v-if="group.id"
+                      type="button"
+                      class="text-[11px] font-semibold text-gray-300 hover:text-white"
+                      @click="startRename(group)"
+                    >
+                      Rename
+                    </button>
+                    <button type="button" class="text-[11px] font-semibold text-gray-300 hover:text-white" @click="selectAllInGroup(group)">
+                      Select all
+                    </button>
+                    <button type="button" class="text-[11px] font-semibold text-gray-300 hover:text-white" @click="exportGroupCsv(group)">
+                      Export CSV
+                    </button>
+                    <button
+                      type="button"
+                      class="text-[11px] font-semibold text-gray-300 hover:text-white disabled:opacity-50"
+                      :disabled="slugExporting"
+                      @click="exportGroupQrZip(group)"
+                    >
+                      Export QR ZIP
+                    </button>
+                  </div>
+                </template>
+              </div>
+            </div>
+            <ul v-if="isFolderExpanded(group.id)" class="space-y-2 p-2 pt-0">
           <li
-            v-for="c in filteredSlugs"
+            v-for="c in group.slugs"
             :key="c.serial"
             class="card-item-bg rounded-2xl p-4 flex items-start gap-3"
             :class="isSelected(c.serial) ? 'ring-1 ring-white/40' : ''"
@@ -705,7 +919,9 @@ watch(filteredSlugs, (rows) => {
               </div>
             </div>
           </li>
-        </ul>
+            </ul>
+          </div>
+        </div>
         <p v-if="!filteredSlugs.length" class="text-sm text-gray-500">
           {{ allSlugs.length ? 'No slugs match these filters.' : 'No slugs yet. Generate a batch above to start writing tags.' }}
         </p>

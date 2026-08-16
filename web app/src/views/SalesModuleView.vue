@@ -26,7 +26,6 @@ import {
   getInvoiceBySale,
   sendInvoiceEmail,
   sendQuoteEmail,
-  updateInvoice,
   resolveProductImage,
   listProducts,
   saveProduct,
@@ -51,7 +50,11 @@ import {
   COMPANY,
   BANKING_DETAILS,
   shouldIncludeBankingDetails,
-  bankingReferenceAdvice
+  bankingReferenceAdvice,
+  invoicePaidAmount,
+  invoiceRemaining,
+  recordInvoicePayment,
+  formatSalesStatus
 } from '../lib/salesStore'
 import {
   provisionCardsForSale,
@@ -143,6 +146,8 @@ const invoicePdfBusy = ref(false)
 const quotePdfBusy = ref(false)
 const invoiceEmailTo = ref('')
 const quoteEmailTo = ref('')
+const invoicePaymentAmount = ref('')
+const invoicePaying = ref(false)
 const editingSaleId = ref('')
 const editingQuoteId = ref('')
 const editingProductId = ref('')
@@ -521,7 +526,15 @@ const filteredInvoices = computed(() => {
   const q = query.value.trim().toLowerCase()
   if (!q) return invoices.value
   return invoices.value.filter((inv) =>
-    [inv.invoiceNumber, inv.customerName, inv.productName, inv.status, inv.customerEmail, inv.emailStatus]
+    [
+      inv.invoiceNumber,
+      inv.customerName,
+      inv.productName,
+      inv.status,
+      formatSalesStatus(inv.status),
+      inv.customerEmail,
+      inv.emailStatus
+    ]
       .join(' ')
       .toLowerCase()
       .includes(q)
@@ -662,6 +675,8 @@ function openInvoiceModal(invoice) {
   if (!invoice) return
   activeInvoice.value = invoice
   invoiceEmailTo.value = invoice.customerEmail || ''
+  const remaining = invoiceRemaining(invoice)
+  invoicePaymentAmount.value = remaining > 0.004 ? String(remaining) : ''
   showInvoice.value = true
 }
 
@@ -1128,22 +1143,30 @@ async function sendActiveInvoice() {
   }
 }
 
-async function markInvoicePaid() {
+async function recordActiveInvoicePayment({ markFullyPaid = false } = {}) {
   if (!activeInvoice.value) return
-  const updated = updateInvoice({
-    ...activeInvoice.value,
-    status: 'paid'
-  })
-  // Mirror sale status when linked
-  if (updated.saleId) {
-    const sale = sales.value.find((s) => s.id === updated.saleId)
-    if (sale && sale.status !== 'paid' && sale.status !== 'fulfilled') {
-      await saveSaleToCloud({ ...sale, status: 'paid' })
+  invoicePaying.value = true
+  try {
+    const result = await recordInvoicePayment(activeInvoice.value.id, invoicePaymentAmount.value, {
+      markFullyPaid
+    })
+    if (!result.ok) {
+      flash(result.error || 'Could not record payment')
+      return
     }
+    activeInvoice.value = result.invoice
+    const remaining = invoiceRemaining(result.invoice)
+    invoicePaymentAmount.value = remaining > 0.004 ? String(remaining) : ''
+    await refresh()
+    if (result.invoice?.status === 'paid') flash('Invoice settled')
+    else flash(`Recorded ${formatMoney(result.increment)} · ${formatMoney(remaining)} still due`)
+  } finally {
+    invoicePaying.value = false
   }
-  activeInvoice.value = updated
-  await refresh()
-  flash('Invoice marked paid')
+}
+
+async function markInvoicePaid() {
+  await recordActiveInvoicePayment({ markFullyPaid: true })
 }
 
 function openQuoteEmail(q) {
@@ -1391,6 +1414,9 @@ async function undeleteAgent(id) {
 function statusClass(status) {
   if (status === 'paid' || status === 'fulfilled' || status === 'accepted' || status === 'converted') {
     return 'bg-emerald-500/15 text-emerald-300'
+  }
+  if (status === 'partially_settled') {
+    return 'bg-sky-500/15 text-sky-300'
   }
   if (status === 'pending' || status === 'sent' || status === 'draft') {
     return 'bg-amber-500/15 text-amber-300'
@@ -1807,14 +1833,19 @@ onMounted(async () => {
                 <div class="flex items-center gap-2 flex-wrap">
                   <p class="text-sm font-semibold truncate">{{ inv.invoiceNumber }}</p>
                   <span class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full" :class="statusClass(inv.status)">
-                    {{ inv.status }}
+                    {{ formatSalesStatus(inv.status) }}
                   </span>
                 </div>
                 <p class="text-xs text-gray-400 mt-0.5">
                   {{ inv.customerName }} · {{ docLinesLabel(inv) }}
                 </p>
                 <p class="text-[11px] text-gray-500 mt-1">
-                  {{ formatMoney(inv.amount) }} · {{ formatDay(inv.issuedAt) }}
+                  {{ formatMoney(inv.amount) }}
+                  <template v-if="invoiceRemaining(inv) > 0.004 && invoicePaidAmount(inv) > 0.004">
+                    · {{ formatMoney(invoicePaidAmount(inv)) }} paid
+                    · {{ formatMoney(invoiceRemaining(inv)) }} due
+                  </template>
+                  · {{ formatDay(inv.issuedAt) }}
                   <span v-if="inv.emailStatus && inv.emailStatus !== 'pending'"> · email {{ inv.emailStatus }}</span>
                 </p>
               </div>
@@ -2686,7 +2717,7 @@ onMounted(async () => {
             <p class="text-xs text-gray-400 mt-1">Issued {{ formatDay(activeInvoice.issuedAt) }}</p>
           </div>
           <span class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full" :class="statusClass(activeInvoice.status)">
-            {{ activeInvoice.status }}
+            {{ formatSalesStatus(activeInvoice.status) }}
           </span>
         </div>
 
@@ -2721,9 +2752,41 @@ onMounted(async () => {
             </div>
             <p class="text-xs text-gray-500 pt-1">{{ activeInvoice.paymentMethod }}</p>
           </div>
-          <div class="border-t border-[var(--border)] pt-3 flex justify-between items-center">
-            <span class="text-xs uppercase tracking-wide text-gray-500">Amount due</span>
-            <span class="text-lg font-bold">{{ formatMoney(activeInvoice.amount) }}</span>
+          <div class="border-t border-[var(--border)] pt-3 space-y-1.5">
+            <div class="flex justify-between items-center">
+              <span class="text-xs uppercase tracking-wide text-gray-500">Invoice total</span>
+              <span class="text-sm font-semibold">{{ formatMoney(activeInvoice.amount) }}</span>
+            </div>
+            <div v-if="invoicePaidAmount(activeInvoice) > 0.004" class="flex justify-between items-center">
+              <span class="text-xs uppercase tracking-wide text-gray-500">Paid</span>
+              <span class="text-sm font-semibold text-emerald-300">{{ formatMoney(invoicePaidAmount(activeInvoice)) }}</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-xs uppercase tracking-wide text-gray-500">Amount due</span>
+              <span class="text-lg font-bold">{{ formatMoney(invoiceRemaining(activeInvoice)) }}</span>
+            </div>
+          </div>
+          <div
+            v-if="activeInvoice.status !== 'paid' && activeInvoice.status !== 'void'"
+            class="border-t border-[var(--border)] pt-3 space-y-2"
+          >
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+              Record payment
+            </label>
+            <div class="field-shell">
+              <input
+                v-model="invoicePaymentAmount"
+                type="number"
+                min="0.01"
+                step="0.01"
+                class="field-input"
+                :max="invoiceRemaining(activeInvoice)"
+                aria-label="Payment amount"
+              >
+            </div>
+            <p class="text-[11px] text-gray-500">
+              Enter less than the amount due to mark this invoice as partially settled.
+            </p>
           </div>
           <div
             v-if="shouldIncludeBankingDetails(activeInvoice, { kind: 'invoice' })"
@@ -2793,10 +2856,20 @@ onMounted(async () => {
           <button
             v-if="activeInvoice.status !== 'paid' && activeInvoice.status !== 'void'"
             type="button"
-            class="flex-1 py-3 rounded-full border border-emerald-500/40 text-emerald-300 text-sm font-semibold"
+            class="flex-1 py-3 rounded-full border border-sky-500/40 text-sky-300 text-sm font-semibold disabled:opacity-60"
+            :disabled="invoicePaying || !(Number(invoicePaymentAmount) > 0)"
+            @click="recordActiveInvoicePayment()"
+          >
+            {{ invoicePaying ? 'Saving…' : 'Record payment' }}
+          </button>
+          <button
+            v-if="activeInvoice.status !== 'paid' && activeInvoice.status !== 'void'"
+            type="button"
+            class="flex-1 py-3 rounded-full border border-emerald-500/40 text-emerald-300 text-sm font-semibold disabled:opacity-60"
+            :disabled="invoicePaying"
             @click="markInvoicePaid"
           >
-            Mark paid
+            {{ invoicePaying ? 'Saving…' : 'Mark paid' }}
           </button>
           <button
             type="button"

@@ -194,11 +194,28 @@ export function apiUpdateCardKind(slug, kind, { personalType } = {}) {
   })
 }
 
-/** Provision a batch of blank cards (admin) */
-export function apiProvisionCards({ count = 1, kind = 'table', productId = '', personalType = '' } = {}) {
+/** Provision a batch of blank cards (admin). Optional `name` creates a named folder. */
+export function apiProvisionCards({
+  count = 1,
+  kind = 'table',
+  productId = '',
+  personalType = '',
+  name = ''
+} = {}) {
+  const body = { count, kind, productId, personalType }
+  const batchName = String(name || '').trim()
+  if (batchName) body.name = batchName
   return request('/api/cards/provision', {
     method: 'POST',
-    body: { count, kind, productId, personalType }
+    body
+  })
+}
+
+/** Rename a named slug batch / folder */
+export function apiRenameCardBatch(id, name) {
+  return request(`/api/admin/card-batches/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: { name: String(name || '').trim() }
   })
 }
 

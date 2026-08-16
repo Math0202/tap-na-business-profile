@@ -176,7 +176,9 @@ function normalizeCard(c) {
     createdAt: c.createdAt || new Date().toISOString(),
     deleted,
     deletedAt: c.deletedAt || '',
-    deletedBy: c.deletedBy || ''
+    deletedBy: c.deletedBy || '',
+    batchId: String(c.batchId || c.batch_id || '').trim(),
+    batchName: String(c.batchName || c.batch_name || '').trim()
   }
 }
 
@@ -341,6 +343,8 @@ export function provisionSlugs({
   productName = '',
   saleId = '',
   customerName = '',
+  batchId = '',
+  batchName = '',
   remoteCards = null
 } = {}) {
   const list = listCards()
@@ -360,7 +364,9 @@ export function provisionSlugs({
         productId: productId || remote.productId || '',
         productName: productName || kindLabel(remote.kind || kind),
         saleId,
-        customerName
+        customerName,
+        batchId: remote.batchId || batchId || '',
+        batchName: remote.batchName || batchName || ''
       })
       created.push(card)
       list.unshift(card)
@@ -377,7 +383,9 @@ export function provisionSlugs({
         productId,
         productName: productName || kindLabel(kind),
         saleId,
-        customerName
+        customerName,
+        batchId,
+        batchName
       })
       created.push(card)
       list.unshift(card)

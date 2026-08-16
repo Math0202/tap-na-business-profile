@@ -678,6 +678,7 @@ function mapSalesInvoiceRow(row) {
       quantity: Number(row.quantity) || 1,
       unitPrice: Number(row.unit_price) || 0,
       amount: Number(row.amount) || 0,
+      paidAmount: Number(row.paid_amount) || 0,
       status: row.status || 'draft',
       paymentMethod: row.payment_method || 'eft',
       issuedAt: row.issued_at || '',
@@ -698,6 +699,11 @@ function salesInvoiceToDb(body, { isNew = false } = {}) {
   const agentId = String(body?.agentId || '').trim() || null
   const saleId = String(body?.saleId || '').trim() || null
   const productId = String(body?.productId || '').trim() || null
+  const amount = Math.max(0, Number(body?.amount) || 0)
+  const status = String(body?.status || 'draft')
+  let paidAmount = Math.max(0, Number(body?.paidAmount) || 0)
+  if (status === 'paid' && paidAmount <= 0) paidAmount = amount
+  if (paidAmount > amount) paidAmount = amount
   return {
     id,
     invoice_number: String(body?.invoiceNumber || id).trim(),
@@ -712,8 +718,9 @@ function salesInvoiceToDb(body, { isNew = false } = {}) {
     product_name: String(body?.productName || '').trim(),
     quantity: Math.max(1, Number(body?.quantity) || 1),
     unit_price: Math.max(0, Number(body?.unitPrice) || 0),
-    amount: Math.max(0, Number(body?.amount) || 0),
-    status: String(body?.status || 'draft'),
+    amount,
+    paid_amount: paidAmount,
+    status,
     payment_method: String(body?.paymentMethod || 'eft'),
     issued_at: body?.issuedAt || new Date().toISOString(),
     sent_at: body?.sentAt || null,
@@ -2980,20 +2987,48 @@ async function handleApi(request, env, url) {
       kind === 'personal'
         ? normalizePersonalType(body?.personalType || body?.personal_type || 'business')
         : ''
+    const batchName = String(body?.name || body?.batchName || '').trim().slice(0, 80)
+    let batch = null
+    if (batchName) {
+      const batchId = uid('batch')
+      const createdAt = new Date().toISOString()
+      await sb(env, 'card_batches', {
+        method: 'POST',
+        body: {
+          id: batchId,
+          name: batchName,
+          kind,
+          personal_type: personalType,
+          created_by: gate.staff?.email || gate.staff?.id || '',
+          created_at: createdAt
+        },
+        prefer: 'return=minimal'
+      })
+      batch = {
+        id: batchId,
+        name: batchName,
+        kind,
+        personalType,
+        createdBy: gate.staff?.email || '',
+        createdAt
+      }
+    }
     const created = []
     for (let i = 0; i < count; i++) {
       const id = uid('card')
       const slug = await uniqueSlug(env)
+      const cardBody = {
+        id,
+        slug,
+        kind,
+        personal_type: personalType,
+        product_id: body?.productId || '',
+        status: 'unlinked'
+      }
+      if (batch?.id) cardBody.batch_id = batch.id
       await sb(env, 'cards', {
         method: 'POST',
-        body: {
-          id,
-          slug,
-          kind,
-          personal_type: personalType,
-          product_id: body?.productId || '',
-          status: 'unlinked'
-        },
+        body: cardBody,
         prefer: 'return=minimal'
       })
       created.push({
@@ -3001,11 +3036,13 @@ async function handleApi(request, env, url) {
         slug,
         kind,
         personalType,
+        batchId: batch?.id || '',
+        batchName: batch?.name || '',
         nfcUrl: cardPageUrl(slug, kind, url.origin),
         qrUrl: `${cardPageUrl(slug, kind, url.origin)}?via=qr`
       })
     }
-    return json({ ok: true, cards: created })
+    return json({ ok: true, batch, cards: created })
   }
 
   const cardMatch = pathname.match(/^\/api\/cards\/([^/]+)$/)
@@ -4607,12 +4644,43 @@ async function handleApi(request, env, url) {
   })
   }
 
+  const batchRenameMatch = pathname.match(/^\/api\/admin\/card-batches\/([^/]+)$/)
+  if (batchRenameMatch && method === 'PATCH') {
+    const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
+    if (gate.error) return gate.error
+    const batchId = decodeURIComponent(batchRenameMatch[1])
+    const body = await readJson(request)
+    const name = String(body?.name || '').trim().slice(0, 80)
+    if (!name) return bad('Batch name is required')
+    const rows = await sb(env, `card_batches?id=eq.${encodeURIComponent(batchId)}&select=id`)
+    if (!rows?.length) return bad('Batch not found', 404)
+    const updated = await sb(env, `card_batches?id=eq.${encodeURIComponent(batchId)}`, {
+      method: 'PATCH',
+      body: { name },
+      prefer: 'return=representation'
+    })
+    const row = updated?.[0] || { id: batchId, name }
+    return json({
+      ok: true,
+      batch: {
+        id: row.id,
+        name: row.name || name,
+        kind: row.kind === 'personal' ? 'personal' : 'table',
+        personalType:
+          row.kind === 'personal' ? normalizePersonalType(row.personal_type || '') : '',
+        createdBy: row.created_by || '',
+        createdAt: row.created_at || ''
+      }
+    })
+  }
+
   if (pathname === '/api/admin/overview' && method === 'GET') {
     const gate = await requireStaff(env, request, { roles: ['admin'] })
     if (gate.error) return gate.error
-    const [profiles, cards] = await Promise.all([
+    const [profiles, cards, batches] = await Promise.all([
       sb(env, 'profiles?deleted=eq.false&select=id,card_type,name,title,company,email,phone,address,avatar,logo,disabled,created_at,updated_at&order=created_at.desc&limit=500'),
-      sb(env, 'cards?select=slug,kind,personal_type,product_id,status,profile_id,linked_at,created_at,deleted,deleted_at,deleted_by&order=created_at.desc&limit=2000')
+      sb(env, 'cards?select=slug,kind,personal_type,product_id,status,profile_id,linked_at,created_at,deleted,deleted_at,deleted_by,batch_id&order=created_at.desc&limit=2000'),
+      sb(env, 'card_batches?select=id,name,kind,personal_type,created_by,created_at&order=created_at.desc&limit=500')
     ])
     const cardsByProfile = {}
     for (const c of cards || []) {
@@ -4622,8 +4690,19 @@ async function handleApi(request, env, url) {
     }
     const nameByProfile = {}
     for (const p of profiles || []) nameByProfile[p.id] = p.name || p.company || ''
+    const mappedBatches = (batches || []).map((b) => ({
+      id: b.id,
+      name: b.name || '',
+      kind: b.kind === 'personal' ? 'personal' : 'table',
+      personalType:
+        b.kind === 'personal' ? normalizePersonalType(b.personal_type || '') : '',
+      createdBy: b.created_by || '',
+      createdAt: b.created_at || ''
+    }))
+    const batchNameById = Object.fromEntries(mappedBatches.map((b) => [b.id, b.name]))
     return json({
       ok: true,
+      batches: mappedBatches,
       profiles: (profiles || []).map((p) => ({
         id: p.id,
         cardType: p.card_type === 'table' ? 'table' : 'personal',
@@ -4664,7 +4743,9 @@ async function handleApi(request, env, url) {
         createdAt: c.created_at,
         deleted: c.deleted === true,
         deletedAt: c.deleted_at || '',
-        deletedBy: c.deleted_by || ''
+        deletedBy: c.deleted_by || '',
+        batchId: c.batch_id || '',
+        batchName: c.batch_id ? batchNameById[c.batch_id] || '' : ''
       }))
     })
   }
