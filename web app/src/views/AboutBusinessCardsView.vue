@@ -79,7 +79,7 @@ onUnmounted(() => {
               <span class="material-symbols-outlined text-primary shrink-0">update</span>
               <div>
                 <p class="font-medium text-sm">No reprint for updates</p>
-                <p class="text-xs text-on-surface-variant mt-1">Change title, number, or links online. Same plastic works.</p>
+                <p class="text-xs text-on-surface-variant mt-1">Change title, number, or links online.</p>
               </div>
             </li>
             <li class="bg-surface-container rounded-xl p-4 flex gap-3">

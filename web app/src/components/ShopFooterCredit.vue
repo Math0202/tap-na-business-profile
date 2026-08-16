@@ -34,7 +34,7 @@ const year = new Date().getFullYear()
       >{{ AUCKMUND_LEGAL_NAME }}</a>
     </p>
     <span class="text-[10px] uppercase font-label-caps text-ink-muted tracking-widest">
-      © {{ year }} TAP.NA
+      © {{ year }} Auckmund Technology
     </span>
   </div>
 </template>

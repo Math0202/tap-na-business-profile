@@ -19,5 +19,5 @@ export const BRAND_SOCIAL_LINKS = [
 ]
 
 export const AUCKMUND_HREF = 'https://auckmund.com/'
-export const AUCKMUND_NAME = 'Auckmund'
-export const AUCKMUND_LEGAL_NAME = 'Auckmund Investment CC'
+export const AUCKMUND_NAME = 'Auckmund Technology'
+export const AUCKMUND_LEGAL_NAME = 'Auckmund Technology'

@@ -610,8 +610,8 @@ onUnmounted(() => {
         <!-- Newsletter -->
         <section :ref="setSectionRef" class="px-margin-mobile md:px-margin-desktop pt-stack-md pb-stack-lg">
           <div class="flex flex-col gap-4 border-t border-border-subtle pt-8 max-w-md">
-            <h3 class="font-label-caps text-[10px] uppercase tracking-[0.3em] text-ink-muted">
-              Stay Update
+            <h3 class="font-label-caps text-[21px] uppercase tracking-[0.3em] text-ink-muted">
+              Stay Updated
             </h3>
             <div v-if="!subscribed" class="flex flex-col gap-4">
               <input
