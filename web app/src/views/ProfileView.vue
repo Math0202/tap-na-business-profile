@@ -266,7 +266,8 @@ function onDisabledChange() {
 async function onAvatarChange(e) {
   const file = e.target.files && e.target.files[0]
   if (!file) return
-  if (file.size > 3 * 1024 * 1024) {
+  // Table logos keep a small limit; personal profile photos have no client size cap
+  if (isTable.value && file.size > 3 * 1024 * 1024) {
     alert('Please choose an image under 3 MB.')
     e.target.value = ''
     return

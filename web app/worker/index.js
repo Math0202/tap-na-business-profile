@@ -5056,8 +5056,10 @@ async function handleApi(request, env, url) {
           ? 15 * 1024 * 1024
           : kind === 'video'
             ? 8 * 1024 * 1024
-            : 3 * 1024 * 1024
-    if (file.size > maxBytes) {
+            : kind === 'avatar'
+              ? 0
+              : 3 * 1024 * 1024
+    if (maxBytes > 0 && file.size > maxBytes) {
       const limitLabel =
         kind === 'product'
           ? '20 MB'
