@@ -117,10 +117,12 @@ const salesTabs = computed(() => {
   const tabs = [
     { id: 'overview', label: 'Overview', icon: 'dashboard' },
     { id: 'sales', label: 'Sales', icon: 'receipt_long' },
-    { id: 'invoices', label: 'Invoices', icon: 'request_quote' },
-    { id: 'products', label: 'Products', icon: 'inventory_2' },
-    { id: 'cash', label: 'Cash', icon: 'account_balance_wallet' }
+    { id: 'invoices', label: 'Invoices', icon: 'request_quote' }
   ]
+  if (canManageProducts.value) {
+    tabs.push({ id: 'products', label: 'Products', icon: 'inventory_2' })
+  }
+  tabs.push({ id: 'cash', label: 'Cash', icon: 'account_balance_wallet' })
   if (canManageAgents.value) {
     tabs.push({ id: 'agents', label: 'Agents', icon: 'group' })
   }
@@ -419,7 +421,8 @@ const filteredQuotes = computed(() => {
 
 const productOptions = computed(() => products.value.filter((p) => p.active))
 const cardProducts = computed(() => productOptions.value.filter((p) => p.category !== 'table'))
-const tableProducts = computed(() => productOptions.value.filter((p) => p.category === 'table'))
+/** Table tops are not sold right now — keep out of sale/quote pickers. */
+const tableProducts = computed(() => [])
 const saleProductQty = reactive({})
 const saleUnitPrices = reactive({})
 const quoteProductQty = reactive({})
@@ -1508,15 +1511,7 @@ onMounted(async () => {
             <p class="text-[11px] uppercase tracking-wide text-gray-500">Pending</p>
             <p class="text-xl font-bold mt-1 text-amber-300">{{ formatMoney(stats.pendingAmount) }}</p>
           </div>
-          <div v-if="isSalesScoped" class="card-item-bg rounded-2xl p-4">
-            <p class="text-[11px] uppercase tracking-wide text-gray-500">Money made</p>
-            <p class="text-xl font-bold mt-1 text-emerald-400">{{ formatMoney(stats.inflow) }}</p>
-          </div>
-          <div v-if="isSalesScoped" class="card-item-bg rounded-2xl p-4">
-            <p class="text-[11px] uppercase tracking-wide text-gray-500">Money spent</p>
-            <p class="text-xl font-bold mt-1 text-red-400">{{ formatMoney(stats.outflow) }}</p>
-          </div>
-          <div v-else class="card-item-bg rounded-2xl p-4">
+          <div v-if="!isSalesScoped" class="card-item-bg rounded-2xl p-4">
             <p class="text-[11px] uppercase tracking-wide text-gray-500">Cash balance</p>
             <p class="text-xl font-bold mt-1" :class="stats.balance >= 0 ? 'text-emerald-400' : 'text-red-400'">
               {{ formatMoney(stats.balance) }}
@@ -1927,16 +1922,16 @@ onMounted(async () => {
 
       <!-- Cash flow -->
       <section v-if="tab === 'cash'" class="mb-8 space-y-4">
-        <div class="grid gap-3" :class="isSalesScoped ? 'grid-cols-2' : 'grid-cols-3'">
+        <div v-if="!isSalesScoped" class="grid gap-3 grid-cols-3">
           <div class="card-item-bg rounded-2xl p-3">
-            <p class="text-[10px] uppercase tracking-wide text-gray-500">{{ isSalesScoped ? 'Money made' : 'In' }}</p>
+            <p class="text-[10px] uppercase tracking-wide text-gray-500">In</p>
             <p class="text-lg font-bold text-emerald-400">{{ formatMoney(cashSummary.inflow) }}</p>
           </div>
           <div class="card-item-bg rounded-2xl p-3">
-            <p class="text-[10px] uppercase tracking-wide text-gray-500">{{ isSalesScoped ? 'Money spent' : 'Out' }}</p>
+            <p class="text-[10px] uppercase tracking-wide text-gray-500">Out</p>
             <p class="text-lg font-bold text-red-400">{{ formatMoney(cashSummary.outflow) }}</p>
           </div>
-          <div v-if="!isSalesScoped" class="card-item-bg rounded-2xl p-3">
+          <div class="card-item-bg rounded-2xl p-3">
             <p class="text-[10px] uppercase tracking-wide text-gray-500">Balance</p>
             <p
               class="text-lg font-bold"
