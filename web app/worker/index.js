@@ -951,6 +951,31 @@ async function purgeDeletedSalesRows(env, table) {
   return Array.isArray(rows) ? rows.length : 0
 }
 
+/** Soft-delete live finance rows for agents about to be hard-purged (FK would otherwise SET NULL). */
+async function softDeleteFinanceForDoomedAgents(env) {
+  const doomed = await sb(env, 'sales_agents?deleted=eq.true&select=id')
+  const ids = (doomed || []).map((r) => String(r.id || '').trim()).filter(Boolean)
+  if (!ids.length) return
+  const now = new Date().toISOString()
+  const patch = {
+    deleted: true,
+    deleted_at: now,
+    deleted_by: 'purge:agent-cascade'
+  }
+  for (const agentId of ids) {
+    for (const table of ['sales_orders', 'sales_quotes', 'sales_invoices', 'sales_cashflow']) {
+      const body = table === 'sales_cashflow'
+        ? { deleted: true, deleted_at: now, deleted_by: 'purge:agent-cascade' }
+        : { ...patch, updated_at: now }
+      await sb(env, `${table}?agent_id=eq.${encodeURIComponent(agentId)}&deleted=eq.false`, {
+        method: 'PATCH',
+        body,
+        prefer: 'return=minimal'
+      })
+    }
+  }
+}
+
 
 async function softDeleteRow(env, {
   table,
@@ -4242,6 +4267,24 @@ async function handleApi(request, env, url) {
   const existing = await sb(env, 'sales_agents?id=eq.' + encodeURIComponent(id) + '&select=*')
   const beforeRow = existing?.[0]
   if (!beforeRow) return bad('Agent not found', 404)
+  // Keep Overview in sync: soft-delete this agent's sales/quotes/invoices/cash with them
+  const now = new Date().toISOString()
+  for (const table of ['sales_orders', 'sales_quotes', 'sales_invoices', 'sales_cashflow']) {
+    const body =
+      table === 'sales_cashflow'
+        ? { deleted: true, deleted_at: now, deleted_by: gate.staff?.email || gate.staff?.id || 'agent-delete' }
+        : {
+            deleted: true,
+            deleted_at: now,
+            deleted_by: gate.staff?.email || gate.staff?.id || 'agent-delete',
+            updated_at: now
+          }
+    await sb(env, `${table}?agent_id=eq.${encodeURIComponent(id)}&deleted=eq.false`, {
+      method: 'PATCH',
+      body,
+      prefer: 'return=minimal'
+    })
+  }
   return await softDeleteSalesEntity(env, {
     table: 'sales_agents',
     id,
@@ -4637,6 +4680,9 @@ async function handleApi(request, env, url) {
   if (pathname === '/api/admin/deleted/purge' && method === 'POST') {
     const gate = await requireStaff(env, request, { roles: ['admin'] })
     if (gate.error) return gate.error
+    // Before hard-deleting agents, soft-delete any live sales still linked to them so
+    // ON DELETE SET NULL cannot leave paid orphan sales inflating Overview revenue.
+    await softDeleteFinanceForDoomedAgents(env)
     const counts = {}
     let total = 0
     for (const [table, key] of DELETED_SALES_TABLES) {
