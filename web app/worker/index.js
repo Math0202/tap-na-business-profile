@@ -809,45 +809,6 @@ async function ensureSalesProductOrNull(env, productId) {
   return hit?.[0] ? id : null
 }
 
-async function ensurePaidSaleCashRows(env, orderRow) {
-  if (!orderRow?.id) return
-  if (orderRow.status !== 'paid' && orderRow.status !== 'fulfilled') return
-  const existing = await sb(
-    env,
-    'sales_cashflow?sale_id=eq.' + encodeURIComponent(orderRow.id) + '&select=id,category'
-  )
-  const cats = new Set((existing || []).map((c) => c.category))
-  const at = orderRow.sold_at || new Date().toISOString()
-  if (!cats.has('sale') && Number(orderRow.amount) > 0) {
-    await upsertSalesRow(env, 'sales_cashflow', {
-      id: uid('cash'),
-      type: 'in',
-      category: 'sale',
-      amount: Number(orderRow.amount) || 0,
-      method: orderRow.payment_method || 'other',
-      description: `Sale · ${orderRow.product_name || 'Product'} · ${orderRow.customer_name || ''}`.trim(),
-      sale_id: orderRow.id,
-      agent_id: orderRow.agent_id || null,
-      occurred_at: at,
-      created_at: new Date().toISOString()
-    })
-  }
-  if (!cats.has('commission') && Number(orderRow.commission) > 0 && orderRow.agent_id) {
-    await upsertSalesRow(env, 'sales_cashflow', {
-      id: uid('cash'),
-      type: 'out',
-      category: 'commission',
-      amount: Number(orderRow.commission) || 0,
-      method: 'eft',
-      description: `Commission · ${orderRow.product_name || 'Sale'}`.trim(),
-      sale_id: orderRow.id,
-      agent_id: orderRow.agent_id,
-      occurred_at: at,
-      created_at: new Date().toISOString()
-    })
-  }
-}
-
 function assertAgentAccess(staff, agentId) {
   if (isSalesElevated(staff)) return null
   if (!staff.agentId) return bad('Sales account is not linked to an agent', 403)
@@ -4333,24 +4294,6 @@ async function handleApi(request, env, url) {
     created_at: beforeRow?.created_at || body?.createdAt || row.created_at || new Date().toISOString()
   }
   await upsertSalesRow(env, 'sales_orders', payload)
-  try {
-    await ensurePaidSaleCashRows(env, {
-      ...row,
-      created_at: payload.created_at
-    })
-  } catch (err) {
-    if (!err?._logged) {
-      await logAppError(env, {
-        source: 'sales_cash_sync',
-        message: err?.message || String(err),
-        stack: err?.stack || '',
-        path: pathname,
-        method,
-        context: { orderId: row?.id || '', agentId: row?.agent_id || '' },
-        actor: gate.staff
-      })
-    }
-  }
   const saved = await sb(env, 'sales_orders?id=eq.' + encodeURIComponent(row.id) + '&select=*')
   const savedRow = saved?.[0] || payload
   await writeSalesChangeLog(env, {

@@ -743,7 +743,11 @@ async function pushMissingFinance(remote) {
     if (!remoteInvoiceIds.has(inv.id)) await apiUpsertSalesInvoice(inv)
   }
   for (const c of listCashFlow()) {
-    if (!remoteCashIds.has(c.id)) await apiUpsertSalesCash(c)
+    if (remoteCashIds.has(c.id)) continue
+    // Never re-upload sale-linked cash the cloud already dropped/replaced for that sale
+    const saleId = String(c.saleId || '').trim()
+    if (saleId && remoteOrderIds.has(saleId)) continue
+    await apiUpsertSalesCash(c)
   }
 }
 
@@ -807,12 +811,23 @@ export async function refreshFinanceFromApi() {
       ? localBefore.cashflow.filter((c) => c.agentId === scopedAgentId)
       : localBefore.cashflow
     const mergedCash = mergeById(localCashForMerge, data.cashflow || [], normalizeCash)
+    const remoteOrderIds = new Set((data.orders || []).map((o) => o.id).filter(Boolean))
+    const remoteCashIds = new Set((data.cashflow || []).map((c) => c.id).filter(Boolean))
+    // Drop stale local sale-cash clones. Cloud is source of truth once the sale exists remotely
+    // (server soft-deletes / replacements won't reappear via merge alone).
+    const prunedCash = mergedCash.filter((c) => {
+      const saleId = String(c.saleId || '').trim()
+      if (!saleId) return true
+      if (remoteCashIds.has(c.id)) return true
+      if (remoteOrderIds.has(saleId)) return false
+      return true
+    })
     const agentSaleIds = new Set(
       mergedOrders.filter((o) => o.agentId === scopedAgentId).map((o) => o.id)
     )
     const finalCash = salesAgentScoped
-      ? filterCashForSalesAgent(mergedCash, scopedAgentId, agentSaleIds)
-      : mergedCash
+      ? filterCashForSalesAgent(prunedCash, scopedAgentId, agentSaleIds)
+      : prunedCash
 
     writeJson(AGENTS_KEY, mergedAgents)
     writeJson(SALES_KEY, mergedOrders)
@@ -910,7 +925,7 @@ export function saveSale(payload, { recordCash = true, createInvoice = true } = 
           saleId: next.id,
           agentId: next.agentId,
           at: next.soldAt
-        })
+        }, { sync: false })
       )
     }
     if (next.commission > 0 && next.agentId && !cashForSale(next.id, 'commission')) {
@@ -924,7 +939,7 @@ export function saveSale(payload, { recordCash = true, createInvoice = true } = 
           saleId: next.id,
           agentId: next.agentId,
           at: next.soldAt
-        })
+        }, { sync: false })
       )
     }
   }
@@ -1226,7 +1241,7 @@ export async function recordInvoicePayment(invoiceId, amount, { markFullyPaid = 
         description: `Invoice ${updated.invoiceNumber} · ${label} · ${updated.customerName}`,
         saleId: updated.saleId || '',
         agentId: updated.agentId || ''
-      })
+      }, { sync: false })
     )
   }
 
@@ -1703,15 +1718,17 @@ function cashInForSale(saleId) {
   )
 }
 
-export function addCashEntry(payload) {
+export function addCashEntry(payload, { sync = true } = {}) {
   const list = listCashFlow()
   const next = normalizeCash(payload)
   list.unshift(next)
   writeJson(CASH_KEY, list)
-  syncFinanceQuiet(async () => {
-    const { apiUpsertSalesCash } = await import('./api.js')
-    await apiUpsertSalesCash(next)
-  })
+  if (sync) {
+    syncFinanceQuiet(async () => {
+      const { apiUpsertSalesCash } = await import('./api.js')
+      await apiUpsertSalesCash(next)
+    })
+  }
   return next
 }
 

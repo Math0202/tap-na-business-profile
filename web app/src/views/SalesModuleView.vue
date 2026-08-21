@@ -157,6 +157,7 @@ const cashCategoryFilter = ref('all')
 const cashFrom = ref('')
 const cashTo = ref('')
 const cashSaving = ref(false)
+const saleSaving = ref(false)
 const editingAgentId = ref('')
 
 const saleForm = ref(emptySale())
@@ -770,6 +771,7 @@ function copyCardUrl(serial, via) {
 
 async function submitSale(e) {
   e.preventDefault()
+  if (saleSaving.value) return
   if (!saleForm.value.customerName.trim()) {
     flash('Customer name is required')
     return
@@ -789,18 +791,23 @@ async function submitSale(e) {
       ? new Date(saleForm.value.soldAt).toISOString()
       : new Date().toISOString()
   }
-  const result = await saveSaleToCloud(payload)
-  if (!result.ok) {
-    flash(result.error || 'Sale saved locally, but cloud sync failed')
-  }
-  showSaleForm.value = false
-  await refresh()
-  if (!wasEdit && result.sale) {
-    provisionCardsForSale(result.sale)
-    flash(result.ok ? 'Sale recorded · invoice & card codes ready' : 'Sale saved (sync issue — retry refresh)')
-    if (result.invoice) openInvoiceModal(result.invoice)
-  } else {
-    flash(wasEdit ? (result.ok ? 'Sale updated' : 'Sale updated locally') : 'Sale recorded')
+  saleSaving.value = true
+  try {
+    const result = await saveSaleToCloud(payload)
+    if (!result.ok) {
+      flash(result.error || 'Sale saved locally, but cloud sync failed')
+    }
+    showSaleForm.value = false
+    await refresh()
+    if (!wasEdit && result.sale) {
+      provisionCardsForSale(result.sale)
+      flash(result.ok ? 'Sale recorded · invoice & card codes ready' : 'Sale saved (sync issue — retry refresh)')
+      if (result.invoice) openInvoiceModal(result.invoice)
+    } else {
+      flash(wasEdit ? (result.ok ? 'Sale updated' : 'Sale updated locally') : 'Sale recorded')
+    }
+  } finally {
+    saleSaving.value = false
   }
 }
 
@@ -2303,8 +2310,10 @@ onMounted(async () => {
         </div>
 
         <div class="flex gap-2 pt-1">
-          <button type="button" class="flex-1 py-3 rounded-full border border-[var(--border)] text-sm font-semibold" @click="showSaleForm = false">Cancel</button>
-          <button type="submit" class="flex-1 py-3 rounded-full bg-white text-black text-sm font-bold">Save</button>
+          <button type="button" class="flex-1 py-3 rounded-full border border-[var(--border)] text-sm font-semibold" :disabled="saleSaving" @click="showSaleForm = false">Cancel</button>
+          <button type="submit" class="flex-1 py-3 rounded-full bg-white text-black text-sm font-bold disabled:opacity-60" :disabled="saleSaving">
+            {{ saleSaving ? 'Saving…' : 'Save' }}
+          </button>
         </div>
       </form>
     </div>
