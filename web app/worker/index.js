@@ -5711,13 +5711,30 @@ async function handleApi(request, env, url) {
     const body = await readJson(request)
     const profileId = String(body?.profileId || body?.profile_id || '').trim()
     if (!profileId) return bad('profileId required')
+    const connectionId = String(body?.connectionId || body?.connection_id || '').trim()
+    const channelRaw = String(body?.shareChannel || body?.share_channel || '').trim().toLowerCase()
+    const shareChannel = channelRaw === 'whatsapp' || channelRaw === 'sms' ? channelRaw : ''
+
+    if (connectionId) {
+      if (!shareChannel) return bad('shareChannel required')
+      const rows = await sb(
+        env,
+        `profile_connections?id=eq.${encodeURIComponent(connectionId)}&profile_id=eq.${encodeURIComponent(profileId)}&deleted=eq.false&select=id,share_channel&limit=1`
+      )
+      if (!rows?.[0]) return bad('Connection not found', 404)
+      await sb(env, `profile_connections?id=eq.${encodeURIComponent(connectionId)}`, {
+        method: 'PATCH',
+        body: { share_channel: shareChannel },
+        prefer: 'return=minimal'
+      })
+      return json({ ok: true, connection: { id: connectionId, shareChannel } })
+    }
+
     const guestName = String(body?.name || '').trim().slice(0, 160)
     if (!guestName) return bad('Name is required')
     const guestPhone = String(body?.phone || '').trim().slice(0, 80)
     const guestEmail = String(body?.email || '').trim().toLowerCase().slice(0, 160)
     const guestCompany = String(body?.company || '').trim().slice(0, 160)
-    const channelRaw = String(body?.shareChannel || body?.share_channel || '').trim().toLowerCase()
-    const shareChannel = channelRaw === 'whatsapp' || channelRaw === 'sms' ? channelRaw : ''
     await ensureProfileStub(env, profileId, guestName)
     const id = uid('conn')
     const now = new Date().toISOString()

@@ -74,6 +74,7 @@ const visible = computed(() => {
     p === '/cards' ||
     p === '/catalog' ||
     p === '/catalog-cart' ||
+    p === '/connections' ||
     p === '/team' ||
     /^\/c\/[^/]+(\/catalog(-cart)?)?$/.test(p)
   ) {
@@ -87,7 +88,7 @@ const visible = computed(() => {
 })
 
 const showCartNav = computed(() => {
-  if (loggedIn.value) return true
+  if (loggedIn.value) return false
   return guestCartCount.value > 0 || catalogCartCount.value > 0
 })
 
@@ -108,14 +109,9 @@ const navItems = computed(() => {
       label: 'Catalog',
       icon: 'inventory_2',
       match: (p) => p === '/catalog' || /\/c\/[^/]+\/catalog$/.test(p)
-    },
-    {
-      action: 'share',
-      label: 'Share',
-      icon: 'ios_share',
-      match: () => false
     }
   ]
+
   if (loggedIn.value) {
     items.splice(1, 0, {
       to: '/profile',
@@ -124,24 +120,37 @@ const navItems = computed(() => {
       match: (p) => p === '/profile'
     })
     if (canUseTeam.value) {
-      items.splice(3, 0, {
+      items.push({
         to: '/team',
         label: 'Team',
         icon: 'groups',
         match: (p) => p === '/team'
       })
     }
-  }
-  if (showCartNav.value) {
-    const cartIndex = loggedIn.value ? (canUseTeam.value ? 4 : 3) : 2
-    items.splice(cartIndex, 0, {
-      to: cartTo,
-      label: 'Cart',
-      icon: 'shopping_cart',
-      match: (p) => p === '/catalog-cart' || /\/c\/[^/]+\/catalog-cart$/.test(p),
-      badge: loggedIn.value ? 0 : guestCartCount.value || catalogCartCount.value
+    items.push({
+      to: '/connections',
+      label: 'Contacts',
+      icon: 'contacts',
+      match: (p) => p === '/connections'
+    })
+  } else {
+    if (showCartNav.value) {
+      items.splice(2, 0, {
+        to: cartTo,
+        label: 'Cart',
+        icon: 'shopping_cart',
+        match: (p) => p === '/catalog-cart' || /\/c\/[^/]+\/catalog-cart$/.test(p),
+        badge: guestCartCount.value || catalogCartCount.value
+      })
+    }
+    items.push({
+      action: 'share',
+      label: 'Share',
+      icon: 'ios_share',
+      match: () => false
     })
   }
+
   return items
 })
 

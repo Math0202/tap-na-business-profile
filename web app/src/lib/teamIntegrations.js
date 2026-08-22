@@ -25,6 +25,23 @@ export const CRM_PROVIDERS = [
 export const CRM_IDS = CRM_PROVIDERS.map((c) => c.id)
 export const MEETING_TOOL_IDS = MEETING_TOOLS.map((t) => t.id)
 
+export const CRM_APP_URLS = {
+  salesforce: 'https://login.salesforce.com',
+  zoho: 'https://crm.zoho.com',
+  hubspot: 'https://app.hubspot.com/contacts',
+  odoo: 'https://www.odoo.com/app/crm',
+  sage: 'https://www.sage.com'
+}
+
+export function crmProviderLabel(provider, crmOther = '') {
+  if (provider === 'other') return String(crmOther || '').trim() || 'Others'
+  return CRM_PROVIDERS.find((p) => p.id === provider)?.label || 'CRM'
+}
+
+export function crmAddUrl(provider) {
+  return CRM_APP_URLS[String(provider || '').trim().toLowerCase()] || ''
+}
+
 export function isConnectTeamPersonalType(personalType) {
   const t = String(personalType || '').trim().toLowerCase()
   return t === 'business' || t === 'executive_exclusive' || t === 'executive'

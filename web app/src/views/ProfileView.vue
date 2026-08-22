@@ -883,7 +883,7 @@ onMounted(async () => {
           <span class="material-symbols-outlined text-[22px]">handshake</span>
         </div>
         <div class="min-w-0 flex-1">
-          <p class="text-sm font-semibold">Connections</p>
+          <p class="text-sm font-semibold">Contacts</p>
           <p class="text-xs text-gray-400 mt-0.5">
             People who shared their details from your card
           </p>

@@ -22,7 +22,7 @@ const email = ref('')
 const company = ref('')
 const error = ref('')
 const step = ref('form')
-const saving = ref(false)
+const connectionId = ref('')
 
 function reset() {
   name.value = ''
@@ -31,12 +31,41 @@ function reset() {
   company.value = ''
   error.value = ''
   step.value = 'form'
-  saving.value = false
+  connectionId.value = ''
 }
 
 watch(() => props.open, (isOpen) => {
   if (isOpen) reset()
 })
+
+function guestPayload(shareChannel = '') {
+  return {
+    profileId: props.profileId,
+    name: name.value.trim(),
+    phone: phone.value.trim(),
+    email: email.value.trim(),
+    company: company.value.trim(),
+    shareChannel
+  }
+}
+
+function saveConnectionInBackground(shareChannel = '') {
+  if (!props.profileId) return
+
+  const payload = guestPayload(shareChannel)
+  if (connectionId.value && shareChannel) {
+    payload.connectionId = connectionId.value
+  }
+
+  apiSubmitConnection(payload)
+    .then((res) => {
+      if (!res?.ok) return
+      const id = res.data?.connection?.id
+      if (id && !connectionId.value) connectionId.value = id
+      if (shareChannel) emit('shared', res.data)
+    })
+    .catch(() => {})
+}
 
 function goToChannel(e) {
   e.preventDefault()
@@ -49,11 +78,11 @@ function goToChannel(e) {
     error.value = 'This profile has no phone number to share with yet.'
     return
   }
+  saveConnectionInBackground()
   step.value = 'channel'
 }
 
-async function shareVia(channel) {
-  if (saving.value) return
+function shareVia(channel) {
   error.value = ''
   const guestName = name.value.trim()
   if (!guestName) {
@@ -83,24 +112,7 @@ async function shareVia(channel) {
     return
   }
 
-  saving.value = true
-  if (props.profileId) {
-    const res = await apiSubmitConnection({
-      profileId: props.profileId,
-      name: guestName,
-      phone: phone.value.trim(),
-      email: email.value.trim(),
-      company: company.value.trim(),
-      shareChannel: channel
-    })
-    if (!res.ok) {
-      saving.value = false
-      error.value = res.error || 'Could not save your details.'
-      return
-    }
-    emit('shared', res.data)
-  }
-  saving.value = false
+  saveConnectionInBackground(channel)
   window.location.href = url
   setTimeout(() => emit('close'), 400)
 }
@@ -192,26 +204,23 @@ async function shareVia(channel) {
           </p>
           <button
             type="button"
-            class="w-full py-3.5 rounded-full bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-500 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-            :disabled="saving"
+            class="w-full py-3.5 rounded-full bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-500 transition-colors flex items-center justify-center gap-2"
             @click="shareVia('whatsapp')"
           >
             <span class="material-symbols-outlined text-[20px]">chat</span>
-            {{ saving ? 'Saving…' : 'Share via WhatsApp' }}
+            Share via WhatsApp
           </button>
           <button
             type="button"
-            class="w-full py-3.5 rounded-full bg-zinc-800 text-white font-bold text-sm hover:bg-zinc-700 transition-colors border border-zinc-700 flex items-center justify-center gap-2 disabled:opacity-50"
-            :disabled="saving"
+            class="w-full py-3.5 rounded-full bg-zinc-800 text-white font-bold text-sm hover:bg-zinc-700 transition-colors border border-zinc-700 flex items-center justify-center gap-2"
             @click="shareVia('sms')"
           >
             <span class="material-symbols-outlined text-[20px]">sms</span>
-            {{ saving ? 'Saving…' : 'Share via SMS' }}
+            Share via SMS
           </button>
           <button
             type="button"
             class="w-full py-2.5 text-sm text-gray-400 hover:text-white"
-            :disabled="saving"
             @click="step = 'form'"
           >
             Back
