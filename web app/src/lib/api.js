@@ -541,6 +541,14 @@ export function apiMeetingStats() {
   return request('/api/meetings/stats')
 }
 
+export function apiSubmitConnection(payload) {
+  return request('/api/connections', { method: 'POST', body: payload })
+}
+
+export function apiListConnections() {
+  return request('/api/connections')
+}
+
 /** Public catalog for a profile (active items only) */
 export function apiPublicCatalog(profileId) {
   return request(`/api/profiles/${encodeURIComponent(profileId)}/catalog`, { timeoutMs: 10000 })

@@ -198,6 +198,12 @@ const routes = [
     component: () => import('../views/MeetingsView.vue')
   },
   {
+    path: '/connections',
+    name: 'connections',
+    component: () => import('../views/ConnectionsView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/catalog',
     name: 'catalog',
     component: () => import('../views/CatalogView.vue')

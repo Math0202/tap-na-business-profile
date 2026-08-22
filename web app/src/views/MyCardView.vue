@@ -6,6 +6,7 @@ import LinkRow from '../components/LinkRow.vue'
 import SecurityMarquee from '../components/SecurityMarquee.vue'
 import ShareQrModal from '../components/ShareQrModal.vue'
 import BookMeetingPopup from '../components/BookMeetingPopup.vue'
+import ConnectPopup from '../components/ConnectPopup.vue'
 import {
   loadPublicProfile,
   loadProfile,
@@ -18,6 +19,7 @@ import {
   isLoggedIn
 } from '../lib/profileStore'
 import { downloadVcard, profileShareUrl, youtubeEmbedUrl, vcardPhotoLine } from '../lib/shareHelpers'
+import { ownerReachPhone } from '../lib/connectShare'
 import { preferredShareSlug, listCardsForAccount, cardImageSrc, kindLabel, personalTypeLabel } from '../lib/cardLinkStore'
 import { trackVisit, trackShare, trackClick, LOCAL_ID } from '../lib/adminStore'
 import { apiLogCardEvent, apiPublicCatalog } from '../lib/api'
@@ -31,6 +33,7 @@ const sharedCatalogItems = ref(null)
 const shareOpen = ref(false)
 const videoOpen = ref(false)
 const bookOpen = ref(false)
+const connectOpen = ref(false)
 const shareModal = ref(null)
 const videoEl = ref(null)
 const embedSrc = ref('')
@@ -44,6 +47,14 @@ const showBooking = computed(
 )
 const bookingProfileId = computed(
   () => String(profile.value.remoteProfileId || profile.value.id || '').trim()
+)
+const ownerPhone = computed(() => ownerReachPhone(profile.value))
+const showConnect = computed(
+  () =>
+    !deleted.value &&
+    !disabled.value &&
+    profile.value.cardType !== 'table' &&
+    !!ownerPhone.value
 )
 const catalogItems = computed(() => {
   const list = Array.isArray(sharedCatalogItems.value)
@@ -569,6 +580,17 @@ watch(() => route.path, () => {
             <span class="material-symbols-outlined">event</span>
             Book a meeting
           </button>
+          <button
+            v-if="showConnect"
+            type="button"
+            class="w-full py-4 rounded-full bg-zinc-800 text-white font-bold text-lg hover:bg-zinc-700 transition-all flex items-center justify-center gap-2 border border-zinc-700"
+            :class="{ 'opacity-40 pointer-events-none': actionsBlocked }"
+            :disabled="actionsBlocked"
+            @click="connectOpen = true"
+          >
+            <span class="material-symbols-outlined">handshake</span>
+            Connect
+          </button>
         </div>
         <SecurityMarquee />
       </div>
@@ -593,6 +615,14 @@ watch(() => route.path, () => {
       :profile-id="bookingProfileId"
       :owner-name="name"
       @close="bookOpen = false"
+    />
+
+    <ConnectPopup
+      :open="connectOpen"
+      :profile-id="bookingProfileId"
+      :owner-name="name"
+      :owner-phone="ownerPhone"
+      @close="connectOpen = false"
     />
 
     <Teleport to="body">

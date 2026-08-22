@@ -5707,6 +5707,72 @@ async function handleApi(request, env, url) {
   }
 
   // ---- Personal card meetings & follow-ups ----
+  if (pathname === '/api/connections' && method === 'POST') {
+    const body = await readJson(request)
+    const profileId = String(body?.profileId || body?.profile_id || '').trim()
+    if (!profileId) return bad('profileId required')
+    const guestName = String(body?.name || '').trim().slice(0, 160)
+    if (!guestName) return bad('Name is required')
+    const guestPhone = String(body?.phone || '').trim().slice(0, 80)
+    const guestEmail = String(body?.email || '').trim().toLowerCase().slice(0, 160)
+    const guestCompany = String(body?.company || '').trim().slice(0, 160)
+    const channelRaw = String(body?.shareChannel || body?.share_channel || '').trim().toLowerCase()
+    const shareChannel = channelRaw === 'whatsapp' || channelRaw === 'sms' ? channelRaw : ''
+    await ensureProfileStub(env, profileId, guestName)
+    const id = uid('conn')
+    const now = new Date().toISOString()
+    await sb(env, 'profile_connections', {
+      method: 'POST',
+      body: {
+        id,
+        profile_id: profileId,
+        name: guestName,
+        phone: guestPhone,
+        email: guestEmail,
+        company: guestCompany,
+        share_channel: shareChannel,
+        created_at: now,
+        deleted: false
+      },
+      prefer: 'return=minimal'
+    })
+    return json({
+      ok: true,
+      connection: {
+        id,
+        profileId,
+        name: guestName,
+        phone: guestPhone,
+        email: guestEmail,
+        company: guestCompany,
+        shareChannel,
+        createdAt: now
+      }
+    })
+  }
+
+  if (pathname === '/api/connections' && method === 'GET') {
+    const profile = await getSessionProfile(env, request)
+    if (!profile) return bad('Unauthorized', 401)
+    const rows = await sb(
+      env,
+      'profile_connections?profile_id=eq.' +
+        encodeURIComponent(profile.id) +
+        '&deleted=eq.false&order=created_at.desc&limit=500'
+    )
+    const connections = (rows || []).map((row) => ({
+      id: row.id,
+      profileId: row.profile_id,
+      name: row.name || '',
+      phone: row.phone || '',
+      email: row.email || '',
+      company: row.company || '',
+      shareChannel: row.share_channel || '',
+      createdAt: row.created_at || ''
+    }))
+    return json({ ok: true, connections })
+  }
+
   if (pathname === '/api/meetings' && method === 'POST') {
     const body = await readJson(request)
     const profileId = String(body?.profileId || '').trim()

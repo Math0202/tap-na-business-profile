@@ -874,6 +874,23 @@ onMounted(async () => {
         <span class="material-symbols-outlined text-gray-500">chevron_right</span>
       </RouterLink>
 
+      <RouterLink
+        v-if="!isTable"
+        to="/connections"
+        class="card-item-bg rounded-2xl p-4 flex items-center gap-3 no-underline text-inherit hover:brightness-110 transition"
+      >
+        <div class="w-11 h-11 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+          <span class="material-symbols-outlined text-[22px]">handshake</span>
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-semibold">Connections</p>
+          <p class="text-xs text-gray-400 mt-0.5">
+            People who shared their details from your card
+          </p>
+        </div>
+        <span class="material-symbols-outlined text-gray-500">chevron_right</span>
+      </RouterLink>
+
       <div class="card-item-bg rounded-2xl px-4 py-3">
         <div class="flex items-center justify-between gap-3">
           <div class="flex items-center gap-3 min-w-0">
