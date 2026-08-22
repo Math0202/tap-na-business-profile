@@ -2,11 +2,16 @@ import { API_BASE } from './api'
 import { absoluteUrl } from './shareHelpers'
 
 let deferredInstallPrompt = null
+const installPromptWaiters = []
 
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeinstallprompt', (event) => {
     event.preventDefault()
     deferredInstallPrompt = event
+    while (installPromptWaiters.length) {
+      const resolve = installPromptWaiters.shift()
+      resolve(event)
+    }
   })
 }
 
@@ -17,7 +22,36 @@ export function profileManifestUrl(slug) {
   return `${base}/c/${encodeURIComponent(code)}/manifest.webmanifest`
 }
 
-export async function installProfileApp({ slug, avatar, name }) {
+export function isIosDevice() {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent)
+}
+
+export function isAndroidDevice() {
+  return /android/i.test(navigator.userAgent)
+}
+
+export function canInstallProfileApp() {
+  return !!deferredInstallPrompt
+}
+
+function waitForInstallPrompt(timeoutMs = 2500) {
+  if (deferredInstallPrompt) return Promise.resolve(deferredInstallPrompt)
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      const idx = installPromptWaiters.indexOf(done)
+      if (idx >= 0) installPromptWaiters.splice(idx, 1)
+      resolve(null)
+    }, timeoutMs)
+    function done(event) {
+      clearTimeout(timer)
+      resolve(event)
+    }
+    installPromptWaiters.push(done)
+  })
+}
+
+/** Register manifest, icons, and service worker as early as possible (page load). */
+export async function prepareProfileAppInstall({ slug, avatar, name }) {
   const manifestUrl = profileManifestUrl(slug)
   if (!manifestUrl) return { ok: false, error: 'Missing profile link.' }
 
@@ -53,14 +87,32 @@ export async function installProfileApp({ slug, avatar, name }) {
     }
   }
 
-  if (deferredInstallPrompt) {
-    deferredInstallPrompt.prompt()
-    const choice = await deferredInstallPrompt.userChoice
+  return { ok: true }
+}
+
+/** Show the native Install / Cancel dialog when Chrome has made it available. */
+export async function promptProfileAppInstall() {
+  let prompt = deferredInstallPrompt
+  if (!prompt) {
+    prompt = await waitForInstallPrompt(2500)
+  }
+
+  if (prompt) {
+    prompt.prompt()
+    const choice = await prompt.userChoice
     deferredInstallPrompt = null
     return { ok: true, method: 'install', outcome: choice?.outcome || '' }
   }
 
-  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent)
-  const isAndroid = /android/i.test(navigator.userAgent)
-  return { ok: true, method: 'manual', isIos, isAndroid }
+  if (isIosDevice()) {
+    return { ok: true, method: 'manual', isIos: true, isAndroid: false }
+  }
+
+  return { ok: true, method: 'unavailable', isIos: false, isAndroid: isAndroidDevice() }
+}
+
+/** @deprecated Use prepareProfileAppInstall + promptProfileAppInstall */
+export async function installProfileApp(opts) {
+  await prepareProfileAppInstall(opts)
+  return promptProfileAppInstall()
 }

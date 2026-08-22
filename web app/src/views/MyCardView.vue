@@ -24,7 +24,7 @@ import { preferredShareSlug, listCardsForAccount, cardImageSrc, kindLabel, perso
 import { trackVisit, trackShare, trackClick, LOCAL_ID } from '../lib/adminStore'
 import { apiLogCardEvent, apiPublicCatalog } from '../lib/api'
 import { personalPagePath } from '../lib/profilePaths'
-import { installProfileApp } from '../lib/profileAppInstall'
+import { prepareProfileAppInstall, promptProfileAppInstall } from '../lib/profileAppInstall'
 
 const route = useRoute()
 const router = useRouter()
@@ -202,6 +202,16 @@ function refresh() {
     ? 'Digital Business Card'
     : (profile.value.name + ' - Digital Business Card')
   loadSharedCatalogPreview()
+  syncVisitorAppInstall()
+}
+
+function syncVisitorAppInstall() {
+  if (!isVisitor.value || !shareSlug.value) return
+  prepareProfileAppInstall({
+    slug: shareSlug.value,
+    avatar: avatar.value,
+    name: name.value
+  }).catch(() => {})
 }
 
 async function loadSharedCatalogPreview() {
@@ -232,24 +242,19 @@ async function saveProfileApp() {
   if (actionsBlocked.value || !shareSlug.value) return
   trackClick(LOCAL_ID, 'save_profile_app', 'Save profile')
   logRemote('click:save_profile_app')
-  const res = await installProfileApp({
-    slug: shareSlug.value,
-    avatar: avatar.value,
-    name: name.value
-  })
+  const res = await promptProfileAppInstall()
   if (!res.ok) {
     saveProfileHint.value = res.error || 'Could not prepare install.'
     saveProfileOpen.value = true
     return
   }
-  if (res.method === 'install' && res.outcome === 'accepted') return
   if (res.method === 'install') return
-  saveProfileHint.value = res.isIos
-    ? 'Tap Share in Safari, then choose “Add to Home Screen”. This profile’s photo will be the app icon.'
-    : res.isAndroid
-      ? 'Open the browser menu (⋮) and choose “Install app” or “Add to Home screen”.'
-      : 'Use your browser’s install or “Add to Home screen” option to save this profile as an app.'
-  saveProfileOpen.value = true
+  if (res.method === 'unavailable') return
+  if (res.isIos) {
+    saveProfileHint.value =
+      'Tap Share in Safari, then choose “Add to Home Screen”. This profile’s photo will be the app icon.'
+    saveProfileOpen.value = true
+  }
 }
 
 async function saveContact() {
