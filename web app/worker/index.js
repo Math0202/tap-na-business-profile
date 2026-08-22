@@ -5790,6 +5790,24 @@ async function handleApi(request, env, url) {
     return json({ ok: true, connections })
   }
 
+  const connectionDeleteMatch = pathname.match(/^\/api\/connections\/([^/]+)$/)
+  if (connectionDeleteMatch && method === 'DELETE') {
+    const profile = await getSessionProfile(env, request)
+    if (!profile) return bad('Unauthorized', 401)
+    const connectionId = decodeURIComponent(connectionDeleteMatch[1])
+    const rows = await sb(
+      env,
+      `profile_connections?id=eq.${encodeURIComponent(connectionId)}&profile_id=eq.${encodeURIComponent(profile.id)}&deleted=eq.false&select=id&limit=1`
+    )
+    if (!rows?.[0]) return bad('Contact not found', 404)
+    await softDeleteRow(env, {
+      table: 'profile_connections',
+      id: connectionId,
+      actor: profile.login_email || profile.email || profile.id
+    })
+    return json({ ok: true, id: connectionId, deleted: true })
+  }
+
   if (pathname === '/api/meetings' && method === 'POST') {
     const body = await readJson(request)
     const profileId = String(body?.profileId || '').trim()

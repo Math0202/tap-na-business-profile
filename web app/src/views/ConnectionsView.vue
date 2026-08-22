@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import BrandMark from '../components/BrandMark.vue'
-import { apiGetMyTeam, apiListConnections } from '../lib/api'
+import { apiDeleteConnection, apiGetMyTeam, apiListConnections } from '../lib/api'
 import { addConnectionToCrm, saveConnectionContact } from '../lib/connectionHelpers'
 import { displayName, loadProfile } from '../lib/profileStore'
 import { crmProviderLabel } from '../lib/teamIntegrations'
@@ -13,6 +13,7 @@ const connections = ref([])
 const usesCrm = ref(false)
 const crmProvider = ref('')
 const crmOther = ref('')
+const deletingId = ref('')
 
 const ownerName = computed(() => displayName(loadProfile()) || 'Your profile')
 
@@ -73,6 +74,20 @@ async function refresh() {
   connections.value = res.data?.connections || []
 }
 
+async function deleteContact(c) {
+  const label = c.name || 'this contact'
+  if (!confirm(`Permanently delete ${label}? This cannot be undone.`)) return
+  deletingId.value = c.id
+  error.value = ''
+  const res = await apiDeleteConnection(c.id)
+  deletingId.value = ''
+  if (!res?.ok) {
+    error.value = res.error || 'Could not delete contact.'
+    return
+  }
+  connections.value = connections.value.filter((row) => row.id !== c.id)
+}
+
 onMounted(async () => {
   await Promise.all([refresh(), loadTeamCrm()])
 })
@@ -129,6 +144,14 @@ onMounted(async () => {
               @click="addConnectionToCrm(c, crmProvider)"
             >
               Add to {{ crmLabel }}
+            </button>
+            <button
+              type="button"
+              class="px-3 py-2 rounded-xl text-xs font-semibold bg-red-500/15 text-red-300 hover:bg-red-500/25 transition disabled:opacity-50"
+              :disabled="deletingId === c.id"
+              @click="deleteContact(c)"
+            >
+              {{ deletingId === c.id ? 'Deleting…' : 'Delete' }}
             </button>
           </div>
         </li>

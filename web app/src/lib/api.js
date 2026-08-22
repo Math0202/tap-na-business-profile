@@ -549,6 +549,10 @@ export function apiListConnections() {
   return request('/api/connections')
 }
 
+export function apiDeleteConnection(id) {
+  return request(`/api/connections/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
 /** Public catalog for a profile (active items only) */
 export function apiPublicCatalog(profileId) {
   return request(`/api/profiles/${encodeURIComponent(profileId)}/catalog`, { timeoutMs: 10000 })
