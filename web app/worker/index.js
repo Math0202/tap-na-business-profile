@@ -6825,6 +6825,68 @@ export default {
       }
     }
 
+    const profileManifestMatch = url.pathname.match(/^\/c\/([^/]+)\/manifest\.webmanifest$/)
+    if (
+      profileManifestMatch &&
+      request.method === 'GET' &&
+      env.SUPABASE_URL &&
+      env.SUPABASE_SERVICE_ROLE_KEY
+    ) {
+      const slug = decodeURIComponent(profileManifestMatch[1])
+      try {
+        const cards = await sb(
+          env,
+          `cards?slug=eq.${encodeURIComponent(slug)}&deleted=eq.false&select=profile_id,kind,status`
+        )
+        const card = cards?.[0]
+        if (!card?.profile_id || String(card.status || '').toLowerCase() === 'disabled') {
+          return new Response('Not found', { status: 404 })
+        }
+        const profiles = await sb(
+          env,
+          `profiles?id=eq.${encodeURIComponent(card.profile_id)}&select=name,title,company,avatar,disabled,card_type`
+        )
+        const profile = profiles?.[0]
+        if (!profile || profile.disabled || profile.card_type === 'table') {
+          return new Response('Not found', { status: 404 })
+        }
+        const displayName = String(profile.name || 'Contact').trim() || 'Contact'
+        const shortName = (displayName.split(/\s+/)[0] || displayName).slice(0, 12)
+        const startUrl = `/c/${encodeURIComponent(slug)}`
+        let iconUrl = absolutePublicUrl(url.origin, profile.avatar)
+        if (!iconUrl || iconUrl.startsWith('data:')) {
+          iconUrl = absolutePublicUrl(url.origin, '/personal.jpeg')
+        }
+        const manifest = {
+          id: startUrl,
+          name: displayName,
+          short_name: shortName,
+          description:
+            [profile.title, profile.company].filter(Boolean).join(' · ') ||
+            `${displayName} on tap-na`,
+          start_url: startUrl,
+          scope: startUrl,
+          display: 'standalone',
+          background_color: '#121212',
+          theme_color: '#121212',
+          icons: [
+            { src: iconUrl, sizes: '192x192', type: 'image/png', purpose: 'any' },
+            { src: iconUrl, sizes: '512x512', type: 'image/png', purpose: 'any' }
+          ]
+        }
+        return new Response(JSON.stringify(manifest), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/manifest+json; charset=utf-8',
+            'Cache-Control': 'public, max-age=300',
+            ...CORS_HEADERS
+          }
+        })
+      } catch {
+        return new Response('Not found', { status: 404 })
+      }
+    }
+
     const productTap = url.pathname.match(/^\/product\/([^/]+)\/?$/)
     if (
       productTap &&

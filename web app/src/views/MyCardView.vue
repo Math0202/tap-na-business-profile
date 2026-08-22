@@ -24,6 +24,7 @@ import { preferredShareSlug, listCardsForAccount, cardImageSrc, kindLabel, perso
 import { trackVisit, trackShare, trackClick, LOCAL_ID } from '../lib/adminStore'
 import { apiLogCardEvent, apiPublicCatalog } from '../lib/api'
 import { personalPagePath } from '../lib/profilePaths'
+import { installProfileApp } from '../lib/profileAppInstall'
 
 const route = useRoute()
 const router = useRouter()
@@ -34,6 +35,8 @@ const shareOpen = ref(false)
 const videoOpen = ref(false)
 const bookOpen = ref(false)
 const connectOpen = ref(false)
+const saveProfileOpen = ref(false)
+const saveProfileHint = ref('')
 const shareModal = ref(null)
 const videoEl = ref(null)
 const embedSrc = ref('')
@@ -85,6 +88,14 @@ const title = computed(() => {
 const company = computed(() => (deleted.value ? '' : String(profile.value.company || '').trim()))
 const avatar = computed(() => avatarUrl(profile.value))
 const actionsBlocked = computed(() => disabled.value || deleted.value)
+const isVisitor = computed(() => {
+  if (actionsBlocked.value) return false
+  if (!isLoggedIn()) return true
+  const mine = loadProfile()
+  const viewedId = String(profile.value.remoteProfileId || profile.value.id || '').trim()
+  const myId = String(mine.remoteProfileId || mine.id || '').trim()
+  return !viewedId || !myId || viewedId !== myId
+})
 const hasVideo = computed(
   () => !deleted.value && !disabled.value && !!(profile.value.video && String(profile.value.video).trim())
 )
@@ -215,6 +226,30 @@ function openShare() {
   trackClick(LOCAL_ID, 'share_open', 'Share / QR button')
   logRemote('share:open')
   shareOpen.value = true
+}
+
+async function saveProfileApp() {
+  if (actionsBlocked.value || !shareSlug.value) return
+  trackClick(LOCAL_ID, 'save_profile_app', 'Save profile')
+  logRemote('click:save_profile_app')
+  const res = await installProfileApp({
+    slug: shareSlug.value,
+    avatar: avatar.value,
+    name: name.value
+  })
+  if (!res.ok) {
+    saveProfileHint.value = res.error || 'Could not prepare install.'
+    saveProfileOpen.value = true
+    return
+  }
+  if (res.method === 'install' && res.outcome === 'accepted') return
+  if (res.method === 'install') return
+  saveProfileHint.value = res.isIos
+    ? 'Tap Share in Safari, then choose “Add to Home Screen”. This profile’s photo will be the app icon.'
+    : res.isAndroid
+      ? 'Open the browser menu (⋮) and choose “Install app” or “Add to Home screen”.'
+      : 'Use your browser’s install or “Add to Home screen” option to save this profile as an app.'
+  saveProfileOpen.value = true
 }
 
 async function saveContact() {
@@ -387,6 +422,19 @@ watch(() => route.path, () => {
               </p>
               <div class="mt-2 flex items-center gap-2 flex-wrap">
                 <button
+                  v-if="isVisitor"
+                  type="button"
+                  aria-label="Save profile"
+                  class="inline-flex items-center gap-1 h-9 px-3 rounded-full bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold border border-zinc-700 transition-colors"
+                  :class="{ 'opacity-40 pointer-events-none': actionsBlocked }"
+                  :disabled="actionsBlocked"
+                  @click="saveProfileApp"
+                >
+                  <span class="material-symbols-outlined text-[16px]">download</span>
+                  Save profile
+                </button>
+                <button
+                  v-else
                   type="button"
                   aria-label="Share profile"
                   class="w-9 h-9 rounded-full bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center transition-colors border border-zinc-700"
@@ -394,7 +442,7 @@ watch(() => route.path, () => {
                   :disabled="actionsBlocked"
                   @click="openShare"
                 >
-                  <span class="material-symbols-outlined text-[18px]">qr_code_2</span>
+                  <span class="material-symbols-outlined text-[18px]">ios_share</span>
                 </button>
                 <RouterLink
                   v-if="isLoggedIn()"
@@ -624,6 +672,36 @@ watch(() => route.path, () => {
       :owner-phone="ownerPhone"
       @close="connectOpen = false"
     />
+
+    <Teleport to="body">
+      <div
+        v-if="saveProfileOpen"
+        class="app-dialog-overlay fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4"
+      >
+        <div class="absolute inset-0 bg-black/70" @click="saveProfileOpen = false" />
+        <div class="relative w-full max-w-md card-item-bg rounded-3xl p-5 shadow-2xl">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-bold">Save profile</h2>
+            <button
+              type="button"
+              aria-label="Close"
+              class="w-9 h-9 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center"
+              @click="saveProfileOpen = false"
+            >
+              <span class="material-symbols-outlined text-[20px]">close</span>
+            </button>
+          </div>
+          <p class="text-sm text-gray-300">{{ saveProfileHint }}</p>
+          <button
+            type="button"
+            class="w-full mt-4 py-3 rounded-full bg-white text-black font-bold text-sm hover:bg-gray-200 transition-colors"
+            @click="saveProfileOpen = false"
+          >
+            Got it
+          </button>
+        </div>
+      </div>
+    </Teleport>
 
     <Teleport to="body">
       <div
