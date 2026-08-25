@@ -27,12 +27,33 @@ export {
 const PRODUCT_TO_KIND = {
   blue: 'personal',
   black: 'personal',
+  'blue-card': 'personal',
+  'black-card': 'personal',
+  'black-card-front': 'personal',
+  professional: 'personal',
+  business: 'personal',
+  executive: 'personal',
+  executive_exclusive: 'personal',
   'table-info': 'table',
   'table-menu': 'table',
   'table-custom': 'table',
   'table-review': 'table',
   'table-wifi': 'table',
+  'info-card': 'table',
+  'standard-menu': 'table',
+  'custom-menu': 'table',
+  'review-google': 'table',
+  'wifi-connect': 'table',
   other: 'table'
+}
+
+export function kindFromProductId(productId, productName = '') {
+  const id = String(productId || '').trim()
+  if (id && PRODUCT_TO_KIND[id]) return PRODUCT_TO_KIND[id]
+  const n = String(productName || id || '').toLowerCase()
+  if (/(executive|business|professional|black-card|blue-card)/.test(n)) return 'personal'
+  if (/(menu|wifi|review|info|table)/.test(n)) return 'table'
+  return 'table'
 }
 
 /** Physical card artwork by product / kind */
@@ -105,10 +126,6 @@ function randomToken(len = 6) {
     out += SLUG_ALPHABET[Math.floor(Math.random() * SLUG_ALPHABET.length)]
   }
   return out
-}
-
-export function kindFromProductId(productId) {
-  return PRODUCT_TO_KIND[productId] || 'table'
 }
 
 export function kindLabel(kind) {
@@ -305,7 +322,7 @@ export function provisionCardsForSale(sale, { count } = {}) {
     const first = lines[0] || {}
     return provisionSlugs({
       count: needed,
-      kind: kindFromProductId(first.productId || sale.productId),
+      kind: kindFromProductId(first.productId || sale.productId, first.productName || sale.productName),
       productId: first.productId || sale.productId,
       productName: first.productName || sale.productName,
       saleId: sale.id,
@@ -321,7 +338,7 @@ export function provisionCardsForSale(sale, { count } = {}) {
     if (need <= 0) continue
     provisionSlugs({
       count: need,
-      kind: kindFromProductId(line.productId),
+      kind: kindFromProductId(line.productId, line.productName),
       productId: line.productId,
       productName: line.productName,
       saleId: sale.id,

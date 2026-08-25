@@ -809,6 +809,28 @@ async function ensureSalesProductOrNull(env, productId) {
   return hit?.[0] ? id : null
 }
 
+/** Match catalog product by name (shop cart labels like "Professional"). */
+async function findSalesProductIdByName(env, name) {
+  const n = String(name || '').trim()
+  if (!n) return null
+  const exact = await sb(
+    env,
+    'sales_products?name=eq.' + encodeURIComponent(n) + '&select=id&limit=1'
+  )
+  if (exact?.[0]?.id) return exact[0].id
+  const fuzzy = await sb(
+    env,
+    'sales_products?name=ilike.' + encodeURIComponent(n) + '&select=id&limit=1'
+  )
+  return fuzzy?.[0]?.id || null
+}
+
+async function resolveShopLineProductId(env, line) {
+  const byId = await ensureSalesProductOrNull(env, line?.id || line?.productId)
+  if (byId) return byId
+  return findSalesProductIdByName(env, line?.name || line?.productName)
+}
+
 function assertAgentAccess(staff, agentId) {
   if (isSalesElevated(staff)) return null
   if (!staff.agentId) return bad('Sales account is not linked to an agent', 403)
@@ -6446,6 +6468,7 @@ async function handleApi(request, env, url) {
   <p style="margin:0 0 16px;">
     ${escapeHtml(name)}<br>
     ${escapeHtml(email)}<br>
+    ${phone ? `${escapeHtml(phone)}<br>` : ''}
     ${escapeHtml(billToAddress)}
   </p>
   ${imagesHtml}
@@ -6480,6 +6503,7 @@ async function handleApi(request, env, url) {
       'Bill to',
       name,
       email,
+      phone,
       billToAddress,
       '',
       ...lines.map((l) => `${l.name} × ${l.qty} @ ${money(l.price)} = ${money(l.lineTotal)}`),
@@ -6509,6 +6533,7 @@ async function handleApi(request, env, url) {
       'Bill to',
       name,
       email,
+      phone,
       billToAddress,
       '',
       'Item / Qty / Unit / Total',
@@ -6547,14 +6572,18 @@ async function handleApi(request, env, url) {
 
     const recipients = [email, salesCopyTo].filter((v, i, arr) => arr.indexOf(v) === i)
 
-    // Persist into sales_quotes so admin Sales can assign agents, convert → invoice, etc.
-    const salesLines = lines.map((l) => ({
-      productId: '',
-      productName: l.name,
-      quantity: l.qty,
-      unitPrice: l.price,
-      amount: l.lineTotal
-    }))
+    // Persist into sales_quotes with the same shape as Sales quotes (product ids, lines, etc.)
+    const salesLines = []
+    for (const l of lines) {
+      const productId = (await resolveShopLineProductId(env, l)) || ''
+      salesLines.push({
+        productId,
+        productName: l.name,
+        quantity: l.qty,
+        unitPrice: l.price,
+        amount: l.lineTotal
+      })
+    }
     const primary = salesLines[0] || {
       productId: '',
       productName: 'Shop order',
@@ -6573,37 +6602,42 @@ async function handleApi(request, env, url) {
       if (!Number.isNaN(d.getTime())) validUntilIso = d.toISOString()
     }
     if (!validUntilIso) {
-      validUntilIso = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+      // Match Sales quote form default (~30 days)
+      validUntilIso = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
     }
     const noteParts = [
       '[Shop checkout]',
       company ? `Company: ${company}` : '',
       town ? `Town: ${town}` : '',
+      phone ? `Phone: ${phone}` : '',
       note || ''
     ].filter(Boolean)
     const quoteId = `quote-shop-${quoteRef}`
     const existingShopQuotes = await sb(
       env,
-      'sales_quotes?quote_number=eq.' + encodeURIComponent(quoteRef) + '&select=id,created_at&limit=1'
+      'sales_quotes?quote_number=eq.' +
+        encodeURIComponent(quoteRef) +
+        '&select=id,created_at,agent_id,status,sale_id&limit=1'
     )
     const existingShop = existingShopQuotes?.[0] || null
+    const headerProductId = salesLines.find((l) => l.productId)?.productId || null
     const salesQuoteRow = {
       id: existingShop?.id || quoteId,
       quote_number: quoteRef,
-      agent_id: null,
+      agent_id: existingShop?.agent_id || null,
       customer_name: name,
       customer_phone: phone,
       customer_email: email,
       customer_address: [company, town].filter(Boolean).join(', ') || town,
-      product_id: null,
+      product_id: headerProductId,
       product_name: productNameSummary.slice(0, 500),
       quantity: Math.max(1, qtySummary),
       unit_price: salesLines.length === 1 ? primary.unitPrice : 0,
       amount: subtotal,
-      status: 'sent',
+      status: existingShop?.status === 'converted' ? 'converted' : 'sent',
       valid_until: validUntilIso,
       notes: noteParts.join('\n').slice(0, 4000),
-      sale_id: '',
+      sale_id: existingShop?.sale_id || '',
       email_status: 'pending',
       emailed_at: null,
       lines: salesLines,

@@ -161,7 +161,7 @@ async function placeOrder() {
       unitPrice: l.price,
       amount: Math.round(Number(l.qty) * Number(l.price) * 100) / 100
     }))
-    const validUntil = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+    const validUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
     let pdfPayload = null
     try {
       const pdf = await generateQuotePdf({

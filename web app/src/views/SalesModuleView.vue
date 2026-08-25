@@ -42,6 +42,7 @@ import {
   agentPerformance,
   formatMoney,
   emptyLine,
+  normalizeLine,
   PRODUCT_CATEGORIES,
   SALE_STATUSES,
   QUOTE_STATUSES,
@@ -222,18 +223,35 @@ function emptyQuote() {
 function cloneLines(lines, legacy = {}) {
   const raw = Array.isArray(lines) && lines.length
     ? lines
-    : legacy.productId
+    : legacy.productId || legacy.productName
       ? [{ productId: legacy.productId, productName: legacy.productName, quantity: legacy.quantity, unitPrice: legacy.unitPrice }]
       : [emptyLine()]
-  return raw.map((line) => emptyLine(line.productId || '')).map((base, i) => ({
-    ...base,
-    productId: raw[i].productId || base.productId,
-    productName: raw[i].productName || base.productName,
-    quantity: Math.max(1, Number(raw[i].quantity) || 1),
-    unitPrice: raw[i].unitPrice != null && raw[i].unitPrice !== ''
-      ? Number(raw[i].unitPrice)
-      : base.unitPrice
-  }))
+  return raw.map((line) => {
+    const pid = String(line.productId || '').trim()
+    const qty = Math.max(1, Number(line.quantity) || 1)
+    const unit =
+      line.unitPrice != null && line.unitPrice !== ''
+        ? Number(line.unitPrice)
+        : undefined
+    if (pid) {
+      const base = emptyLine(pid)
+      return {
+        ...base,
+        productId: pid,
+        productName: line.productName || base.productName,
+        quantity: qty,
+        unitPrice: unit != null ? unit : base.unitPrice,
+        amount: Math.round(qty * (unit != null ? unit : base.unitPrice) * 100) / 100
+      }
+    }
+    // Keep name-only shop lines — do not invent the first catalog product
+    return normalizeLine({
+      productId: '',
+      productName: line.productName || 'Product',
+      quantity: qty,
+      unitPrice: unit != null ? unit : 0
+    })
+  })
 }
 
 function linesTotal(lines) {
@@ -964,6 +982,11 @@ async function undeleteQuote(id) {
 }
 
 function convertQuote(q) {
+  if (!String(q.agentId || '').trim()) {
+    flash('Assign an agent on the quote before converting (commission & ownership).')
+    openEditQuote(q)
+    return
+  }
   if (!confirm(`Convert ${q.quoteNumber} to a sale and generate an invoice?`)) return
   const result = convertQuoteToSale(q.id)
   refresh()

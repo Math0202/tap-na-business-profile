@@ -895,9 +895,12 @@ export function getSale(id) {
 export function saveSale(payload, { recordCash = true, createInvoice = true } = {}) {
   const agents = listAgents()
   const agent = agents.find((a) => a.id === payload.agentId)
-  const rate = agent ? Number(agent.commissionRate) : 10
+  // No agent → no commission (shop/unassigned quotes). Match agent rate when assigned.
+  const rate = agent ? Number(agent.commissionRate) || 0 : 0
   const summary = summarizeLines(payload.lines, payload)
-  const commission = Math.round(summary.amount * (rate / 100) * 100) / 100
+  const commission = agent
+    ? Math.round(summary.amount * (rate / 100) * 100) / 100
+    : 0
 
   const next = normalizeSale({
     ...payload,
