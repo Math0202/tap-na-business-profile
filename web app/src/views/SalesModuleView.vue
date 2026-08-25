@@ -1227,7 +1227,9 @@ async function recordActiveInvoicePayment({ markFullyPaid = false } = {}) {
     await refresh()
     const receiptNote =
       result.receipt?.ok
-        ? ' · Receipt emailed to customer'
+        ? result.receipt?.pdfAttached
+          ? ' · Paid invoice emailed (PDF)'
+          : ' · Receipt emailed to customer'
         : result.receipt?.skipped
           ? ''
           : result.receipt?.error

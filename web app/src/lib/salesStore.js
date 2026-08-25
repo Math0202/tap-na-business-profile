@@ -1842,7 +1842,11 @@ export function buildPaymentReceiptEmailPayload(invoice, { paidAmount } = {}) {
   }
 }
 
-/** Email the customer a receipt after a payment is recorded against an invoice. */
+/**
+ * Email the customer a receipt after a payment is recorded.
+ * Fully paid invoices attach the real invoice PDF with status Paid.
+ * Partial payments get a receipt email only (no paid PDF).
+ */
 export async function sendPaymentReceiptEmail(invoice, { paidAmount } = {}) {
   const payload = buildPaymentReceiptEmailPayload(invoice, { paidAmount })
   if (!payload.to.length) {
@@ -1851,11 +1855,51 @@ export async function sendPaymentReceiptEmail(invoice, { paidAmount } = {}) {
   if (!(moneyRound(paidAmount != null ? paidAmount : invoicePaidAmount(invoice)) > 0)) {
     return { ok: false, skipped: true, error: 'Nothing paid' }
   }
+
+  const fullyPaid =
+    invoiceRemaining(invoice) <= 0.004 && String(invoice?.status || '').toLowerCase() === 'paid'
+
+  if (fullyPaid) {
+    try {
+      const paidInvoice = {
+        ...invoice,
+        status: 'paid',
+        paidAmount: moneyRound(
+          Math.max(invoicePaidAmount(invoice), moneyRound(invoice.amount) || 0)
+        )
+      }
+      const { generateInvoicePdf } = await import('./salesDocuments.js')
+      const pdf = await generateInvoicePdf(paidInvoice)
+      payload.attachments = [
+        {
+          filename: pdf.filename || `${invoice.invoiceNumber || 'invoice'}.pdf`,
+          content: pdf.base64,
+          type: 'application/pdf',
+          contentType: 'application/pdf'
+        }
+      ]
+      if (pdf.imageAttachment) {
+        payload.attachments.push({
+          ...pdf.imageAttachment,
+          type: pdf.imageAttachment.type || 'image/jpeg',
+          contentType: pdf.imageAttachment.type || 'image/jpeg'
+        })
+      }
+    } catch (err) {
+      return { ok: false, error: err?.message || 'Could not generate paid invoice PDF', payload }
+    }
+  }
+
   const delivered = await deliverViaCloudflare(payload)
   if (!delivered.ok) {
     return { ok: false, error: delivered.error || 'Receipt email failed', payload }
   }
-  return { ok: true, emailId: delivered.id, payload }
+  return {
+    ok: true,
+    emailId: delivered.id,
+    payload,
+    pdfAttached: fullyPaid
+  }
 }
 
 /* ——— Cash flow ——— */
