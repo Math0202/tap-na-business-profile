@@ -221,14 +221,6 @@ function selectAllFiltered() {
 
 function clearSelection() {
   selected.value = new Set()
-  selectMode.value = false
-}
-
-function clearGroupSelection(group) {
-  const next = new Set(selected.value)
-  for (const c of group?.slugs || []) next.delete(c.serial)
-  selected.value = next
-  if (!next.size) selectMode.value = false
 }
 
 function toggleSelectMode() {
@@ -658,14 +650,6 @@ watch(filteredSlugs, (rows) => {
             {{ selectMode ? 'Selecting…' : 'Select' }}
           </button>
           <button
-            v-if="selectMode || selectedCount"
-            type="button"
-            class="px-4 py-2.5 rounded-full text-xs font-semibold border border-[var(--border)] shrink-0"
-            @click="clearSelection"
-          >
-            Clear{{ selectedCount ? ` (${selectedCount})` : '' }}
-          </button>
-          <button
             type="button"
             class="px-4 py-2.5 rounded-full text-xs font-semibold border border-[var(--border)] shrink-0"
             :disabled="!exportRows.length"
@@ -731,9 +715,10 @@ watch(filteredSlugs, (rows) => {
             <button
               type="button"
               class="px-3 py-1.5 rounded-full text-[11px] font-semibold border border-[var(--border)] text-gray-300"
+              :disabled="!selectedCount"
               @click="clearSelection"
             >
-              Clear{{ selectedCount ? ` (${selectedCount})` : '' }}
+              Clear ({{ selectedCount }})
             </button>
             <button
               type="button"
@@ -799,14 +784,6 @@ watch(filteredSlugs, (rows) => {
                     </button>
                     <button type="button" class="text-[11px] font-semibold text-gray-300 hover:text-white" @click="selectAllInGroup(group)">
                       Select all
-                    </button>
-                    <button
-                      v-if="selectedInGroup(group)"
-                      type="button"
-                      class="text-[11px] font-semibold text-gray-300 hover:text-white"
-                      @click="clearGroupSelection(group)"
-                    >
-                      Clear
                     </button>
                     <button type="button" class="text-[11px] font-semibold text-gray-300 hover:text-white" @click="exportGroupCsv(group)">
                       Export CSV

@@ -1142,16 +1142,21 @@ export function convertQuoteToSale(quoteId, overrides = {}) {
     quoteId: quote.id
   })
 
+  const converted = normalizeQuote({
+    ...quote,
+    status: 'converted',
+    saleId: result.sale.id
+  })
   const list = listQuotes()
   const idx = list.findIndex((q) => q.id === quote.id)
   if (idx >= 0) {
-    list[idx] = {
-      ...list[idx],
-      status: 'converted',
-      saleId: result.sale.id
-    }
+    list[idx] = { ...list[idx], ...converted, id: list[idx].id, createdAt: list[idx].createdAt, quoteNumber: list[idx].quoteNumber }
     writeJson(QUOTES_KEY, list)
   }
+  syncFinanceQuiet(async () => {
+    const { apiUpsertSalesQuote } = await import('./api.js')
+    await apiUpsertSalesQuote(converted)
+  })
 
   try {
     import('./cardLinkStore.js').then((m) => {

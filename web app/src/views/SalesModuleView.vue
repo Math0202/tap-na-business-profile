@@ -396,9 +396,17 @@ function agentName(id) {
   )
 }
 
+function isShopQuote(q) {
+  const num = String(q?.quoteNumber || '')
+  const notes = String(q?.notes || '')
+  return /^SQ-/i.test(num) || notes.includes('[Shop checkout]')
+}
+
 const filteredSales = computed(() => {
   let list = sales.value
-  if (!isSalesScoped.value && agentFilter.value) {
+  if (!isSalesScoped.value && agentFilter.value === '__none__') {
+    list = list.filter((s) => !s.agentId)
+  } else if (!isSalesScoped.value && agentFilter.value) {
     list = list.filter((s) => s.agentId === agentFilter.value)
   }
   const q = query.value.trim().toLowerCase()
@@ -423,13 +431,15 @@ const totalCommission = computed(() =>
 
 const filteredQuotes = computed(() => {
   let list = quotes.value
-  if (!isSalesScoped.value && agentFilter.value) {
+  if (!isSalesScoped.value && agentFilter.value === '__none__') {
+    list = list.filter((item) => !item.agentId)
+  } else if (!isSalesScoped.value && agentFilter.value) {
     list = list.filter((item) => item.agentId === agentFilter.value)
   }
   const q = query.value.trim().toLowerCase()
   if (!q) return list
   return list.filter((item) =>
-    [item.customerName, item.productName, item.status, item.quoteNumber, agentName(item.agentId), item.notes]
+    [item.customerName, item.productName, item.status, item.quoteNumber, agentName(item.agentId), item.notes, isShopQuote(item) ? 'shop' : '']
       .join(' ')
       .toLowerCase()
       .includes(q)
@@ -1763,6 +1773,7 @@ onMounted(async () => {
             class="field-shell field-input !py-3 shrink-0 sm:max-w-[200px]"
           >
             <option value="">All agents</option>
+            <option value="__none__">Unassigned</option>
             <option v-for="a in agents" :key="a.id" :value="a.id">{{ a.name }}</option>
           </select>
           <div class="flex gap-2 shrink-0">
@@ -1835,6 +1846,12 @@ onMounted(async () => {
                 <div class="min-w-0">
                 <div class="flex items-center gap-2 flex-wrap">
                   <p class="text-sm font-semibold truncate">{{ q.quoteNumber }}</p>
+                  <span
+                    v-if="isShopQuote(q)"
+                    class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300"
+                  >
+                    Shop
+                  </span>
                   <span class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full" :class="statusClass(q.status)">
                     {{ q.status }}
                   </span>
@@ -1855,6 +1872,14 @@ onMounted(async () => {
                   @click="convertQuote(q)"
                 >
                   Convert
+                </button>
+                <button
+                  v-if="!isSalesScoped && q.status !== 'converted' && !q.agentId"
+                  type="button"
+                  class="text-xs font-semibold text-sky-300 hover:text-sky-200"
+                  @click="openEditQuote(q)"
+                >
+                  Assign
                 </button>
                 <button
                   v-if="q.status !== 'converted'"

@@ -6383,6 +6383,16 @@ async function handleApi(request, env, url) {
       .join('')
 
     const billToAddress = [company, town].filter(Boolean).join(', ') || town
+    const buddyAmt = (Math.round(subtotal * 100) / 100).toFixed(2)
+    const buddyPayUrl =
+      subtotal > 0
+        ? `https://payment.buddy.na?business=3227&amount=${encodeURIComponent(buddyAmt)}&reference=${encodeURIComponent(quoteRef)}`
+        : ''
+    const buddyHtml = buddyPayUrl
+      ? `<p style="margin:16px 0 0;font-size:14px;"><a href="${escapeHtml(buddyPayUrl)}" style="color:#0a7;font-weight:700;">Pay with Buddy</a></p>
+  <p style="margin:4px 0 0;font-size:12px;color:#666;word-break:break-all;">${escapeHtml(buddyPayUrl)}</p>`
+      : ''
+
     const bankingHtml = `
   <div style="margin:16px 0 0;font-size:13px;line-height:1.6;">
     <div><span style="color:#777;">Account Name</span> ${escapeHtml(banking.accountHolder)}</div>
@@ -6428,6 +6438,7 @@ async function handleApi(request, env, url) {
   <p style="font-size:15px;font-weight:700;margin:0 0 6px;">Quoted total: ${escapeHtml(money(subtotal))}</p>
   <p style="font-size:13px;margin:0 0 16px;">Payment method: eft</p>
   ${bankingHtml}
+  ${buddyHtml}
 </body>
 </html>`.trim()
 
@@ -6455,7 +6466,8 @@ async function handleApi(request, env, url) {
       `Account Type ${banking.accountType}`,
       `Account Number ${banking.accountNumber}`,
       `Branch Code ${banking.branchCode}`,
-      `Swift Code ${banking.swiftCode}`
+      `Swift Code ${banking.swiftCode}`,
+      ...(buddyPayUrl ? ['', `Pay with Buddy: ${buddyPayUrl}`] : [])
     ]
       .filter((line, i, arr) => line !== '' || arr[i - 1] !== '')
       .join('\n')
@@ -6484,7 +6496,8 @@ async function handleApi(request, env, url) {
       `Account Type ${banking.accountType}`,
       `Account Number ${banking.accountNumber}`,
       `Branch Code ${banking.branchCode}`,
-      `Swift Code ${banking.swiftCode}`
+      `Swift Code ${banking.swiftCode}`,
+      ...(buddyPayUrl ? ['', `Pay with Buddy: ${buddyPayUrl}`] : [])
     ].filter(Boolean)
     const clientPdf = body?.pdf || body?.pdfAttachment || null
     const clientPdfContent = String(clientPdf?.content || '').replace(/\s+/g, '')
@@ -6508,6 +6521,93 @@ async function handleApi(request, env, url) {
           }
 
     const recipients = [email, salesCopyTo].filter((v, i, arr) => arr.indexOf(v) === i)
+
+    // Persist into sales_quotes so admin Sales can assign agents, convert → invoice, etc.
+    const salesLines = lines.map((l) => ({
+      productId: '',
+      productName: l.name,
+      quantity: l.qty,
+      unitPrice: l.price,
+      amount: l.lineTotal
+    }))
+    const primary = salesLines[0] || {
+      productId: '',
+      productName: 'Shop order',
+      quantity: 1,
+      unitPrice: subtotal,
+      amount: subtotal
+    }
+    const productNameSummary =
+      salesLines.length === 1
+        ? primary.productName
+        : salesLines.map((l) => `${l.productName} × ${l.quantity}`).join(', ')
+    const qtySummary = salesLines.reduce((s, l) => s + (Number(l.quantity) || 0), 0) || 1
+    let validUntilIso = null
+    if (validUntilRaw) {
+      const d = new Date(validUntilRaw)
+      if (!Number.isNaN(d.getTime())) validUntilIso = d.toISOString()
+    }
+    if (!validUntilIso) {
+      validUntilIso = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+    }
+    const noteParts = [
+      '[Shop checkout]',
+      company ? `Company: ${company}` : '',
+      town ? `Town: ${town}` : '',
+      note || ''
+    ].filter(Boolean)
+    const quoteId = `quote-shop-${quoteRef}`
+    const existingShopQuotes = await sb(
+      env,
+      'sales_quotes?quote_number=eq.' + encodeURIComponent(quoteRef) + '&select=id,created_at&limit=1'
+    )
+    const existingShop = existingShopQuotes?.[0] || null
+    const salesQuoteRow = {
+      id: existingShop?.id || quoteId,
+      quote_number: quoteRef,
+      agent_id: null,
+      customer_name: name,
+      customer_phone: phone,
+      customer_email: email,
+      customer_address: [company, town].filter(Boolean).join(', ') || town,
+      product_id: null,
+      product_name: productNameSummary.slice(0, 500),
+      quantity: Math.max(1, qtySummary),
+      unit_price: salesLines.length === 1 ? primary.unitPrice : 0,
+      amount: subtotal,
+      status: 'sent',
+      valid_until: validUntilIso,
+      notes: noteParts.join('\n').slice(0, 4000),
+      sale_id: '',
+      email_status: 'pending',
+      emailed_at: null,
+      lines: salesLines,
+      updated_at: new Date().toISOString(),
+      created_at: existingShop?.created_at || new Date().toISOString()
+    }
+    try {
+      await upsertSalesRow(env, 'sales_quotes', salesQuoteRow)
+      await writeSalesChangeLog(env, {
+        staff: { id: 'shop', name: 'Shop checkout', email: email, role: 'system' },
+        action: existingShop ? 'update' : 'create',
+        entityType: 'quote',
+        entityId: salesQuoteRow.id,
+        entityLabel: quoteRef,
+        summary: `${existingShop ? 'Updated' : 'Created'} shop quote: ${quoteRef} — ${name}`,
+        before: existingShop,
+        after: salesQuoteRow
+      })
+    } catch (err) {
+      await logAppError(env, {
+        source: 'shop_quote_persist',
+        message: err?.message || String(err),
+        stack: err?.stack || '',
+        path: pathname,
+        method,
+        context: { kind: 'sales_quotes', quoteRef }
+      })
+    }
+
     let provisionedTeam = null
     try {
       provisionedTeam = await provisionTeamFromShopQuote(env, {
@@ -6537,10 +6637,21 @@ async function handleApi(request, env, url) {
         text,
         attachments: [pdfAttachment]
       })
+      try {
+        await upsertSalesRow(env, 'sales_quotes', {
+          ...salesQuoteRow,
+          email_status: 'sent',
+          emailed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+      } catch {
+        /* best-effort email status */
+      }
       return json({
         ok: true,
         id: sent.id || '',
         quoteRef,
+        quoteId: salesQuoteRow.id,
         // Client-facing only — sales@ is also notified but not shown in the UI
         to: [email],
         email,
