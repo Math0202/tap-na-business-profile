@@ -117,7 +117,7 @@ export function bankingDetailsLines(_docNumber, { kind: _kind } = {}) {
   ]
 }
 
-export function bankingDetailsHtml(docNumber, { kind, amount } = {}) {
+export function bankingDetailsHtml(docNumber, { kind, amount, includePayQr = true } = {}) {
   void kind
   const b = BANKING_DETAILS
   const payAmount = moneyRound(amount)
@@ -134,12 +134,21 @@ export function bankingDetailsHtml(docNumber, { kind, amount } = {}) {
         `<div><span style="color:#777;">${escapeHtml(label)}</span> ${escapeHtml(value)}</div>`
     )
     .join('')
+  const qrBlock =
+    includePayQr && payUrl
+      ? `
+    <p style="margin:14px 0 6px;font-size:12px;color:#555;">Scan to pay with Buddy</p>
+    <img src="cid:buddy-pay-qr" alt="Buddy payment QR code" width="160" height="160" style="display:block;width:160px;height:160px;border:1px solid #eee;border-radius:8px;" />`
+      : ''
   const payBlock = payUrl
     ? `
   <div style="margin:16px 0 0;padding:14px 16px;border:1px solid #ddd;border-radius:12px;background:#fafafa;">
     <p style="margin:0 0 8px;font-size:13px;font-weight:700;">Pay online with Buddy</p>
-    <p style="margin:0 0 10px;font-size:12px;color:#555;">Scan the QR on your PDF or tap the link below. Use reference <strong>${escapeHtml(String(docNumber || ''))}</strong>.</p>
-    <a href="${escapeHtml(payUrl)}" style="display:inline-block;padding:10px 16px;background:#111;color:#fff;text-decoration:none;border-radius:999px;font-size:13px;font-weight:700;">Pay now</a>
+    <p style="margin:0 0 10px;font-size:12px;color:#555;">Use reference <strong>${escapeHtml(String(docNumber || ''))}</strong> · Amount ${escapeHtml(formatMoney(payAmount))}.</p>
+    ${qrBlock}
+    <p style="margin:12px 0 0;">
+      <a href="${escapeHtml(payUrl)}" style="display:inline-block;padding:10px 16px;background:#111;color:#fff;text-decoration:none;border-radius:999px;font-size:13px;font-weight:700;">Pay now</a>
+    </p>
     <p style="margin:10px 0 0;font-size:11px;color:#777;word-break:break-all;">${escapeHtml(payUrl)}</p>
   </div>`
     : ''
@@ -1285,12 +1294,21 @@ export async function recordInvoicePayment(invoiceId, amount, { markFullyPaid = 
     await apiUpsertSalesCash(entry)
   }
 
+  const finalInvoice = getInvoice(updated.id) || updated
+  let receipt = null
+  try {
+    receipt = await sendPaymentReceiptEmail(finalInvoice, { paidAmount: increment })
+  } catch {
+    receipt = { ok: false, error: 'Receipt email failed' }
+  }
+
   return {
     ok: invRes.ok !== false && (!saleResult || saleResult.ok !== false),
-    invoice: getInvoice(updated.id) || updated,
+    invoice: finalInvoice,
     increment,
     cashCreated,
-    error: invRes.ok === false ? invRes.error : saleResult?.error
+    error: invRes.ok === false ? invRes.error : saleResult?.error,
+    receipt
   }
 }
 
@@ -1579,6 +1597,33 @@ async function deliverViaCloudflare(payload) {
   }
 }
 
+async function buddyPayQrAttachment(reference, amount) {
+  const payUrl = buddyPaymentUrl({ reference, amount })
+  if (!payUrl) return null
+  try {
+    const QRCode = (await import('qrcode')).default
+    const dataUrl = await QRCode.toDataURL(payUrl, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 280,
+      color: { dark: '#111111', light: '#ffffff' }
+    })
+    const comma = dataUrl.indexOf(',')
+    const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : ''
+    if (!base64) return null
+    return {
+      filename: 'buddy-pay-qr.png',
+      content: base64,
+      type: 'image/png',
+      contentType: 'image/png',
+      content_id: 'buddy-pay-qr',
+      contentId: 'buddy-pay-qr'
+    }
+  } catch {
+    return null
+  }
+}
+
 /**
  * Send invoice email via Cloudflare with product image + PDF attachment.
  */
@@ -1609,6 +1654,10 @@ export async function sendInvoiceEmail(invoiceId, { to } = {}) {
         type: pdf.imageAttachment.type || 'image/jpeg',
         contentType: pdf.imageAttachment.type || 'image/jpeg'
       })
+    }
+    if (shouldIncludeBankingDetails(invoice, { kind: 'invoice' })) {
+      const qr = await buddyPayQrAttachment(invoice.invoiceNumber, invoiceRemaining(invoice))
+      if (qr) payload.attachments.push(qr)
     }
   } catch (err) {
     return { ok: false, error: err?.message || 'Could not generate invoice PDF' }
@@ -1674,6 +1723,8 @@ export async function sendQuoteEmail(quoteId, { to } = {}) {
         contentType: pdf.imageAttachment.type || 'image/jpeg'
       })
     }
+    const qr = await buddyPayQrAttachment(quote.quoteNumber, quote.amount)
+    if (qr) payload.attachments.push(qr)
   } catch (err) {
     return { ok: false, error: err?.message || 'Could not generate quote PDF' }
   }
@@ -1699,6 +1750,107 @@ export async function sendQuoteEmail(quoteId, { to } = {}) {
     emailPayload: payload,
     emailId: delivered.id
   }
+}
+
+export function buildPaymentReceiptEmailPayload(invoice, { paidAmount } = {}) {
+  const recipient = String(invoice?.customerEmail || '').trim()
+  const received = moneyRound(paidAmount != null ? paidAmount : invoicePaidAmount(invoice))
+  const remaining = invoiceRemaining(invoice)
+  const fullyPaid = remaining <= 0.004
+  const subject = fullyPaid
+    ? `Payment received · ${invoice.invoiceNumber}`
+    : `Partial payment received · ${invoice.invoiceNumber}`
+  const html = `
+<!DOCTYPE html>
+<html>
+<body style="font-family:Arial,sans-serif;color:#111;line-height:1.5;max-width:560px;margin:0 auto;padding:24px;">
+  ${companyHeaderHtml()}
+  <h2 style="font-size:18px;margin:0 0 8px;font-weight:700;">${fullyPaid ? 'Payment successful' : 'Payment received'}</h2>
+  <p style="margin:0 0 16px;color:#555;font-size:14px;">
+    Hi ${escapeHtml(invoice.customerName || 'there')}, we received your payment for invoice
+    <strong>${escapeHtml(invoice.invoiceNumber)}</strong>.
+  </p>
+  <div style="margin:0 0 16px;padding:14px 16px;border:1px solid #ddd;border-radius:12px;background:#fafafa;font-size:14px;">
+    <div style="margin:0 0 6px;"><span style="color:#777;">Amount paid</span> <strong>${escapeHtml(formatMoney(received))}</strong></div>
+    <div style="margin:0 0 6px;"><span style="color:#777;">Invoice total</span> ${escapeHtml(formatMoney(invoice.amount))}</div>
+    <div style="margin:0 0 6px;"><span style="color:#777;">Paid to date</span> ${escapeHtml(formatMoney(invoicePaidAmount(invoice)))}</div>
+    <div><span style="color:#777;">Amount still due</span> ${escapeHtml(formatMoney(remaining))}</div>
+  </div>
+  ${linesImageHtml(invoice)}
+  <table style="width:100%;border-collapse:collapse;margin:0 0 16px;font-size:14px;">
+    <thead>
+      <tr style="border-bottom:1px solid #ddd;text-align:left;">
+        <th style="padding:8px 0;">Item</th>
+        <th style="padding:8px 0;">Qty</th>
+        <th style="padding:8px 0;">Unit</th>
+        <th style="padding:8px 0;text-align:right;">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${linesTableRowsHtml(invoice)}
+    </tbody>
+  </table>
+  <p style="font-size:13px;color:#555;margin:0;">
+    ${
+      fullyPaid
+        ? 'Thank you for your purchase. This email confirms your payment was successful.'
+        : 'Thank you. A balance remains on this invoice — reply if you need another payment link.'
+    }
+  </p>
+  ${
+    !fullyPaid
+      ? bankingDetailsHtml(invoice.invoiceNumber, {
+          kind: 'invoice',
+          amount: remaining,
+          includePayQr: false
+        })
+      : ''
+  }
+</body>
+</html>`.trim()
+
+  const text = [
+    companyHeaderText(),
+    '',
+    fullyPaid ? 'Payment successful' : 'Payment received',
+    '',
+    `Hi ${invoice.customerName || 'there'}, we received your payment for invoice ${invoice.invoiceNumber}.`,
+    '',
+    `Amount paid: ${formatMoney(received)}`,
+    `Invoice total: ${formatMoney(invoice.amount)}`,
+    `Paid to date: ${formatMoney(invoicePaidAmount(invoice))}`,
+    `Amount still due: ${formatMoney(remaining)}`,
+    '',
+    linesTextBlock(invoice),
+    '',
+    fullyPaid
+      ? 'Thank you for your purchase. This email confirms your payment was successful.'
+      : 'Thank you. A balance remains on this invoice.'
+  ].join('\n')
+
+  return {
+    from: companyFromAddress(),
+    to: recipient ? [recipient] : [],
+    subject,
+    html,
+    text
+  }
+}
+
+/** Email the customer a receipt after a payment is recorded against an invoice. */
+export async function sendPaymentReceiptEmail(invoice, { paidAmount } = {}) {
+  const payload = buildPaymentReceiptEmailPayload(invoice, { paidAmount })
+  if (!payload.to.length) {
+    return { ok: false, skipped: true, error: 'No customer email for receipt' }
+  }
+  if (!(moneyRound(paidAmount != null ? paidAmount : invoicePaidAmount(invoice)) > 0)) {
+    return { ok: false, skipped: true, error: 'Nothing paid' }
+  }
+  const delivered = await deliverViaCloudflare(payload)
+  if (!delivered.ok) {
+    return { ok: false, error: delivered.error || 'Receipt email failed', payload }
+  }
+  return { ok: true, emailId: delivered.id, payload }
 }
 
 /* ——— Cash flow ——— */

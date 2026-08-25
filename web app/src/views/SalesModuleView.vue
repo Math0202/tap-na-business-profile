@@ -1215,8 +1215,16 @@ async function recordActiveInvoicePayment({ markFullyPaid = false } = {}) {
     const remaining = invoiceRemaining(result.invoice)
     invoicePaymentAmount.value = remaining > 0.004 ? String(remaining) : ''
     await refresh()
-    if (result.invoice?.status === 'paid') flash('Invoice settled')
-    else flash(`Recorded ${formatMoney(result.increment)} · ${formatMoney(remaining)} still due`)
+    const receiptNote =
+      result.receipt?.ok
+        ? ' · Receipt emailed to customer'
+        : result.receipt?.skipped
+          ? ''
+          : result.receipt?.error
+            ? ` · Receipt not sent (${result.receipt.error})`
+            : ''
+    if (result.invoice?.status === 'paid') flash(`Invoice settled${receiptNote}`)
+    else flash(`Recorded ${formatMoney(result.increment)} · ${formatMoney(remaining)} still due${receiptNote}`)
   } finally {
     invoicePaying.value = false
   }
