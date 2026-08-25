@@ -1801,12 +1801,16 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;')
 }
 
-/** Real mailbox only — rejects placeholders like admin@01 used for local staff login. */
+/** Known bouncing / undeliverable mailboxes — never send transactional mail here. */
+const BLOCKED_EMAILS = new Set(['chris@oyeetunam.com.na', 'admin@01'])
+
+/** Real mailbox only — rejects placeholders and known bounce addresses. */
 function isDeliverableEmail(value) {
   const email = String(value || '').trim().toLowerCase()
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return false
+  if (BLOCKED_EMAILS.has(email)) return false
   // Internal / non-mailbox staff logins
-  if (email === 'admin@01' || email.endsWith('@01') || email.endsWith('.local')) return false
+  if (email.endsWith('@01') || email.endsWith('.local')) return false
   return true
 }
 
@@ -2313,16 +2317,23 @@ function normalizeAttachmentList(rawAttachments) {
  * Prefers Workers EMAIL binding; falls back to REST API with CLOUDFLARE_API_TOKEN.
  */
 async function sendCloudflareEmail(env, opts = {}) {
-  const toList = Array.isArray(opts.to)
+  const rawTo = Array.isArray(opts.to)
     ? opts.to.map((x) => String(x || '').trim()).filter(Boolean)
     : String(opts.to || '')
         .split(',')
         .map((x) => x.trim())
         .filter(Boolean)
+  const blocked = rawTo.filter((addr) => !isDeliverableEmail(addr))
+  const toList = rawTo.filter((addr) => isDeliverableEmail(addr))
   const subject = String(opts.subject || '').trim()
   const html = opts.html != null ? String(opts.html) : ''
   const text = opts.text != null ? String(opts.text) : ''
-  if (!toList.length) throw new Error('to is required')
+  if (!toList.length) {
+    if (blocked.length) {
+      return { ok: true, skipped: true, reason: 'blocked_or_undeliverable', blocked }
+    }
+    throw new Error('to is required')
+  }
   if (!subject) throw new Error('subject is required')
   if (!html && !text) throw new Error('html or text is required')
 
@@ -2357,7 +2368,8 @@ async function sendCloudflareEmail(env, opts = {}) {
       ok: true,
       id: result?.messageId || result?.id || '',
       provider: 'cloudflare-binding',
-      raw: result
+      raw: result,
+      ...(blocked.length ? { blocked } : {})
     }
   }
 
