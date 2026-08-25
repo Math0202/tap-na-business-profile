@@ -324,7 +324,7 @@ onUnmounted(() => {
               </h2>
               <div class="h-1 w-12 bg-primary" />
               <p class="text-on-surface-variant text-sm mt-1">
-                Business &amp; Executive in one package (min 5).
+                Business &amp; Executive in one package (min 2).
               </p>
             </div>
             <span class="font-label-caps text-label-caps text-ink-muted shrink-0">{{ teamCards.length }} ITEMS</span>

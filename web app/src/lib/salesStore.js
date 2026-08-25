@@ -3,6 +3,7 @@
  */
 
 import { PERSONAL_CARD_IMAGES } from './teamRoles'
+import { buddyPaymentUrl } from './buddyPayment'
 
 const AGENTS_KEY = 'tapna_sales_agents'
 const SALES_KEY = 'tapna_sales_orders'
@@ -116,10 +117,11 @@ export function bankingDetailsLines(_docNumber, { kind: _kind } = {}) {
   ]
 }
 
-export function bankingDetailsHtml(docNumber, { kind } = {}) {
-  void docNumber
+export function bankingDetailsHtml(docNumber, { kind, amount } = {}) {
   void kind
   const b = BANKING_DETAILS
+  const payAmount = moneyRound(amount)
+  const payUrl = buddyPaymentUrl({ reference: docNumber, amount: payAmount })
   const rows = [
     ['Account Name', b.accountHolder],
     ['Account Type', b.accountType],
@@ -132,14 +134,32 @@ export function bankingDetailsHtml(docNumber, { kind } = {}) {
         `<div><span style="color:#777;">${escapeHtml(label)}</span> ${escapeHtml(value)}</div>`
     )
     .join('')
+  const payBlock = payUrl
+    ? `
+  <div style="margin:16px 0 0;padding:14px 16px;border:1px solid #ddd;border-radius:12px;background:#fafafa;">
+    <p style="margin:0 0 8px;font-size:13px;font-weight:700;">Pay online with Buddy</p>
+    <p style="margin:0 0 10px;font-size:12px;color:#555;">Scan the QR on your PDF or tap the link below. Use reference <strong>${escapeHtml(String(docNumber || ''))}</strong>.</p>
+    <a href="${escapeHtml(payUrl)}" style="display:inline-block;padding:10px 16px;background:#111;color:#fff;text-decoration:none;border-radius:999px;font-size:13px;font-weight:700;">Pay now</a>
+    <p style="margin:10px 0 0;font-size:11px;color:#777;word-break:break-all;">${escapeHtml(payUrl)}</p>
+  </div>`
+    : ''
   return `
   <div style="margin:16px 0 0;font-size:13px;line-height:1.6;">
     ${rows}
+    ${payBlock}
   </div>`.trim()
 }
 
-export function bankingDetailsText(docNumber, { kind } = {}) {
-  return bankingDetailsLines(docNumber, { kind }).join('\n')
+export function bankingDetailsText(docNumber, { kind, amount } = {}) {
+  const lines = bankingDetailsLines(docNumber, { kind })
+  const payUrl = buddyPaymentUrl({
+    reference: docNumber,
+    amount: amount != null ? amount : 0
+  })
+  if (payUrl) {
+    lines.push('', 'Pay online with Buddy:', payUrl)
+  }
+  return lines.join('\n')
 }
 
 
@@ -1404,7 +1424,10 @@ export function buildInvoiceEmailPayload(invoice, { to } = {}) {
   <p style="font-size:13px;margin:0 0 16px;">Payment method: ${escapeHtml(paymentMethod)}</p>
   ${
     shouldIncludeBankingDetails(invoice, { kind: 'invoice' })
-      ? bankingDetailsHtml(invoice.invoiceNumber, { kind: 'invoice' })
+      ? bankingDetailsHtml(invoice.invoiceNumber, {
+          kind: 'invoice',
+          amount: invoiceRemaining(invoice)
+        })
       : ''
   }
 </body>
@@ -1430,7 +1453,12 @@ export function buildInvoiceEmailPayload(invoice, { to } = {}) {
     `Payment method: ${paymentMethod}`,
     '',
     ...(shouldIncludeBankingDetails(invoice, { kind: 'invoice' })
-      ? [bankingDetailsText(invoice.invoiceNumber, { kind: 'invoice' })]
+      ? [
+          bankingDetailsText(invoice.invoiceNumber, {
+            kind: 'invoice',
+            amount: invoiceRemaining(invoice)
+          })
+        ]
       : [])
   ].join('\n')
 
@@ -1491,7 +1519,7 @@ export function buildQuoteEmailPayload(quote, { to } = {}) {
   </table>
   <p style="font-size:15px;font-weight:700;margin:0 0 6px;">Quoted total: ${escapeHtml(formatMoney(quote.amount))}</p>
   <p style="font-size:13px;margin:0 0 16px;">Payment method: ${escapeHtml(paymentMethod)}</p>
-  ${bankingDetailsHtml(quote.quoteNumber, { kind: 'quote' })}
+  ${bankingDetailsHtml(quote.quoteNumber, { kind: 'quote', amount: quote.amount })}
 </body>
 </html>`.trim()
 
@@ -1512,7 +1540,7 @@ export function buildQuoteEmailPayload(quote, { to } = {}) {
     `Quoted total: ${formatMoney(quote.amount)}`,
     `Payment method: ${paymentMethod}`,
     '',
-    bankingDetailsText(quote.quoteNumber, { kind: 'quote' })
+    bankingDetailsText(quote.quoteNumber, { kind: 'quote', amount: quote.amount })
   ]
     .filter((line, i, arr) => line !== '' || arr[i - 1] !== '')
     .join('\n')

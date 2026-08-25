@@ -145,7 +145,7 @@ export function getProduct(id) {
 export const BUSINESS_CARD_ID = 'black-card'
 export const EXECUTIVE_CARD_ID = 'black-card-front'
 export const TEAM_CARD_IDS = new Set([BUSINESS_CARD_ID, EXECUTIVE_CARD_ID])
-export const TEAM_PACKAGE_MIN = 5
+export const TEAM_PACKAGE_MIN = 2
 /** Connect Solo max qty before recommending Connect Teams. */
 export const SOLO_PACKAGE_MAX = 4
 /** Business alone (0 Executive) cannot exceed this. */
@@ -271,10 +271,10 @@ export function getMaxQty(productId) {
 export function initialTeamMix(focusId) {
   const focus = String(focusId || '')
   if (focus === EXECUTIVE_CARD_ID) {
-    return { businessQty: 3, executiveQty: 2 }
+    return { businessQty: 0, executiveQty: 2 }
   }
-  // Default / Business focus → 2 Business : 3 Executive
-  return { businessQty: 2, executiveQty: 3 }
+  // Default / Business focus → 2 Business (meets package minimum)
+  return { businessQty: 2, executiveQty: 0 }
 }
 
 export function businessCards() {
@@ -286,7 +286,7 @@ export function connectSoloCards() {
   return businessCards().filter((p) => !isTeamCard(p.id))
 }
 
-/** Business + Executive team cards (combined package, min 5 total). */
+/** Business + Executive team cards (combined package, min 2 total). */
 export function connectTeamCards() {
   const list = businessCards().filter((p) => isTeamCard(p.id))
   const order = [BUSINESS_CARD_ID, EXECUTIVE_CARD_ID]

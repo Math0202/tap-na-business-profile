@@ -83,6 +83,7 @@ import {
   upsertStaffSalesUser
 } from '../lib/staffAuth'
 import QRCode from 'qrcode'
+import { buddyPaymentUrl } from '../lib/buddyPayment'
 
 const route = useRoute()
 const router = useRouter()
@@ -142,6 +143,22 @@ const saleCards = ref([])
 const cardQrMap = ref({})
 const activeInvoice = ref(null)
 const activeQuote = ref(null)
+const invoicePayQr = ref('')
+const quotePayQr = ref('')
+const invoiceBuddyPayUrl = computed(() => {
+  if (!activeInvoice.value) return ''
+  return buddyPaymentUrl({
+    reference: activeInvoice.value.invoiceNumber,
+    amount: invoiceRemaining(activeInvoice.value)
+  })
+})
+const quoteBuddyPayUrl = computed(() => {
+  if (!activeQuote.value) return ''
+  return buddyPaymentUrl({
+    reference: activeQuote.value.quoteNumber,
+    amount: activeQuote.value.amount
+  })
+})
 const invoiceSending = ref(false)
 const quoteSending = ref(false)
 const invoicePdfBusy = ref(false)
@@ -639,6 +656,36 @@ watch(productOptions, (list) => {
     if (saleUnitPrices[p.id] == null) saleUnitPrices[p.id] = p.defaultPrice
     if (quoteProductQty[p.id] == null) quoteProductQty[p.id] = 0
     if (quoteUnitPrices[p.id] == null) quoteUnitPrices[p.id] = p.defaultPrice
+  }
+})
+
+watch([showInvoice, invoiceBuddyPayUrl], async ([open, url]) => {
+  invoicePayQr.value = ''
+  if (!open || !url) return
+  try {
+    invoicePayQr.value = await QRCode.toDataURL(url, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 200,
+      color: { dark: '#111111', light: '#ffffff' }
+    })
+  } catch {
+    invoicePayQr.value = ''
+  }
+})
+
+watch([showQuoteEmail, quoteBuddyPayUrl], async ([open, url]) => {
+  quotePayQr.value = ''
+  if (!open || !url) return
+  try {
+    quotePayQr.value = await QRCode.toDataURL(url, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 200,
+      color: { dark: '#111111', light: '#ffffff' }
+    })
+  } catch {
+    quotePayQr.value = ''
   }
 })
 
@@ -2826,6 +2873,32 @@ onMounted(async () => {
                 <dd class="font-mono text-right">{{ BANKING_DETAILS.swiftCode }}</dd>
               </div>
             </dl>
+            <div
+              v-if="invoiceBuddyPayUrl"
+              class="mt-3 rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-3 space-y-2"
+            >
+              <p class="text-[10px] uppercase tracking-wide text-emerald-400/90">Pay online</p>
+              <div class="flex items-center gap-3">
+                <img
+                  v-if="invoicePayQr"
+                  :src="invoicePayQr"
+                  alt="Buddy payment QR"
+                  class="w-24 h-24 rounded-xl bg-white p-1 shrink-0"
+                >
+                <div class="min-w-0 space-y-2">
+                  <a
+                    :href="invoiceBuddyPayUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-emerald-500 text-black text-xs font-bold no-underline hover:bg-emerald-400"
+                  >
+                    <span class="material-symbols-outlined text-[16px]">payments</span>
+                    Pay with Buddy
+                  </a>
+                  <p class="text-[10px] text-gray-500 break-all leading-snug">{{ invoiceBuddyPayUrl }}</p>
+                </div>
+              </div>
+            </div>
           </div>
           <p class="text-[11px] text-gray-500 leading-relaxed">
             {{ COMPANY.legalName }} · {{ COMPANY.address }} · {{ COMPANY.phone }} · {{ COMPANY.email }}
@@ -2933,6 +3006,32 @@ onMounted(async () => {
               <dd class="font-mono text-right">{{ BANKING_DETAILS.swiftCode }}</dd>
             </div>
           </dl>
+          <div
+            v-if="quoteBuddyPayUrl"
+            class="mt-3 rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-3 space-y-2"
+          >
+            <p class="text-[10px] uppercase tracking-wide text-emerald-400/90">Pay online</p>
+            <div class="flex items-center gap-3">
+              <img
+                v-if="quotePayQr"
+                :src="quotePayQr"
+                alt="Buddy payment QR"
+                class="w-24 h-24 rounded-xl bg-white p-1 shrink-0"
+              >
+              <div class="min-w-0 space-y-2">
+                <a
+                  :href="quoteBuddyPayUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-emerald-500 text-black text-xs font-bold no-underline hover:bg-emerald-400"
+                >
+                  <span class="material-symbols-outlined text-[16px]">payments</span>
+                  Pay with Buddy
+                </a>
+                <p class="text-[10px] text-gray-500 break-all leading-snug">{{ quoteBuddyPayUrl }}</p>
+              </div>
+            </div>
+          </div>
         </div>
         <p class="text-[11px] text-gray-500 leading-relaxed">
           {{ COMPANY.legalName }} · {{ COMPANY.address }} · {{ COMPANY.phone }} · {{ COMPANY.email }}

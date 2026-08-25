@@ -3,6 +3,7 @@
  */
 
 import { jsPDF } from 'jspdf'
+import QRCode from 'qrcode'
 import {
   COMPANY,
   formatMoney,
@@ -12,8 +13,10 @@ import {
   shouldIncludeBankingDetails,
   invoicePaidAmount,
   invoiceRemaining,
-  formatSalesStatus
+  formatSalesStatus,
+  bankingReferenceAdvice
 } from './salesStore'
+import { buddyPaymentUrl } from './buddyPayment'
 
 const LOGO_SRC = '/images/tap-na_logo.png'
 
@@ -226,9 +229,38 @@ function drawTotals(doc, row, isInvoice, y) {
   return y
 }
 
-function drawBanking(doc, y) {
-  y = ensureSpace(doc, y, 36)
+async function drawBanking(doc, y, { kind, row, number } = {}) {
+  const amount = kind === 'invoice' ? invoiceRemaining(row) : Number(row?.amount) || 0
+  const payUrl = buddyPaymentUrl({ reference: number, amount })
+  let qrDataUrl = ''
+  if (payUrl) {
+    try {
+      qrDataUrl = await QRCode.toDataURL(payUrl, {
+        errorCorrectionLevel: 'M',
+        margin: 1,
+        width: 280,
+        color: { dark: '#111111', light: '#ffffff' }
+      })
+    } catch {
+      qrDataUrl = ''
+    }
+  }
+
+  const blockH = payUrl ? 62 : 36
+  y = ensureSpace(doc, y, blockH)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(11)
+  doc.setTextColor(17, 17, 17)
+  doc.text('Banking details', 20, y)
+  y += 6
   doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(80, 80, 80)
+  const advice = bankingReferenceAdvice(number, { kind })
+  const adviceLines = doc.splitTextToSize(advice, 170)
+  doc.text(adviceLines, 20, y)
+  y += adviceLines.length * 4.2 + 2
+
   doc.setFontSize(10)
   const rows = [
     ['Account Name', BANKING_DETAILS.accountHolder],
@@ -245,6 +277,33 @@ function drawBanking(doc, y) {
     doc.text(String(value || ''), 68, y)
     y += 5.2
   }
+
+  if (payUrl) {
+    y += 3
+    y = ensureSpace(doc, y, 42)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(11)
+    doc.setTextColor(17, 17, 17)
+    doc.text('Pay online with Buddy', 20, y)
+    y += 5
+    if (qrDataUrl) {
+      doc.addImage(qrDataUrl, 'PNG', 20, y, 28, 28)
+    }
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.setTextColor(40, 40, 40)
+    const linkX = qrDataUrl ? 52 : 20
+    doc.text('Scan the QR or open this link to pay:', linkX, y + 6)
+    doc.setTextColor(20, 90, 180)
+    const urlLines = doc.splitTextToSize(payUrl, qrDataUrl ? 138 : 170)
+    doc.text(urlLines, linkX, y + 11)
+    if (doc.textWithLink) {
+      doc.setTextColor(20, 90, 180)
+      doc.textWithLink('Pay now (Buddy)', linkX, y + 11 + urlLines.length * 4.2 + 2, { url: payUrl })
+    }
+    y += Math.max(30, 14 + urlLines.length * 4.2 + 8)
+  }
+
   return y
 }
 
@@ -284,7 +343,7 @@ async function buildPdfBytes({ kind, row, logoDataUrl, lineImageDataUrls }) {
   y = drawTotals(doc, row, isInvoice, y)
 
   if (shouldIncludeBankingDetails(row, { kind })) {
-    y = drawBanking(doc, y)
+    y = await drawBanking(doc, y, { kind, row, number })
   }
 
   return doc.output('arraybuffer')
