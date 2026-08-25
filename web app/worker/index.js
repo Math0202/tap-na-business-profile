@@ -1801,6 +1801,15 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;')
 }
 
+/** Real mailbox only — rejects placeholders like admin@01 used for local staff login. */
+function isDeliverableEmail(value) {
+  const email = String(value || '').trim().toLowerCase()
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return false
+  // Internal / non-mailbox staff logins
+  if (email === 'admin@01' || email.endsWith('@01') || email.endsWith('.local')) return false
+  return true
+}
+
 function defaultEmailFrom(env) {
   return String(env.EMAIL_FROM || env.RESEND_FROM || 'tap-na <welcome@mail.tapnam.com>').trim()
 }
@@ -2455,6 +2464,10 @@ async function sendWelcomeEmail(env, { email, name, cardType }) {
 }
 
 async function sendLoginAlertEmail(env, { email, name }) {
+  const to = String(email || '').trim().toLowerCase()
+  if (!isDeliverableEmail(to)) {
+    return { skipped: true, reason: 'undeliverable_email' }
+  }
   const display = String(name || '').trim() || 'there'
   const when = new Date().toUTCString()
   const html = transactionalShell({
@@ -2465,7 +2478,7 @@ async function sendLoginAlertEmail(env, { email, name }) {
   })
   const text = `New sign-in to tap-na\n\nHi ${display},\nSomeone signed in at ${when} UTC.\nIf this was not you, change your password.`
   return sendCloudflareEmail(env, {
-    to: email,
+    to,
     subject: 'tap-na sign-in alert',
     html,
     text
@@ -2764,7 +2777,7 @@ async function handleApi(request, env, url) {
     }
     const claims = staffClaimsFromUser(data.user)
     if (!claims.role) return bad('This account is not staff', 403)
-    if (email.includes('@')) {
+    if (isDeliverableEmail(email)) {
       sendLoginAlertEmail(env, {
         email,
         name: claims.name || data.user?.user_metadata?.full_name || ''
@@ -3933,7 +3946,7 @@ async function handleApi(request, env, url) {
     } catch (_) {
       /* non-fatal */
     }
-    if (loginEmail.includes('@')) {
+    if (isDeliverableEmail(loginEmail)) {
       sendLoginAlertEmail(env, {
         email: loginEmail,
         name: profile.name || ''
