@@ -1,15 +1,14 @@
 /**
- * Printable NFC business card fronts/backs from black templates + optional B&W logo.
- * Front: logo above Connect. Back: QR for slug in the bottom zone.
+ * Printable NFC card fronts/backs from tier templates + optional B&W logo.
+ * Front: logo above Connect. Back: labeled QR (slug in centre) in the bottom zone.
+ * Templates: business | executive | professional
  */
 
 import JSZip from 'jszip'
 import { buildLabeledQrPng } from './qrExport'
+import { normalizePersonalType, DEFAULT_PERSONAL_TYPE } from './teamRoles'
 
-export const CARD_TEMPLATE_FRONT =
-  '/Card%20Templates/template%20front%20-%20black.png'
-export const CARD_TEMPLATE_BACK =
-  '/Card%20Templates/template%20back%20-%20black.png'
+export const CARD_TEMPLATE_VARIANTS = ['business', 'executive', 'professional']
 
 /** Default logo box as fractions of card (centre x, centre y, width). */
 export const DEFAULT_LOGO_LAYOUT = Object.freeze({
@@ -32,6 +31,9 @@ const QR_ZONE = Object.freeze({
   sizePct: 0.42
 })
 
+const frontTplCache = new Map()
+const backTplCache = new Map()
+
 function safeSlugPart(slug) {
   return String(slug || 'slug').replace(/[^\w.-]+/g, '_')
 }
@@ -52,6 +54,26 @@ export function loadImage(src) {
     img.onerror = () => reject(new Error('Image failed to load'))
     img.src = src
   })
+}
+
+/**
+ * Map personalType / product to template file stem: business | executive | professional
+ */
+export function resolveCardTemplateVariant(personalTypeOrCard = '') {
+  const raw =
+    typeof personalTypeOrCard === 'object' && personalTypeOrCard
+      ? personalTypeOrCard.personalType || personalTypeOrCard.productId || ''
+      : personalTypeOrCard
+  const key = normalizePersonalType(raw, { fallback: DEFAULT_PERSONAL_TYPE })
+  if (key === 'executive_exclusive') return 'executive'
+  if (key === 'professional') return 'professional'
+  return 'business'
+}
+
+export function cardTemplateUrl(side, variant) {
+  const v = CARD_TEMPLATE_VARIANTS.includes(variant) ? variant : 'business'
+  const face = side === 'back' ? 'back' : 'front'
+  return `/Card%20Templates/template%20${face}%20-%20${encodeURIComponent(v)}.png`
 }
 
 export function normalizeLogoLayout(layout = {}) {
@@ -80,9 +102,6 @@ function canvasToBlob(canvas) {
   })
 }
 
-/**
- * Convert any image source to B&W (luma), preserving alpha. Returns a data URL PNG.
- */
 export async function toBlackAndWhite(imageSource) {
   const img =
     imageSource instanceof HTMLImageElement
@@ -127,21 +146,24 @@ function logoRect(cardW, cardH, layout, logoImg) {
   }
 }
 
-let frontTplCache = null
-let backTplCache = null
-
-export async function getFrontTemplate() {
-  if (!frontTplCache) frontTplCache = await loadImage(CARD_TEMPLATE_FRONT)
-  return frontTplCache
+export async function getFrontTemplate(personalTypeOrCard) {
+  const variant = resolveCardTemplateVariant(personalTypeOrCard)
+  if (!frontTplCache.has(variant)) {
+    frontTplCache.set(variant, await loadImage(cardTemplateUrl('front', variant)))
+  }
+  return frontTplCache.get(variant)
 }
 
-export async function getBackTemplate() {
-  if (!backTplCache) backTplCache = await loadImage(CARD_TEMPLATE_BACK)
-  return backTplCache
+export async function getBackTemplate(personalTypeOrCard) {
+  const variant = resolveCardTemplateVariant(personalTypeOrCard)
+  if (!backTplCache.has(variant)) {
+    backTplCache.set(variant, await loadImage(cardTemplateUrl('back', variant)))
+  }
+  return backTplCache.get(variant)
 }
 
-export async function composeCardFront({ logoBw = null, layout } = {}) {
-  const tpl = await getFrontTemplate()
+export async function composeCardFront({ logoBw = null, layout, personalType } = {}) {
+  const tpl = await getFrontTemplate(personalType)
   const canvas = document.createElement('canvas')
   canvas.width = tpl.naturalWidth || tpl.width
   canvas.height = tpl.naturalHeight || tpl.height
@@ -158,18 +180,17 @@ export async function composeCardFront({ logoBw = null, layout } = {}) {
   return canvasToBlob(canvas)
 }
 
-export async function composeCardBack({ serial, kind } = {}) {
+export async function composeCardBack({ serial, kind, personalType } = {}) {
   const code = String(serial || '').trim()
   if (!code) throw new Error('Missing slug')
 
-  const tpl = await getBackTemplate()
+  const tpl = await getBackTemplate(personalType)
   const canvas = document.createElement('canvas')
   canvas.width = tpl.naturalWidth || tpl.width
   canvas.height = tpl.naturalHeight || tpl.height
   const ctx = canvas.getContext('2d')
   ctx.drawImage(tpl, 0, 0)
 
-  // Labeled QR (slug in centre) — same as slug PNG export
   const qrSize = Math.round(canvas.width * QR_ZONE.sizePct)
   const qrBlob = await buildLabeledQrPng(code, { kind })
   const qrUrl = URL.createObjectURL(qrBlob)
@@ -185,8 +206,8 @@ export async function composeCardBack({ serial, kind } = {}) {
   return canvasToBlob(canvas)
 }
 
-export async function paintFrontPreview(canvasEl, { logoBw, layout } = {}) {
-  const tpl = await getFrontTemplate()
+export async function paintFrontPreview(canvasEl, { logoBw, layout, personalType } = {}) {
+  const tpl = await getFrontTemplate(personalType)
   const cardW = tpl.naturalWidth || tpl.width
   const cardH = tpl.naturalHeight || tpl.height
   const cssW =
@@ -221,8 +242,8 @@ export async function paintFrontPreview(canvasEl, { logoBw, layout } = {}) {
   return { scale, cardW, cardH, logoRect: logoRectCss }
 }
 
-export async function paintBackPreview(canvasEl, { serial, kind } = {}) {
-  const blob = await composeCardBack({ serial, kind })
+export async function paintBackPreview(canvasEl, { serial, kind, personalType } = {}) {
+  const blob = await composeCardBack({ serial, kind, personalType })
   const url = URL.createObjectURL(blob)
   try {
     const img = await loadImage(url)
@@ -245,6 +266,15 @@ export async function paintBackPreview(canvasEl, { serial, kind } = {}) {
   }
 }
 
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = () => reject(new Error('Could not read image'))
+    reader.readAsDataURL(blob)
+  })
+}
+
 export async function downloadCardsZip(
   cards,
   { logoBw = null, layout, zipName, onProgress } = {}
@@ -257,7 +287,7 @@ export async function downloadCardsZip(
     logoImg = await loadImage(String(logoBw))
   }
   const L = normalizeLogoLayout(layout)
-  const frontBlob = await composeCardFront({ logoBw: logoImg, layout: L })
+  const frontByVariant = new Map()
 
   const zip = new JSZip()
   const used = new Set()
@@ -269,8 +299,20 @@ export async function downloadCardsZip(
     if (used.has(base.toLowerCase())) base = safeSlugPart(`${slug}-${i + 1}`)
     used.add(base.toLowerCase())
 
-    zip.file(`${base}-front.png`, frontBlob)
-    const backBlob = await composeCardBack({ serial: slug, kind: list[i].kind })
+    const personalType = list[i].personalType || ''
+    const variant = resolveCardTemplateVariant(personalType || list[i])
+    if (!frontByVariant.has(variant)) {
+      frontByVariant.set(
+        variant,
+        await composeCardFront({ logoBw: logoImg, layout: L, personalType: variant })
+      )
+    }
+    zip.file(`${base}-front.png`, frontByVariant.get(variant))
+    const backBlob = await composeCardBack({
+      serial: slug,
+      kind: list[i].kind,
+      personalType: variant
+    })
     zip.file(`${base}-back.png`, backBlob)
     onProgress?.(i + 1, list.length)
   }
@@ -282,18 +324,6 @@ export async function downloadCardsZip(
   return list.length
 }
 
-function blobToDataUrl(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result)
-    reader.onerror = () => reject(new Error('Could not read image'))
-    reader.readAsDataURL(blob)
-  })
-}
-
-/**
- * PDF: one card side per page, order front → back for each slug.
- */
 export async function downloadCardsPdf(
   cards,
   { logoBw = null, layout, pdfName, onProgress } = {}
@@ -306,12 +336,19 @@ export async function downloadCardsPdf(
     logoImg = await loadImage(String(logoBw))
   }
   const L = normalizeLogoLayout(layout)
-  const frontBlob = await composeCardFront({ logoBw: logoImg, layout: L })
-  const frontDataUrl = await blobToDataUrl(frontBlob)
+  const frontByVariant = new Map()
+
+  const firstVariant = resolveCardTemplateVariant(list[0])
+  const firstFront = await composeCardFront({
+    logoBw: logoImg,
+    layout: L,
+    personalType: firstVariant
+  })
+  frontByVariant.set(firstVariant, firstFront)
+  const frontDataUrl = await blobToDataUrl(firstFront)
   const frontImg = await loadImage(frontDataUrl)
   const pxW = frontImg.naturalWidth || frontImg.width
   const pxH = frontImg.naturalHeight || frontImg.height
-  // ~300 DPI → mm (print-friendly page sized to the card art)
   const wMm = (pxW / 300) * 25.4
   const hMm = (pxH / 300) * 25.4
 
@@ -327,11 +364,24 @@ export async function downloadCardsPdf(
     const slug = String(list[i].serial).trim()
     if (!slug) continue
 
+    const variant = resolveCardTemplateVariant(list[i])
+    if (!frontByVariant.has(variant)) {
+      frontByVariant.set(
+        variant,
+        await composeCardFront({ logoBw: logoImg, layout: L, personalType: variant })
+      )
+    }
+    const frontUrl = await blobToDataUrl(frontByVariant.get(variant))
+
     if (i > 0) doc.addPage([wMm, hMm], orientation)
-    doc.addImage(frontDataUrl, 'PNG', 0, 0, wMm, hMm)
+    doc.addImage(frontUrl, 'PNG', 0, 0, wMm, hMm)
 
     doc.addPage([wMm, hMm], orientation)
-    const backBlob = await composeCardBack({ serial: slug, kind: list[i].kind })
+    const backBlob = await composeCardBack({
+      serial: slug,
+      kind: list[i].kind,
+      personalType: variant
+    })
     const backDataUrl = await blobToDataUrl(backBlob)
     doc.addImage(backDataUrl, 'PNG', 0, 0, wMm, hMm)
 

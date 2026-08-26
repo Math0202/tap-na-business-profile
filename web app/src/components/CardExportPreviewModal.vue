@@ -35,20 +35,31 @@ const drag = reactive({
 const sampleCard = computed(() => props.cards.find((c) => c?.serial) || null)
 const cardCount = computed(() => props.cards.filter((c) => c?.serial).length)
 
+const sampleTier = computed(() => {
+  const c = sampleCard.value
+  if (!c) return ''
+  const raw = String(c.personalType || '').toLowerCase()
+  if (raw.includes('exec')) return 'Executive'
+  if (raw.includes('professional')) return 'Professional'
+  return 'Business'
+})
+
 async function redraw() {
   await nextTick()
   if (!props.open) return
   if (frontCanvas.value) {
     frontMeta.value = await paintFrontPreview(frontCanvas.value, {
       logoBw: logoBw.value,
-      layout: { ...layout }
+      layout: { ...layout },
+      personalType: sampleCard.value
     })
     drawHandles()
   }
   if (backCanvas.value && sampleCard.value) {
     await paintBackPreview(backCanvas.value, {
       serial: sampleCard.value.serial,
-      kind: sampleCard.value.kind
+      kind: sampleCard.value.kind,
+      personalType: sampleCard.value
     })
   }
 }
@@ -265,7 +276,7 @@ onBeforeUnmount(() => {
         <div>
           <h2 class="text-lg font-bold">Export cards</h2>
           <p class="text-[11px] text-gray-500 mt-0.5">
-            {{ cardCount }} card{{ cardCount === 1 ? '' : 's' }} · optional logo (always black &amp; white) · drag to move, corner to resize
+            {{ cardCount }} card{{ cardCount === 1 ? '' : 's' }}{{ sampleTier ? ' · ' + sampleTier : '' }} · optional logo (always black &amp; white) · drag to move, corner to resize
           </p>
         </div>
         <button
