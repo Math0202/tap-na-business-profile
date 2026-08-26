@@ -31,6 +31,7 @@ import {
   apiRenameCardBatch
 } from '../lib/api'
 import { downloadSlugQrPng, downloadSlugsQrZip } from '../lib/qrExport'
+import CardExportPreviewModal from '../components/CardExportPreviewModal.vue'
 import QRCode from 'qrcode'
 
 const query = ref('')
@@ -44,6 +45,10 @@ const slugKindFilter = ref('all')
 const slugGenerating = ref(false)
 const slugExporting = ref(false)
 const slugDeleting = ref(false)
+const exportMenuOpen = ref(false)
+const cardExportOpen = ref(false)
+const cardExportRows = ref([])
+const cardExportZipName = ref('')
 const slugForm = ref({ count: 10, kind: 'table', personalType: 'business', name: '' })
 const dateFrom = ref('')
 const dateTo = ref('')
@@ -527,6 +532,42 @@ async function exportGroupQrZip(group) {
   )
 }
 
+function openCardExport(rows, zipName = '') {
+  const list = Array.isArray(rows) ? rows.filter((c) => c?.serial) : []
+  if (!list.length) {
+    flash(selectMode.value ? 'Select at least one slug to export' : 'No slugs to export')
+    return
+  }
+  exportMenuOpen.value = false
+  cardExportRows.value = list
+  cardExportZipName.value = zipName || ''
+  cardExportOpen.value = true
+}
+
+function openCardExportFromSelection() {
+  openCardExport(
+    exportRows.value,
+    `tap-na-cards-${new Date().toISOString().slice(0, 10)}.zip`
+  )
+}
+
+function openCardExportFromGroup(group) {
+  openCardExport(
+    group?.slugs || [],
+    `tap-na-cards-${safeFilePart(group?.name)}-${new Date().toISOString().slice(0, 10)}.zip`
+  )
+}
+
+function closeCardExport() {
+  cardExportOpen.value = false
+  cardExportRows.value = []
+  cardExportZipName.value = ''
+}
+
+function onCardExportDone(n) {
+  flash(`Downloaded ${n} card set(s) as ZIP`)
+}
+
 onMounted(() => {
   refresh()
   refreshSlugQrs()
@@ -649,22 +690,46 @@ watch(filteredSlugs, (rows) => {
           >
             {{ selectMode ? 'Selecting…' : 'Select' }}
           </button>
-          <button
-            type="button"
-            class="px-4 py-2.5 rounded-full text-xs font-semibold border border-[var(--border)] shrink-0"
-            :disabled="!exportRows.length"
-            @click="exportSlugsCsv"
-          >
-            Export CSV{{ selectedCount ? ` (${selectedCount})` : '' }}
-          </button>
-          <button
-            type="button"
-            class="px-4 py-2.5 rounded-full text-xs font-bold bg-white text-black shrink-0 disabled:opacity-50"
-            :disabled="!exportRows.length || slugExporting"
-            @click="exportSlugsQrZip()"
-          >
-            {{ slugExporting ? 'Packing…' : (selectedCount ? `Export QR ZIP (${selectedCount})` : 'Export QR ZIP') }}
-          </button>
+          <div class="relative shrink-0 z-30">
+            <button
+              type="button"
+              class="px-4 py-2.5 rounded-full text-xs font-bold bg-white text-black disabled:opacity-50 w-full sm:w-auto"
+              :disabled="!exportRows.length || slugExporting"
+              @click="exportMenuOpen = !exportMenuOpen"
+            >
+              Export{{ selectedCount ? ` (${selectedCount})` : '' }}
+            </button>
+            <div
+              v-if="exportMenuOpen"
+              class="absolute right-0 top-full mt-2 z-40 min-w-[200px] rounded-2xl border border-[var(--border)] bg-zinc-950 shadow-xl p-2 space-y-1"
+            >
+              <p class="px-3 pt-1 text-[10px] uppercase tracking-wide text-gray-500">Slugs only</p>
+              <button
+                type="button"
+                class="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-gray-200 hover:bg-white/10"
+                @click="exportMenuOpen = false; exportSlugsCsv()"
+              >
+                Export CSV
+              </button>
+              <button
+                type="button"
+                class="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-gray-200 hover:bg-white/10 disabled:opacity-50"
+                :disabled="slugExporting"
+                @click="exportMenuOpen = false; exportSlugsQrZip()"
+              >
+                Export QR ZIP
+              </button>
+              <div class="border-t border-[var(--border)] my-1" />
+              <p class="px-3 pt-1 text-[10px] uppercase tracking-wide text-gray-500">Cards</p>
+              <button
+                type="button"
+                class="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-gray-200 hover:bg-white/10"
+                @click="openCardExportFromSelection"
+              >
+                Export cards…
+              </button>
+            </div>
+          </div>
         </div>
 
         <div class="flex flex-col sm:flex-row gap-2">
@@ -795,6 +860,13 @@ watch(filteredSlugs, (rows) => {
                       @click="exportGroupQrZip(group)"
                     >
                       Export QR ZIP
+                    </button>
+                    <button
+                      type="button"
+                      class="text-[11px] font-semibold text-sky-300 hover:text-sky-200"
+                      @click="openCardExportFromGroup(group)"
+                    >
+                      Export cards
                     </button>
                   </div>
                 </template>
@@ -929,6 +1001,23 @@ watch(filteredSlugs, (rows) => {
     </main>
 
     <AdminBottomNav />
+
+    <CardExportPreviewModal
+      :open="cardExportOpen"
+      :cards="cardExportRows"
+      :zip-name="cardExportZipName"
+      @close="closeCardExport"
+      @progress="flash"
+      @done="onCardExportDone"
+      @error="flash"
+    />
+
+    <div
+      v-if="exportMenuOpen"
+      class="fixed inset-0 z-20"
+      aria-hidden="true"
+      @click="exportMenuOpen = false"
+    />
 
     <div
       v-if="toast"
