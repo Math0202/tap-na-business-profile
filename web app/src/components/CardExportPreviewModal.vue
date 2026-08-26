@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   DEFAULT_LOGO_LAYOUT,
+  downloadCardsPdf,
   downloadCardsZip,
   normalizeLogoLayout,
   paintBackPreview,
@@ -198,6 +199,31 @@ async function exportZip() {
   }
 }
 
+async function exportPdf() {
+  if (!cardCount.value || exporting.value) return
+  exporting.value = true
+  try {
+    const base = String(props.zipName || '')
+      .replace(/\.zip$/i, '')
+      .trim()
+    const pdfName = base ? `${base}.pdf` : undefined
+    const n = await downloadCardsPdf(props.cards, {
+      logoBw: logoBw.value,
+      layout: { ...layout },
+      pdfName,
+      onProgress: (done, total) => {
+        if (done === total || done % 5 === 0) emit('progress', `Building PDF ${done}/${total}…`)
+      }
+    })
+    emit('done', n)
+    emit('close')
+  } catch (err) {
+    emit('error', err?.message || 'PDF export failed')
+  } finally {
+    exporting.value = false
+  }
+}
+
 function close() {
   if (exporting.value) return
   emit('close')
@@ -304,14 +330,14 @@ onBeforeUnmount(() => {
           <div class="rounded-2xl overflow-hidden border border-zinc-700 bg-black">
             <canvas ref="backCanvas" class="w-full h-auto block" />
           </div>
-          <p class="text-[10px] text-gray-500 mt-1">Each card gets its own QR on the back.</p>
+          <p class="text-[10px] text-gray-500 mt-1">Each card gets its own labeled QR (slug in the centre) on the back.</p>
         </div>
       </div>
 
-      <div class="flex gap-2 pt-1">
+      <div class="flex flex-col sm:flex-row gap-2 pt-1">
         <button
           type="button"
-          class="flex-1 py-3 rounded-full border border-[var(--border)] text-sm font-semibold"
+          class="sm:flex-1 py-3 rounded-full border border-[var(--border)] text-sm font-semibold"
           :disabled="exporting"
           @click="close"
         >
@@ -319,11 +345,19 @@ onBeforeUnmount(() => {
         </button>
         <button
           type="button"
-          class="flex-1 py-3 rounded-full bg-white text-black text-sm font-bold disabled:opacity-60"
+          class="sm:flex-1 py-3 rounded-full border border-[var(--border)] text-sm font-semibold disabled:opacity-60"
           :disabled="!cardCount || exporting"
           @click="exportZip"
         >
           {{ exporting ? 'Packing…' : `Export ZIP (${cardCount})` }}
+        </button>
+        <button
+          type="button"
+          class="sm:flex-1 py-3 rounded-full bg-white text-black text-sm font-bold disabled:opacity-60"
+          :disabled="!cardCount || exporting"
+          @click="exportPdf"
+        >
+          {{ exporting ? 'Building…' : `Export PDF (${cardCount})` }}
         </button>
       </div>
     </div>

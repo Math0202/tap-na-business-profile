@@ -3,9 +3,8 @@
  * Front: logo above Connect. Back: QR for slug in the bottom zone.
  */
 
-import QRCode from 'qrcode'
 import JSZip from 'jszip'
-import { cardQrUrl } from './cardLinkStore'
+import { buildLabeledQrPng } from './qrExport'
 
 export const CARD_TEMPLATE_FRONT =
   '/Card%20Templates/template%20front%20-%20black.png'
@@ -170,32 +169,18 @@ export async function composeCardBack({ serial, kind } = {}) {
   const ctx = canvas.getContext('2d')
   ctx.drawImage(tpl, 0, 0)
 
+  // Labeled QR (slug in centre) — same as slug PNG export
   const qrSize = Math.round(canvas.width * QR_ZONE.sizePct)
-  const url = cardQrUrl(code, undefined, { kind })
-  const qrDataUrl = await QRCode.toDataURL(url, {
-    width: qrSize,
-    margin: 1,
-    errorCorrectionLevel: 'M',
-    color: { dark: '#0a0a0a', light: '#ffffff' }
-  })
-  const qrImg = await loadImage(qrDataUrl)
-  const cx = canvas.width / 2
-  const cy = canvas.height * QR_ZONE.cyPct
-  const pad = Math.round(qrSize * 0.08)
-  const box = qrSize + pad * 2
-  const bx = cx - box / 2
-  const by = cy - box / 2
-  const radius = Math.round(box * 0.06)
-  ctx.fillStyle = '#ffffff'
-  ctx.beginPath()
-  ctx.moveTo(bx + radius, by)
-  ctx.arcTo(bx + box, by, bx + box, by + box, radius)
-  ctx.arcTo(bx + box, by + box, bx, by + box, radius)
-  ctx.arcTo(bx, by + box, bx, by, radius)
-  ctx.arcTo(bx, by, bx + box, by, radius)
-  ctx.closePath()
-  ctx.fill()
-  ctx.drawImage(qrImg, cx - qrSize / 2, cy - qrSize / 2, qrSize, qrSize)
+  const qrBlob = await buildLabeledQrPng(code, { kind })
+  const qrUrl = URL.createObjectURL(qrBlob)
+  try {
+    const qrImg = await loadImage(qrUrl)
+    const cx = canvas.width / 2
+    const cy = canvas.height * QR_ZONE.cyPct
+    ctx.drawImage(qrImg, cx - qrSize / 2, cy - qrSize / 2, qrSize, qrSize)
+  } finally {
+    URL.revokeObjectURL(qrUrl)
+  }
 
   return canvasToBlob(canvas)
 }
@@ -294,5 +279,67 @@ export async function downloadCardsZip(
   const file =
     zipName || `tap-na-cards-${new Date().toISOString().slice(0, 10)}.zip`
   triggerDownload(out, file)
+  return list.length
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = () => reject(new Error('Could not read image'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+/**
+ * PDF: one card side per page, order front → back for each slug.
+ */
+export async function downloadCardsPdf(
+  cards,
+  { logoBw = null, layout, pdfName, onProgress } = {}
+) {
+  const list = (cards || []).filter((c) => c?.serial)
+  if (!list.length) throw new Error('No slugs to export')
+
+  let logoImg = null
+  if (logoBw) {
+    logoImg = await loadImage(String(logoBw))
+  }
+  const L = normalizeLogoLayout(layout)
+  const frontBlob = await composeCardFront({ logoBw: logoImg, layout: L })
+  const frontDataUrl = await blobToDataUrl(frontBlob)
+  const frontImg = await loadImage(frontDataUrl)
+  const pxW = frontImg.naturalWidth || frontImg.width
+  const pxH = frontImg.naturalHeight || frontImg.height
+  // ~300 DPI → mm (print-friendly page sized to the card art)
+  const wMm = (pxW / 300) * 25.4
+  const hMm = (pxH / 300) * 25.4
+
+  const { jsPDF } = await import('jspdf')
+  const orientation = hMm >= wMm ? 'portrait' : 'landscape'
+  const doc = new jsPDF({
+    unit: 'mm',
+    format: [wMm, hMm],
+    orientation
+  })
+
+  for (let i = 0; i < list.length; i++) {
+    const slug = String(list[i].serial).trim()
+    if (!slug) continue
+
+    if (i > 0) doc.addPage([wMm, hMm], orientation)
+    doc.addImage(frontDataUrl, 'PNG', 0, 0, wMm, hMm)
+
+    doc.addPage([wMm, hMm], orientation)
+    const backBlob = await composeCardBack({ serial: slug, kind: list[i].kind })
+    const backDataUrl = await blobToDataUrl(backBlob)
+    doc.addImage(backDataUrl, 'PNG', 0, 0, wMm, hMm)
+
+    onProgress?.(i + 1, list.length)
+  }
+
+  const file =
+    pdfName || `tap-na-cards-${new Date().toISOString().slice(0, 10)}.pdf`
+  doc.save(file)
   return list.length
 }

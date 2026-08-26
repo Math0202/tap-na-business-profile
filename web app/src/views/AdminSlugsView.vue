@@ -565,7 +565,7 @@ function closeCardExport() {
 }
 
 function onCardExportDone(n) {
-  flash(`Downloaded ${n} card set(s) as ZIP`)
+  flash(`Downloaded ${n} card set(s)`)
 }
 
 onMounted(() => {
