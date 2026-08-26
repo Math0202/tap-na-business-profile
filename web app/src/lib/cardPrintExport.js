@@ -28,8 +28,29 @@ export const LOGO_BOUNDS = Object.freeze({
 
 const QR_ZONE = Object.freeze({
   cyPct: 0.78,
-  sizePct: 0.42
+  sizePct: 0.42,
+  /** Corner radius (px) for the QR block on the card back */
+  cornerRadius: 7
 })
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  const radius = Math.max(0, Math.min(r, w / 2, h / 2))
+  ctx.beginPath()
+  ctx.moveTo(x + radius, y)
+  ctx.arcTo(x + w, y, x + w, y + h, radius)
+  ctx.arcTo(x + w, y + h, x, y + h, radius)
+  ctx.arcTo(x, y + h, x, y, radius)
+  ctx.arcTo(x, y, x + w, y, radius)
+  ctx.closePath()
+}
+
+function drawRoundedImage(ctx, img, x, y, w, h, r) {
+  ctx.save()
+  roundRectPath(ctx, x, y, w, h, r)
+  ctx.clip()
+  ctx.drawImage(img, x, y, w, h)
+  ctx.restore()
+}
 
 const frontTplCache = new Map()
 const backTplCache = new Map()
@@ -198,7 +219,9 @@ export async function composeCardBack({ serial, kind, personalType } = {}) {
     const qrImg = await loadImage(qrUrl)
     const cx = canvas.width / 2
     const cy = canvas.height * QR_ZONE.cyPct
-    ctx.drawImage(qrImg, cx - qrSize / 2, cy - qrSize / 2, qrSize, qrSize)
+    const qx = cx - qrSize / 2
+    const qy = cy - qrSize / 2
+    drawRoundedImage(ctx, qrImg, qx, qy, qrSize, qrSize, QR_ZONE.cornerRadius)
   } finally {
     URL.revokeObjectURL(qrUrl)
   }
