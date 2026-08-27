@@ -1,8 +1,9 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import BrandMark from '../components/BrandMark.vue'
 import AdminBottomNav from '../components/AdminBottomNav.vue'
+import ActivityCharts from '../components/ActivityCharts.vue'
 import { apiAdminProfileActivities } from '../lib/api'
 
 const route = useRoute()
@@ -10,8 +11,11 @@ const loading = ref(true)
 const error = ref('')
 const profile = ref(null)
 const stats = ref(null)
+const analytics = ref(null)
 const activities = ref([])
+const connections = ref(0)
 const filter = ref('all') // all | open | click | share
+const days = ref(30)
 
 const profileId = computed(() => String(route.params.id || ''))
 
@@ -79,24 +83,25 @@ function place(a) {
   return [a.city, a.region, a.country].filter(Boolean).join(', ') || 'Unknown location'
 }
 
-function topList(rows, empty = '—') {
-  if (!rows?.length) return empty
-  return rows.slice(0, 4).map((r) => `${r.name} (${r.count})`).join(' · ')
-}
-
 async function refresh() {
   loading.value = true
   error.value = ''
-  const res = await apiAdminProfileActivities(profileId.value)
+  const res = await apiAdminProfileActivities(profileId.value, { days: days.value })
   if (res.ok && res.data?.ok) {
     profile.value = res.data.profile
     stats.value = res.data.stats
+    analytics.value = res.data.analytics || null
     activities.value = res.data.activities || []
+    connections.value = Number(res.data.connections || 0)
   } else {
     error.value = res.error || 'Could not load activities'
   }
   loading.value = false
 }
+
+watch(days, () => {
+  refresh()
+})
 
 onMounted(() => {
   document.title = 'Profile activities - Admin'
@@ -114,7 +119,7 @@ onMounted(() => {
             <p class="text-xs text-gray-500 uppercase tracking-wide">Admin · Activities</p>
             <h1 class="text-2xl font-bold tracking-tight mt-1 truncate">{{ label }}</h1>
             <p class="text-gray-400 text-sm mt-1">
-              Opens, clicks, shares, device &amp; location data
+              Charts for taps, scans, clicks, shares &amp; location
             </p>
           </div>
           <div class="flex gap-2 flex-wrap">
@@ -136,6 +141,19 @@ onMounted(() => {
           </div>
         </div>
       </header>
+
+      <div class="flex gap-2 mb-5 overflow-x-auto pb-1">
+        <button
+          v-for="d in [7, 30, 90]"
+          :key="d"
+          type="button"
+          class="px-3.5 py-2 rounded-full text-xs font-semibold border shrink-0"
+          :class="days === d ? 'bg-white text-black border-white' : 'border-[var(--border)] text-gray-400'"
+          @click="days = d"
+        >
+          {{ d }} days
+        </button>
+      </div>
 
       <div v-if="loading" class="card-item-bg rounded-2xl p-6 text-sm text-gray-400 text-center">
         Loading activities…
@@ -163,17 +181,16 @@ onMounted(() => {
           </div>
         </section>
 
-        <section class="card-item-bg rounded-2xl p-4 mb-5 space-y-2 text-sm">
-          <p><span class="text-gray-500">Channels:</span> {{ topList(stats?.byChannel) }}</p>
-          <p><span class="text-gray-500">Devices:</span> {{ topList(stats?.byDevice) }}</p>
-          <p><span class="text-gray-500">Browsers:</span> {{ topList(stats?.byBrowser) }}</p>
-          <p><span class="text-gray-500">Countries:</span> {{ topList(stats?.byCountry) }}</p>
-          <p><span class="text-gray-500">Cities:</span> {{ topList(stats?.byCity) }}</p>
-          <p><span class="text-gray-500">Actions:</span> {{ topList(stats?.byAction) }}</p>
-          <p class="text-xs text-gray-500 font-mono pt-1">
-            Slugs: {{ (profile?.slugs || []).map((s) => s.slug).join(' · ') || 'None' }}
-          </p>
-        </section>
+        <ActivityCharts
+          class="mb-6"
+          :analytics="analytics"
+          :connections="connections"
+          :days="days"
+        />
+
+        <p class="text-xs text-gray-500 font-mono mb-4">
+          Slugs: {{ (profile?.slugs || []).map((s) => s.slug).join(' · ') || 'None' }}
+        </p>
 
         <div class="flex gap-2 mb-4 overflow-x-auto pb-1">
           <button
@@ -194,7 +211,7 @@ onMounted(() => {
         </div>
 
         <section v-if="!filtered.length" class="card-item-bg rounded-2xl p-6 text-sm text-gray-400">
-          No activity recorded yet for this profile.
+          No activity recorded yet for this profile in the selected period.
         </section>
         <section v-else class="space-y-2 mb-8">
           <article
@@ -221,8 +238,8 @@ onMounted(() => {
           </article>
         </section>
 
-        <RouterLink to="/admin" class="text-xs font-semibold text-gray-500 hover:text-gray-300">
-          ← Back to dashboard
+        <RouterLink to="/admin?panel=analytics" class="text-xs font-semibold text-gray-500 hover:text-gray-300">
+          ← Analytics overview
         </RouterLink>
       </template>
     </main>

@@ -5,6 +5,7 @@ import BrandMark from '../components/BrandMark.vue'
 import AdminBottomNav from '../components/AdminBottomNav.vue'
 import {
   apiAdminOverview,
+  apiAdminAnalytics,
   apiSalesChangelog,
   apiAdminErrors,
   apiSalesFinance,
@@ -19,6 +20,7 @@ import {
 } from '../lib/api'
 import { cardImageSrc } from '../lib/cardLinkStore'
 import { purgeLocalDeletedRecords } from '../lib/salesStore'
+import ActivityCharts from '../components/ActivityCharts.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -29,7 +31,7 @@ const profiles = ref([])
 const cards = ref([])
 const query = ref('')
 const tab = ref('all') // all | personal | business
-const panel = ref('profiles') // profiles | log | errors | deleted
+const panel = ref('profiles') // profiles | analytics | log | errors | deleted
 
 const changeLog = ref([])
 const errorLog = ref([])
@@ -39,8 +41,14 @@ const restoringId = ref('')
 const clearingDeleted = ref(false)
 const deletedNotice = ref('')
 
+const analyticsDays = ref(30)
+const analyticsLoading = ref(false)
+const analyticsError = ref('')
+const analyticsData = ref(null)
+
 const panels = [
   { id: 'profiles', label: 'Profiles', icon: 'group' },
+  { id: 'analytics', label: 'Analytics', icon: 'monitoring' },
   { id: 'log', label: 'Log', icon: 'history' },
   { id: 'errors', label: 'Errors', icon: 'bug_report' },
   { id: 'deleted', label: 'Deleted', icon: 'delete' }
@@ -72,6 +80,17 @@ async function refresh() {
       } else {
         loadError.value = res.error || 'Could not load live data'
       }
+    } else if (panel.value === 'analytics') {
+      analyticsLoading.value = true
+      analyticsError.value = ''
+      const res = await apiAdminAnalytics({ days: analyticsDays.value })
+      if (res.ok && res.data?.ok) {
+        analyticsData.value = res.data
+      } else {
+        analyticsError.value = res.error || 'Could not load analytics'
+        analyticsData.value = null
+      }
+      analyticsLoading.value = false
     } else if (panel.value === 'log') {
       const logRes = await apiSalesChangelog({ limit: 200 })
       changeLog.value = logRes.ok ? (logRes.data?.changes || []) : []
@@ -322,6 +341,10 @@ watch(
   }
 )
 
+watch(analyticsDays, () => {
+  if (panel.value === 'analytics') refresh()
+})
+
 onMounted(() => {
   document.title = 'Admin dashboard - tap-na'
   panel.value = panelFromRoute()
@@ -530,6 +553,76 @@ onMounted(() => {
           </article>
         </section>
       </template>
+
+      <!-- Analytics panel -->
+      <section v-else-if="panel === 'analytics'" class="mb-8 space-y-4">
+        <div class="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-400">Activity analytics</h2>
+            <p class="text-xs text-gray-500 mt-1">
+              Tap vs scan, opens, clicks, shares, logins, and top profiles
+            </p>
+          </div>
+          <div class="flex gap-2 overflow-x-auto pb-1">
+            <button
+              v-for="d in [7, 30, 90]"
+              :key="d"
+              type="button"
+              class="px-3.5 py-2 rounded-full text-xs font-semibold border shrink-0"
+              :class="analyticsDays === d ? 'bg-white text-black border-white' : 'border-[var(--border)] text-gray-400'"
+              @click="analyticsDays = d"
+            >
+              {{ d }} days
+            </button>
+          </div>
+        </div>
+
+        <div v-if="analyticsLoading || loading" class="card-item-bg rounded-2xl p-6 text-sm text-gray-400 text-center">
+          Loading analytics…
+        </div>
+        <div v-else-if="analyticsError || loadError" class="card-item-bg rounded-2xl p-6 text-sm text-amber-300">
+          {{ analyticsError || loadError }}
+        </div>
+        <template v-else-if="analyticsData">
+          <section class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+            <div class="card-item-bg rounded-2xl p-4">
+              <p class="text-[11px] uppercase tracking-wide text-gray-500">Events</p>
+              <p class="text-2xl font-bold mt-1">{{ analyticsData.analytics?.totals?.total || 0 }}</p>
+            </div>
+            <div class="card-item-bg rounded-2xl p-4">
+              <p class="text-[11px] uppercase tracking-wide text-gray-500">Opens</p>
+              <p class="text-2xl font-bold mt-1 text-emerald-300">{{ analyticsData.analytics?.totals?.opens || 0 }}</p>
+            </div>
+            <div class="card-item-bg rounded-2xl p-4">
+              <p class="text-[11px] uppercase tracking-wide text-gray-500">Clicks</p>
+              <p class="text-2xl font-bold mt-1 text-sky-300">{{ analyticsData.analytics?.totals?.clicks || 0 }}</p>
+            </div>
+            <div class="card-item-bg rounded-2xl p-4">
+              <p class="text-[11px] uppercase tracking-wide text-gray-500">Shares</p>
+              <p class="text-2xl font-bold mt-1 text-violet-300">{{ analyticsData.analytics?.totals?.shares || 0 }}</p>
+            </div>
+            <div class="card-item-bg rounded-2xl p-4">
+              <p class="text-[11px] uppercase tracking-wide text-gray-500">Logins</p>
+              <p class="text-2xl font-bold mt-1 text-amber-200">{{ analyticsData.logins || 0 }}</p>
+            </div>
+            <div class="card-item-bg rounded-2xl p-4">
+              <p class="text-[11px] uppercase tracking-wide text-gray-500">Connections</p>
+              <p class="text-2xl font-bold mt-1 text-amber-300">{{ analyticsData.connections || 0 }}</p>
+            </div>
+          </section>
+
+          <ActivityCharts
+            :analytics="analyticsData.analytics"
+            :logins="analyticsData.logins || 0"
+            :logins-by-day="analyticsData.loginsByDay || []"
+            :connections="analyticsData.connections || 0"
+            :top-profiles="analyticsData.topProfiles || []"
+            :days="analyticsDays"
+            show-logins
+            show-top-profiles
+          />
+        </template>
+      </section>
 
       <!-- Change log panel -->
       <section v-else-if="panel === 'log'" class="mb-8 space-y-4">

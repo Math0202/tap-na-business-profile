@@ -238,6 +238,151 @@ async function sb(env, path, { method = 'GET', body, prefer, skipErrorLog = fals
   return data
 }
 
+
+function parseAnalyticsDays(request, fallback = 30) {
+  try {
+    const url = new URL(request.url)
+    const raw = Number(url.searchParams.get('days') || fallback)
+    if (!Number.isFinite(raw)) return fallback
+    return Math.min(90, Math.max(7, Math.round(raw)))
+  } catch {
+    return fallback
+  }
+}
+
+function analyticsSinceIso(days) {
+  const d = new Date()
+  d.setUTCHours(0, 0, 0, 0)
+  d.setUTCDate(d.getUTCDate() - (Number(days) || 30) + 1)
+  return d.toISOString()
+}
+
+function dayKeyUtc(iso) {
+  try {
+    return new Date(iso).toISOString().slice(0, 10)
+  } catch {
+    return ''
+  }
+}
+
+function countMapEntries(map, { limit = 12, labelUnknown = 'Unknown' } = {}) {
+  return Object.entries(map)
+    .map(([name, count]) => ({
+      name: !name || name === 'unknown' ? labelUnknown : name,
+      count
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit)
+}
+
+function buildActivityAnalytics(rows = []) {
+  const byChannelAll = {}
+  const byChannelOpens = {}
+  const byDevice = {}
+  const byBrowser = {}
+  const byCountry = {}
+  const byCity = {}
+  const byAction = {}
+  const bySlug = {}
+  const byDay = {}
+  const byHour = Array.from({ length: 24 }, () => 0)
+
+  let opens = 0
+  let clicks = 0
+  let shares = 0
+
+  for (const raw of rows) {
+    const action = String(raw.action || 'open')
+    const channel = String(raw.channel || 'other')
+    const device = String(raw.device || raw.device_type || 'unknown') || 'unknown'
+    const browser = String(raw.browser || 'unknown') || 'unknown'
+    const country = String(raw.country || raw.ip_country || 'unknown') || 'unknown'
+    const city = String(raw.city || raw.ip_city || 'unknown') || 'unknown'
+    const slug = String(raw.slug || 'unknown') || 'unknown'
+    const at = raw.at || raw.opened_at
+
+    const isOpen = action === 'open'
+    const isShare = action.startsWith('share')
+    const isClick = action.startsWith('click')
+
+    if (isOpen) opens += 1
+    else if (isShare) shares += 1
+    else if (isClick) clicks += 1
+
+    byChannelAll[channel] = (byChannelAll[channel] || 0) + 1
+    if (isOpen) byChannelOpens[channel] = (byChannelOpens[channel] || 0) + 1
+    byDevice[device] = (byDevice[device] || 0) + 1
+    byBrowser[browser] = (byBrowser[browser] || 0) + 1
+    byCountry[country] = (byCountry[country] || 0) + 1
+    byCity[city] = (byCity[city] || 0) + 1
+    byAction[action] = (byAction[action] || 0) + 1
+    bySlug[slug] = (bySlug[slug] || 0) + 1
+
+    const dk = dayKeyUtc(at)
+    if (dk) {
+      if (!byDay[dk]) byDay[dk] = { date: dk, opens: 0, clicks: 0, shares: 0, total: 0 }
+      byDay[dk].total += 1
+      if (isOpen) byDay[dk].opens += 1
+      else if (isClick) byDay[dk].clicks += 1
+      else if (isShare) byDay[dk].shares += 1
+    }
+
+    try {
+      const h = new Date(at).getUTCHours()
+      if (Number.isFinite(h) && isOpen) byHour[h] += 1
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const total = rows.length
+  const seriesByDay = Object.values(byDay).sort((a, b) => a.date.localeCompare(b.date))
+
+  return {
+    totals: { total, opens, clicks, shares },
+    funnel: {
+      opens,
+      clicks,
+      shares,
+      clickRate: opens ? Math.round((clicks / opens) * 1000) / 10 : 0,
+      shareRate: opens ? Math.round((shares / opens) * 1000) / 10 : 0
+    },
+    series: {
+      byDay: seriesByDay,
+      byHour: byHour.map((count, hour) => ({ hour, count }))
+    },
+    byChannel: countMapEntries(byChannelAll),
+    byChannelOpens: countMapEntries(byChannelOpens),
+    byDevice: countMapEntries(byDevice),
+    byBrowser: countMapEntries(byBrowser),
+    byCountry: countMapEntries(byCountry),
+    byCity: countMapEntries(byCity),
+    byAction: countMapEntries(byAction, { limit: 20 }),
+    bySlug: countMapEntries(bySlug, { limit: 20 }),
+    byKind: [
+      { name: 'Opens', count: opens },
+      { name: 'Clicks', count: clicks },
+      { name: 'Shares', count: shares }
+    ].filter((r) => r.count > 0)
+  }
+}
+
+function mapOpenRows(opens) {
+  return (opens || []).map((o) => ({
+    id: o.id,
+    slug: o.slug || '',
+    channel: o.channel || 'other',
+    action: o.action || 'open',
+    device: o.device_type || '',
+    browser: o.browser || '',
+    country: o.ip_country || '',
+    city: o.ip_city || '',
+    region: o.ip_region || '',
+    userAgent: o.user_agent || '',
+    at: o.opened_at
+  }))
+}
+
 async function uniqueSlug(env) {
   for (let i = 0; i < 12; i++) {
     const slug = randomSlug(6)
@@ -4827,11 +4972,114 @@ async function handleApi(request, env, url) {
   }
 
 
+  if (pathname === '/api/admin/analytics' && method === 'GET') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
+    const days = parseAnalyticsDays(request, 30)
+    const since = analyticsSinceIso(days)
+    let opens = []
+    try {
+      opens = await sb(
+        env,
+        `card_opens?opened_at=gte.${encodeURIComponent(since)}&select=id,slug,channel,action,user_agent,device_type,browser,ip_country,ip_city,ip_region,opened_at&order=opened_at.desc&limit=5000`
+      )
+    } catch {
+      opens = []
+    }
+    const activities = mapOpenRows(opens)
+    const analytics = buildActivityAnalytics(activities)
+
+    let logins = 0
+    let loginsByDay = []
+    try {
+      const sessions = await sb(
+        env,
+        `sessions?created_at=gte.${encodeURIComponent(since)}&select=id,profile_id,created_at&order=created_at.desc&limit=2000`
+      )
+      logins = (sessions || []).length
+      const map = {}
+      for (const s of sessions || []) {
+        const dk = dayKeyUtc(s.created_at)
+        if (!dk) continue
+        map[dk] = (map[dk] || 0) + 1
+      }
+      loginsByDay = Object.entries(map)
+        .map(([date, count]) => ({ date, count }))
+        .sort((a, b) => a.date.localeCompare(b.date))
+    } catch {
+      /* sessions optional */
+    }
+
+    let connections = 0
+    try {
+      const rows = await sb(
+        env,
+        `profile_connections?deleted=eq.false&created_at=gte.${encodeURIComponent(since)}&select=id&limit=2000`
+      )
+      connections = (rows || []).length
+    } catch {
+      connections = 0
+    }
+
+    const topProfiles = []
+    try {
+      const slugHits = analytics.bySlug || []
+      const cards = await sb(env, 'cards?deleted=eq.false&select=slug,profile_id&limit=3000')
+      const profiles = await sb(
+        env,
+        'profiles?deleted=eq.false&select=id,name,company,card_type&limit=1000'
+      )
+      const nameById = {}
+      for (const p of profiles || []) {
+        nameById[p.id] =
+          p.card_type === 'table'
+            ? p.company || p.name || p.id
+            : p.name || p.company || p.id
+      }
+      const profileIdBySlug = {}
+      for (const c of cards || []) {
+        if (c.slug) profileIdBySlug[c.slug] = c.profile_id
+      }
+      const byProfile = {}
+      for (const row of slugHits) {
+        const pid = profileIdBySlug[row.name]
+        if (!pid) continue
+        byProfile[pid] = (byProfile[pid] || 0) + row.count
+      }
+      topProfiles.push(
+        ...Object.entries(byProfile)
+          .map(([id, count]) => ({
+            id,
+            name: nameById[id] || id,
+            count
+          }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10)
+      )
+    } catch {
+      /* ignore */
+    }
+
+    return json({
+      ok: true,
+      days,
+      since,
+      sampleSize: activities.length,
+      analytics,
+      logins,
+      loginsByDay,
+      connections,
+      topProfiles
+    })
+  }
+
   const adminActivitiesMatch = pathname.match(/^\/api\/admin\/profiles\/([^/]+)\/activities$/)
   if (adminActivitiesMatch && method === 'GET') {
     const gate = await requireStaff(env, request, { roles: ['admin'] })
     if (gate.error) return gate.error
     const profileId = decodeURIComponent(adminActivitiesMatch[1])
+    const days = parseAnalyticsDays(request, 30)
+    const since = analyticsSinceIso(days)
     const profiles = await sb(env, `profiles?id=eq.${encodeURIComponent(profileId)}&select=*`)
     const profile = profiles?.[0]
     if (!profile) return bad('Profile not found', 404)
@@ -4845,37 +5093,28 @@ async function handleApi(request, env, url) {
       const orFilter = slugs.map((s) => `slug.eq.${encodeURIComponent(s)}`).join(',')
       opens = await sb(
         env,
-        `card_opens?or=(${orFilter})&select=id,slug,channel,action,user_agent,device_type,browser,ip_country,ip_city,ip_region,opened_at&order=opened_at.desc&limit=500`
+        `card_opens?or=(${orFilter})&opened_at=gte.${encodeURIComponent(since)}&select=id,slug,channel,action,user_agent,device_type,browser,ip_country,ip_city,ip_region,opened_at&order=opened_at.desc&limit=5000`
       )
     }
-    const activities = (opens || []).map((o) => ({
-      id: o.id,
-      slug: o.slug || '',
-      channel: o.channel || 'other',
-      action: o.action || 'open',
-      device: o.device_type || '',
-      browser: o.browser || '',
-      country: o.ip_country || '',
-      city: o.ip_city || '',
-      region: o.ip_region || '',
-      userAgent: o.user_agent || '',
-      at: o.opened_at
-    }))
-    const countBy = (key) => {
-      const map = {}
-      for (const a of activities) {
-        const k = a[key] || 'unknown'
-        map[k] = (map[k] || 0) + 1
-      }
-      return Object.entries(map)
-        .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count)
+    const activities = mapOpenRows(opens)
+    const analytics = buildActivityAnalytics(activities)
+
+    let connections = 0
+    try {
+      const rows = await sb(
+        env,
+        `profile_connections?profile_id=eq.${encodeURIComponent(profileId)}&deleted=eq.false&created_at=gte.${encodeURIComponent(since)}&select=id&limit=1000`
+      )
+      connections = (rows || []).length
+    } catch {
+      connections = 0
     }
-    const opensCount = activities.filter((a) => a.action === 'open').length
-    const sharesCount = activities.filter((a) => String(a.action).startsWith('share')).length
-    const clicksCount = activities.filter((a) => String(a.action).startsWith('click')).length
+
     return json({
       ok: true,
+      days,
+      since,
+      sampleSize: activities.length,
       profile: {
         id: profile.id,
         cardType: profile.card_type === 'table' ? 'table' : 'personal',
@@ -4896,17 +5135,24 @@ async function handleApi(request, env, url) {
         }))
       },
       stats: {
-        total: activities.length,
-        opens: opensCount,
-        shares: sharesCount,
-        clicks: clicksCount,
-        byChannel: countBy('channel'),
-        byDevice: countBy('device'),
-        byBrowser: countBy('browser'),
-        byCountry: countBy('country'),
-        byAction: countBy('action'),
-        byCity: countBy('city')
+        total: analytics.totals.total,
+        opens: analytics.totals.opens,
+        shares: analytics.totals.shares,
+        clicks: analytics.totals.clicks,
+        byChannel: analytics.byChannel,
+        byDevice: analytics.byDevice,
+        byBrowser: analytics.byBrowser,
+        byCountry: analytics.byCountry,
+        byAction: analytics.byAction,
+        byCity: analytics.byCity,
+        bySlug: analytics.bySlug,
+        byKind: analytics.byKind,
+        funnel: analytics.funnel,
+        series: analytics.series,
+        byChannelOpens: analytics.byChannelOpens
       },
+      analytics,
+      connections,
       activities
     })
   }

@@ -414,10 +414,22 @@ export function apiAdminOverview() {
 }
 
 /** Live activity feed for one profile (opens, clicks, shares, device, location) */
-export function apiAdminProfileActivities(profileId) {
-  return request(`/api/admin/profiles/${encodeURIComponent(profileId)}/activities`, {
-    timeoutMs: 15000
-  })
+export function apiAdminProfileActivities(profileId, { days = 30 } = {}) {
+  const q = new URLSearchParams()
+  if (days) q.set('days', String(days))
+  const qs = q.toString()
+  return request(
+    `/api/admin/profiles/${encodeURIComponent(profileId)}/activities${qs ? `?${qs}` : ''}`,
+    { timeoutMs: 20000 }
+  )
+}
+
+/** Cross-profile activity analytics (charts) for admin dashboard */
+export function apiAdminAnalytics({ days = 30 } = {}) {
+  const q = new URLSearchParams()
+  if (days) q.set('days', String(days))
+  const qs = q.toString()
+  return request(`/api/admin/analytics${qs ? `?${qs}` : ''}`, { timeoutMs: 25000 })
 }
 
 /** Full profile for admin edit */
