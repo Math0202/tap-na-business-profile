@@ -239,6 +239,24 @@ async function sb(env, path, { method = 'GET', body, prefer, skipErrorLog = fals
 }
 
 
+/** PostgREST/Supabase caps rows per request (~1000). Page with limit+offset. */
+async function sbPaged(env, basePath, { pageSize = 1000, maxRows = 20000, skipErrorLog = false } = {}) {
+  const size = Math.min(1000, Math.max(1, Number(pageSize) || 1000))
+  const cap = Math.max(size, Number(maxRows) || 20000)
+  const out = []
+  let offset = 0
+  while (offset < cap) {
+    const sep = String(basePath).includes('?') ? '&' : '?'
+    const path = String(basePath) + sep + 'limit=' + size + '&offset=' + offset
+    const rows = await sb(env, path, { skipErrorLog })
+    const batch = Array.isArray(rows) ? rows : []
+    out.push(...batch)
+    if (batch.length < size) break
+    offset += size
+  }
+  return out
+}
+
 function parseAnalyticsDays(request, fallback = 30) {
   try {
     const url = new URL(request.url)
@@ -4979,9 +4997,9 @@ async function handleApi(request, env, url) {
     const since = analyticsSinceIso(days)
     let opens = []
     try {
-      opens = await sb(
+      opens = await sbPaged(
         env,
-        `card_opens?opened_at=gte.${encodeURIComponent(since)}&select=id,slug,channel,action,user_agent,device_type,browser,ip_country,ip_city,ip_region,opened_at&order=opened_at.desc&limit=5000`
+        `card_opens?opened_at=gte.${encodeURIComponent(since)}&select=id,slug,channel,action,user_agent,device_type,browser,ip_country,ip_city,ip_region,opened_at&order=opened_at.desc`
       )
     } catch {
       opens = []
@@ -4992,9 +5010,9 @@ async function handleApi(request, env, url) {
     let logins = 0
     let loginsByDay = []
     try {
-      const sessions = await sb(
+      const sessions = await sbPaged(
         env,
-        `sessions?created_at=gte.${encodeURIComponent(since)}&select=id,profile_id,created_at&order=created_at.desc&limit=2000`
+        `sessions?created_at=gte.${encodeURIComponent(since)}&select=id,profile_id,created_at&order=created_at.desc`
       )
       logins = (sessions || []).length
       const map = {}
@@ -5012,9 +5030,9 @@ async function handleApi(request, env, url) {
 
     let connections = 0
     try {
-      const rows = await sb(
+      const rows = await sbPaged(
         env,
-        `profile_connections?deleted=eq.false&created_at=gte.${encodeURIComponent(since)}&select=id&limit=2000`
+        `profile_connections?deleted=eq.false&created_at=gte.${encodeURIComponent(since)}&select=id`
       )
       connections = (rows || []).length
     } catch {
@@ -5024,10 +5042,10 @@ async function handleApi(request, env, url) {
     const topProfiles = []
     try {
       const slugHits = analytics.bySlug || []
-      const cards = await sb(env, 'cards?deleted=eq.false&select=slug,profile_id&limit=3000')
-      const profiles = await sb(
+      const cards = await sbPaged(env, 'cards?deleted=eq.false&select=slug,profile_id')
+      const profiles = await sbPaged(
         env,
-        'profiles?deleted=eq.false&select=id,name,company,card_type&limit=1000'
+        'profiles?deleted=eq.false&select=id,name,company,card_type'
       )
       const nameById = {}
       for (const p of profiles || []) {
@@ -5091,9 +5109,9 @@ async function handleApi(request, env, url) {
     let opens = []
     if (slugs.length) {
       const orFilter = slugs.map((s) => `slug.eq.${encodeURIComponent(s)}`).join(',')
-      opens = await sb(
+      opens = await sbPaged(
         env,
-        `card_opens?or=(${orFilter})&opened_at=gte.${encodeURIComponent(since)}&select=id,slug,channel,action,user_agent,device_type,browser,ip_country,ip_city,ip_region,opened_at&order=opened_at.desc&limit=5000`
+        `card_opens?or=(${orFilter})&opened_at=gte.${encodeURIComponent(since)}&select=id,slug,channel,action,user_agent,device_type,browser,ip_country,ip_city,ip_region,opened_at&order=opened_at.desc`
       )
     }
     const activities = mapOpenRows(opens)
@@ -5101,9 +5119,9 @@ async function handleApi(request, env, url) {
 
     let connections = 0
     try {
-      const rows = await sb(
+      const rows = await sbPaged(
         env,
-        `profile_connections?profile_id=eq.${encodeURIComponent(profileId)}&deleted=eq.false&created_at=gte.${encodeURIComponent(since)}&select=id&limit=1000`
+        `profile_connections?profile_id=eq.${encodeURIComponent(profileId)}&deleted=eq.false&created_at=gte.${encodeURIComponent(since)}&select=id`
       )
       connections = (rows || []).length
     } catch {
