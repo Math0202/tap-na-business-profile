@@ -1,20 +1,18 @@
 import { Chart } from 'chart.js'
 import { destroyChart } from './activityCharts.js'
-import { saleAmountPending, summarizeCashFlow, cashCategoryLabel } from './salesStore.js'
+import { saleAmountPending, summarizeCashFlow } from './salesStore.js'
 
 export { destroyChart }
 
 const PALETTE = {
   cashIn: '#34d399',
   cashOut: '#f87171',
+  balance: '#38bdf8',
   pending: '#fbbf24',
-  categories: ['#34d399', '#38bdf8', '#a78bfa', '#fbbf24', '#fb7185', '#94a3b8'],
   muted: '#71717a',
   grid: 'rgba(255,255,255,0.06)',
   text: '#a1a1aa'
 }
-
-const INCOME_CATEGORIES = ['sale', 'investment', 'tech_services', 'other', 'refund']
 
 function baseOptions(extra = {}) {
   return {
@@ -37,7 +35,15 @@ function baseOptions(extra = {}) {
 }
 
 function moneyTick(v) {
-  return v >= 1000 ? `N$${(v / 1000).toFixed(0)}k` : `N$${v}`
+  const n = Number(v) || 0
+  const abs = Math.abs(n)
+  const sign = n < 0 ? '-' : ''
+  if (abs >= 1000) return `${sign}N$${(abs / 1000).toFixed(0)}k`
+  return `${sign}N$${abs}`
+}
+
+function moneyTooltip(value) {
+  return `N$ ${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
 }
 
 function dayKeys(days) {
@@ -51,13 +57,43 @@ function dayKeys(days) {
   return keys
 }
 
-function inWindow(iso, cutoffMs) {
-  const t = new Date(iso).getTime()
-  return !Number.isNaN(t) && t >= cutoffMs
+function endOfDayMs(dateKey) {
+  return new Date(`${dateKey}T23:59:59`).getTime()
 }
 
 function moneyRound(n) {
   return Math.round((Number(n) || 0) * 100) / 100
+}
+
+function cashReceivedForSaleBefore(saleId, cash, beforeMs) {
+  return moneyRound(
+    (cash || [])
+      .filter(
+        (c) =>
+          !c.deleted &&
+          c.saleId === saleId &&
+          c.category === 'sale' &&
+          c.type === 'in' &&
+          new Date(c.at).getTime() <= beforeMs
+      )
+      .reduce((sum, c) => sum + (Number(c.amount) || 0), 0)
+  )
+}
+
+function pendingAsOf(dateKey, sales, cash) {
+  const beforeMs = endOfDayMs(dateKey)
+  const activeSales = (sales || []).filter(
+    (s) =>
+      !s.deleted &&
+      s.status !== 'cancelled' &&
+      new Date(s.soldAt || 0).getTime() <= beforeMs
+  )
+  return moneyRound(
+    activeSales.reduce((sum, s) => {
+      const received = cashReceivedForSaleBefore(s.id, cash, beforeMs)
+      return sum + Math.max(0, moneyRound(s.amount) - received)
+    }, 0)
+  )
 }
 
 /** Build chart-ready aggregates — totals match Cash tab (summarizeCashFlow). */
@@ -71,7 +107,7 @@ export function buildSalesPerformanceData({
   const summary = summarizeCashFlow(activeCash)
   const activeSales = (sales || []).filter((s) => !s.deleted && s.status !== 'cancelled')
   const pending = moneyRound(
-    pendingAmount != null && pendingAmount > 0
+    pendingAmount != null && pendingAmount >= 0
       ? pendingAmount
       : activeSales.reduce((sum, s) => sum + saleAmountPending(s), 0)
   )
@@ -79,11 +115,19 @@ export function buildSalesPerformanceData({
   const cutoffMs = Date.now() - days * 86400000
   const cashInByDay = new Map()
   const cashOutByDay = new Map()
-  for (const c of activeCash) {
-    if (!inWindow(c.at, cutoffMs)) continue
+
+  let prePeriodBalance = 0
+  for (const c of [...activeCash].sort((a, b) => String(a.at).localeCompare(String(b.at)))) {
+    const amount = Number(c.amount) || 0
+    const atMs = new Date(c.at).getTime()
+    const delta = c.type === 'out' ? -amount : amount
+    if (!Number.isNaN(atMs) && atMs < cutoffMs) {
+      prePeriodBalance += delta
+      continue
+    }
+    if (Number.isNaN(atMs) || atMs < cutoffMs) continue
     const key = String(c.at || '').slice(0, 10)
     if (!key) continue
-    const amount = Number(c.amount) || 0
     if (c.type === 'out') {
       cashOutByDay.set(key, (cashOutByDay.get(key) || 0) + amount)
     } else {
@@ -91,36 +135,31 @@ export function buildSalesPerformanceData({
     }
   }
 
-  const byDay = dayKeys(days).map((date) => ({
-    date,
-    cashIn: Math.round((cashInByDay.get(date) || 0) * 100) / 100,
-    cashOut: Math.round((cashOutByDay.get(date) || 0) * 100) / 100
-  }))
+  let runningBalance = moneyRound(prePeriodBalance)
+  const byDay = dayKeys(days).map((date) => {
+    const cashIn = Math.round((cashInByDay.get(date) || 0) * 100) / 100
+    const cashOut = Math.round((cashOutByDay.get(date) || 0) * 100) / 100
+    runningBalance = moneyRound(runningBalance + cashIn - cashOut)
+    return {
+      date,
+      cashIn,
+      cashOut,
+      balance: runningBalance,
+      pending: pendingAsOf(date, activeSales, activeCash)
+    }
+  })
 
-  const byCategory = Object.entries(summary.byCategory || {})
-    .map(([category, amounts]) => ({
-      category,
-      name: cashCategoryLabel(category),
-      in: Math.round((amounts.in || 0) * 100) / 100,
-      out: Math.round((amounts.out || 0) * 100) / 100,
-      net: Math.round(((amounts.in || 0) - (amounts.out || 0)) * 100) / 100
-    }))
-    .filter((r) => r.in > 0.004 || r.out > 0.004)
-    .sort((a, b) => b.in - a.in)
-
-  const byIncomeCategory = byCategory
-    .filter((r) => INCOME_CATEGORIES.includes(r.category) && r.in > 0.004)
-    .sort((a, b) => b.in - a.in)
+  if (byDay.length) {
+    byDay[byDay.length - 1].pending = pending
+  }
 
   return {
     days,
     byDay,
-    byCategory,
-    byIncomeCategory,
     totals: {
-      inflow: Math.round(summary.inflow * 100) / 100,
-      outflow: Math.round(summary.outflow * 100) / 100,
-      balance: Math.round(summary.balance * 100) / 100,
+      inflow: moneyRound(summary.inflow),
+      outflow: moneyRound(summary.outflow),
+      balance: moneyRound(summary.balance),
       pending,
       salesCount: activeSales.length
     },
@@ -132,7 +171,7 @@ export function buildSalesPerformanceData({
   }
 }
 
-export function makeCashFlowTrend(canvas, byDay = []) {
+export function makePerformanceTrend(canvas, byDay = []) {
   return new Chart(canvas, {
     type: 'line',
     data: {
@@ -142,8 +181,8 @@ export function makeCashFlowTrend(canvas, byDay = []) {
           label: 'Cash in',
           data: byDay.map((d) => d.cashIn || 0),
           borderColor: PALETTE.cashIn,
-          backgroundColor: 'rgba(52,211,153,0.15)',
-          fill: true,
+          backgroundColor: 'rgba(52,211,153,0.12)',
+          fill: false,
           tension: 0.35,
           pointRadius: 0,
           borderWidth: 2
@@ -152,11 +191,32 @@ export function makeCashFlowTrend(canvas, byDay = []) {
           label: 'Cash out',
           data: byDay.map((d) => d.cashOut || 0),
           borderColor: PALETTE.cashOut,
-          backgroundColor: 'rgba(248,113,113,0.08)',
-          fill: true,
+          backgroundColor: 'transparent',
+          fill: false,
           tension: 0.35,
           pointRadius: 0,
           borderWidth: 2
+        },
+        {
+          label: 'Balance',
+          data: byDay.map((d) => d.balance || 0),
+          borderColor: PALETTE.balance,
+          backgroundColor: 'transparent',
+          fill: false,
+          tension: 0.35,
+          pointRadius: 0,
+          borderWidth: 2.5
+        },
+        {
+          label: 'Pending',
+          data: byDay.map((d) => d.pending || 0),
+          borderColor: PALETTE.pending,
+          backgroundColor: 'transparent',
+          fill: false,
+          tension: 0.35,
+          pointRadius: 0,
+          borderWidth: 2,
+          borderDash: [6, 4]
         }
       ]
     },
@@ -171,29 +231,41 @@ export function makeCashFlowTrend(canvas, byDay = []) {
           ticks: { color: PALETTE.text, callback: moneyTick },
           grid: { color: PALETTE.grid }
         }
+      },
+      plugins: {
+        ...baseOptions().plugins,
+        tooltip: {
+          ...baseOptions().plugins.tooltip,
+          callbacks: {
+            label(ctx) {
+              return `${ctx.dataset.label}: ${moneyTooltip(ctx.parsed.y)}`
+            }
+          }
+        }
       }
     })
   })
 }
 
-export function makeCategoryInflowBar(canvas, rows = []) {
-  const colors = rows.map((_, i) => PALETTE.categories[i % PALETTE.categories.length])
+export function makePerformanceSummaryBar(canvas, totals) {
+  const labels = ['Cash in', 'Cash out', 'Balance', 'Pending']
+  const values = [totals.inflow, totals.outflow, totals.balance, totals.pending]
+  const colors = [PALETTE.cashIn, PALETTE.cashOut, PALETTE.balance, PALETTE.pending]
+
   return new Chart(canvas, {
     type: 'bar',
     data: {
-      labels: rows.map((r) => r.name),
+      labels,
       datasets: [
         {
-          label: 'Cash in',
-          data: rows.map((r) => r.in),
+          data: values,
           backgroundColor: colors,
-          borderRadius: 6,
+          borderRadius: 8,
           borderSkipped: false
         }
       ]
     },
     options: baseOptions({
-      indexAxis: 'y',
       plugins: {
         ...baseOptions().plugins,
         legend: { display: false },
@@ -201,61 +273,20 @@ export function makeCategoryInflowBar(canvas, rows = []) {
           ...baseOptions().plugins.tooltip,
           callbacks: {
             label(ctx) {
-              return `N$ ${Number(ctx.raw || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+              return moneyTooltip(ctx.raw)
             }
           }
         }
       },
       scales: {
         x: {
+          ticks: { color: PALETTE.text },
+          grid: { display: false }
+        },
+        y: {
           beginAtZero: true,
           ticks: { color: PALETTE.text, callback: moneyTick },
           grid: { color: PALETTE.grid }
-        },
-        y: {
-          ticks: { color: PALETTE.text },
-          grid: { display: false }
-        }
-      }
-    })
-  })
-}
-
-export function makeCashOverviewDoughnut(canvas, totals) {
-  const rows = [
-    { name: 'Cash in', value: totals.inflow, color: PALETTE.cashIn },
-    { name: 'Cash out', value: totals.outflow, color: PALETTE.cashOut },
-    { name: 'Pending (sales)', value: totals.pending, color: PALETTE.pending }
-  ].filter((r) => r.value > 0.004)
-
-  return new Chart(canvas, {
-    type: 'doughnut',
-    data: {
-      labels: rows.map((r) => r.name),
-      datasets: [
-        {
-          data: rows.map((r) => r.value),
-          backgroundColor: rows.map((r) => r.color),
-          borderWidth: 0,
-          hoverOffset: 4
-        }
-      ]
-    },
-    options: baseOptions({
-      cutout: '62%',
-      plugins: {
-        ...baseOptions().plugins,
-        legend: {
-          position: 'bottom',
-          labels: { color: PALETTE.text, boxWidth: 12, font: { size: 11 } }
-        },
-        tooltip: {
-          ...baseOptions().plugins.tooltip,
-          callbacks: {
-            label(ctx) {
-              return `${ctx.label}: N$ ${Number(ctx.raw || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
-            }
-          }
         }
       }
     })

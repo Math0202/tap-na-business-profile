@@ -3,9 +3,8 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import {
   buildSalesPerformanceData,
   destroyChart,
-  makeCashFlowTrend,
-  makeCashOverviewDoughnut,
-  makeCategoryInflowBar
+  makePerformanceSummaryBar,
+  makePerformanceTrend
 } from '../lib/salesCharts'
 
 const props = defineProps({
@@ -16,8 +15,7 @@ const props = defineProps({
 })
 
 const trendCanvas = ref(null)
-const overviewCanvas = ref(null)
-const categoryCanvas = ref(null)
+const summaryCanvas = ref(null)
 const charts = []
 
 const data = computed(() =>
@@ -39,14 +37,11 @@ async function render() {
   const d = data.value
   if (!d.hasData) return
 
-  if (trendCanvas.value && d.byDay.some((row) => row.cashIn > 0 || row.cashOut > 0)) {
-    charts.push(makeCashFlowTrend(trendCanvas.value, d.byDay))
+  if (trendCanvas.value && d.byDay.length) {
+    charts.push(makePerformanceTrend(trendCanvas.value, d.byDay))
   }
-  if (overviewCanvas.value) {
-    charts.push(makeCashOverviewDoughnut(overviewCanvas.value, d.totals))
-  }
-  if (categoryCanvas.value && d.byIncomeCategory.length) {
-    charts.push(makeCategoryInflowBar(categoryCanvas.value, d.byIncomeCategory))
+  if (summaryCanvas.value) {
+    charts.push(makePerformanceSummaryBar(summaryCanvas.value, d.totals))
   }
 }
 
@@ -110,31 +105,20 @@ onBeforeUnmount(() => clearCharts())
 
       <section class="card-item-bg rounded-2xl p-4">
         <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
-          Cash in &amp; out over time
+          Cash in · out · balance · pending
           <span class="text-gray-600 font-normal normal-case">(last {{ data.days }} days)</span>
         </h3>
-        <div class="h-56">
+        <div class="h-64">
           <canvas ref="trendCanvas" />
         </div>
       </section>
 
-      <section class="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div class="card-item-bg rounded-2xl p-4">
-          <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
-            Cash in · out · pending
-          </h3>
-          <div class="h-52">
-            <canvas ref="overviewCanvas" />
-          </div>
-        </div>
-        <div class="card-item-bg rounded-2xl p-4">
-          <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
-            Cash in by category
-          </h3>
-          <div class="h-52">
-            <canvas v-if="data.byIncomeCategory.length" ref="categoryCanvas" />
-            <p v-else class="text-sm text-gray-500 pt-8 text-center">No category inflows yet.</p>
-          </div>
+      <section class="card-item-bg rounded-2xl p-4">
+        <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
+          Current totals
+        </h3>
+        <div class="h-52">
+          <canvas ref="summaryCanvas" />
         </div>
       </section>
     </template>
