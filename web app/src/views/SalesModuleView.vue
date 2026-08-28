@@ -61,7 +61,8 @@ import {
   invoicePaidAmount,
   invoiceRemaining,
   recordInvoicePayment,
-  formatSalesStatus
+  formatSalesStatus,
+  cashCategoryLabel
 } from '../lib/salesStore'
 import {
   provisionCardsForSale,
@@ -1644,8 +1645,7 @@ onMounted(async () => {
         <SalesPerformanceCharts
           :sales="sales"
           :cash="cash"
-          :agents="agents"
-          :is-sales-scoped="isSalesScoped"
+          :pending-amount="stats.pendingAmount"
         />
 
         <div>
@@ -2093,7 +2093,7 @@ onMounted(async () => {
             :key="row.category"
             class="flex items-center justify-between gap-3 text-xs"
           >
-            <span class="capitalize text-gray-300">{{ row.category }}</span>
+            <span class="text-gray-300">{{ cashCategoryLabel(row.category) }}</span>
             <span class="tabular-nums text-gray-400">
               <span class="text-emerald-400">+{{ formatMoney(row.in) }}</span>
               <span class="mx-1">/</span>
@@ -2144,7 +2144,7 @@ onMounted(async () => {
             </select>
             <select v-model="cashCategoryFilter" class="field-shell w-full field-input !py-2.5 text-xs">
               <option value="all">All categories</option>
-              <option v-for="c in CASH_CATEGORIES" :key="c" :value="c">{{ c }}</option>
+              <option v-for="c in CASH_CATEGORIES" :key="c" :value="c">{{ cashCategoryLabel(c) }}</option>
             </select>
             <input v-model="cashFrom" type="date" class="field-shell w-full field-input !py-2.5 text-xs" title="From date">
             <input v-model="cashTo" type="date" class="field-shell w-full field-input !py-2.5 text-xs" title="To date">
@@ -3199,7 +3199,7 @@ onMounted(async () => {
           <div>
             <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Category</label>
             <select v-model="cashForm.category" class="field-shell w-full field-input !py-3">
-              <option v-for="c in CASH_CATEGORIES" :key="c" :value="c">{{ c }}</option>
+              <option v-for="c in CASH_CATEGORIES" :key="c" :value="c">{{ cashCategoryLabel(c) }}</option>
             </select>
           </div>
         </div>

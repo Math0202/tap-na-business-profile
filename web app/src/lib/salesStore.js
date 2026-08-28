@@ -26,6 +26,8 @@ export const INVOICE_STATUSES = ['draft', 'sent', 'partially_settled', 'paid', '
 export const PAYMENT_METHODS = ['cash', 'eft', 'card', 'mobile', 'other']
 export const CASH_CATEGORIES = [
   'sale',
+  'investment',
+  'tech_services',
   'commission',
   'refund',
   'expense',
@@ -33,6 +35,21 @@ export const CASH_CATEGORIES = [
   'salary',
   'other'
 ]
+
+export function cashCategoryLabel(category) {
+  const labels = {
+    sale: 'Sales',
+    investment: 'Investment',
+    tech_services: 'Tech Services',
+    commission: 'Commission',
+    refund: 'Refund',
+    expense: 'Expense',
+    stock: 'Stock',
+    salary: 'Salary',
+    other: 'Other'
+  }
+  return labels[String(category || '').trim()] || String(category || 'Other')
+}
 
 export const COMPANY = {
   name: 'tap-na',

@@ -917,7 +917,17 @@ function salesCashToDb(body, { isNew = false } = {}) {
   const id = String(body?.id || '').trim() || (isNew ? uid('cash') : '')
   const agentId = String(body?.agentId || '').trim() || null
   const saleId = String(body?.saleId || '').trim() || null
-  const allowedCategories = ['sale', 'commission', 'refund', 'expense', 'stock', 'salary', 'other']
+  const allowedCategories = [
+    'sale',
+    'investment',
+    'tech_services',
+    'commission',
+    'refund',
+    'expense',
+    'stock',
+    'salary',
+    'other'
+  ]
   const allowedMethods = ['cash', 'eft', 'card', 'mobile', 'other']
   const category = String(body?.category || 'other')
   const method = String(body?.method || 'other')
