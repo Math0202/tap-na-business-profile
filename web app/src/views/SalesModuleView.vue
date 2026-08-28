@@ -22,6 +22,7 @@ import {
   deleteQuote,
   convertQuoteToSale,
   listInvoices,
+  listInvoicesForActiveSales,
   getInvoice,
   getInvoiceBySale,
   sendInvoiceEmail,
@@ -40,6 +41,9 @@ import {
   cashEntriesWithRunningBalance,
   getSalesStats,
   agentPerformance,
+  saleAmountPending,
+  cashSaleInTotal,
+  cashCommissionTotal,
   formatMoney,
   emptyLine,
   normalizeLine,
@@ -332,18 +336,17 @@ async function refresh() {
     quotes.value = allQuotes.filter((q) => q.agentId === aid && !q.deleted)
     const saleIds = new Set(sales.value.map((s) => s.id))
     invoices.value = allInvoices.filter(
-      (inv) => !inv.deleted && (inv.agentId === aid || (inv.saleId && saleIds.has(inv.saleId)))
+      (inv) => !inv.deleted && inv.saleId && saleIds.has(inv.saleId)
     )
     cash.value = listCashFlowForAgent(aid, { includeDeleted: false, saleIds })
-    const paid = sales.value.filter((s) => s.status === 'paid' || s.status === 'fulfilled')
-    const pending = sales.value.filter((s) => s.status === 'pending')
+    const scopedSaleIds = [...saleIds]
     const inflow = cash.value.filter((c) => c.type === 'in').reduce((sum, c) => sum + (Number(c.amount) || 0), 0)
     const outflow = cash.value.filter((c) => c.type === 'out').reduce((sum, c) => sum + (Number(c.amount) || 0), 0)
     stats.value = {
       salesCount: sales.value.length,
-      revenue: paid.reduce((sum, s) => sum + (Number(s.amount) || 0), 0),
-      pendingAmount: pending.reduce((sum, s) => sum + (Number(s.amount) || 0), 0),
-      commissions: paid.reduce((sum, s) => sum + (Number(s.commission) || 0), 0),
+      revenue: cashSaleInTotal({ saleIds: scopedSaleIds }),
+      pendingAmount: sales.value.reduce((sum, s) => sum + saleAmountPending(s), 0),
+      commissions: cashCommissionTotal({ saleIds: scopedSaleIds }),
       inflow,
       outflow,
       balance: inflow - outflow,
@@ -355,7 +358,12 @@ async function refresh() {
     agents.value = visible(allAgents)
     sales.value = visible(allSales)
     quotes.value = visible(allQuotes)
-    invoices.value = visible(allInvoices)
+    invoices.value = includeDeleted
+      ? visible(allInvoices.filter((inv) => {
+          const saleIds = new Set(allSales.filter((s) => !s.deleted).map((s) => s.id))
+          return inv.saleId && saleIds.has(inv.saleId)
+        }))
+      : visible(listInvoicesForActiveSales({ includeDeleted: false }))
     cash.value = visible(allCash)
     products.value = visible(products.value)
     stats.value = getSalesStats()
@@ -1588,12 +1596,12 @@ onMounted(async () => {
       <section v-if="tab === 'overview'" class="space-y-6 mb-8">
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <div class="card-item-bg rounded-2xl p-4">
-            <p class="text-[11px] uppercase tracking-wide text-gray-500">Revenue (paid)</p>
+            <p class="text-[11px] uppercase tracking-wide text-gray-500">Sale cash in</p>
             <p class="text-xl font-bold mt-1">{{ formatMoney(stats.revenue) }}</p>
           </div>
           <div class="card-item-bg rounded-2xl p-4">
             <p class="text-[11px] uppercase tracking-wide text-gray-500">
-              {{ isSalesScoped ? 'Your commission' : 'Commissions (paid)' }}
+              {{ isSalesScoped ? 'Your commission' : 'Commissions (cash out)' }}
             </p>
             <p class="text-xl font-bold mt-1 text-emerald-300">{{ formatMoney(totalCommission) }}</p>
           </div>
@@ -1667,7 +1675,11 @@ onMounted(async () => {
                     <span v-if="!isSalesScoped"> · {{ agentName(s.agentId) }}</span>
                   </p>
                   <p class="text-[11px] text-gray-500 mt-1">
-                    {{ formatMoney(s.amount) }} · commission {{ formatMoney(s.commission) }} · {{ formatDate(s.soldAt) }}
+                    {{ formatMoney(s.amount) }}
+                    <span v-if="saleAmountPending(s) > 0.004" class="text-amber-400">
+                      · {{ formatMoney(saleAmountPending(s)) }} due
+                    </span>
+                    · commission {{ formatMoney(s.commission) }} · {{ formatDate(s.soldAt) }}
                   </p>
                   </div>
                 </div>
@@ -1842,7 +1854,11 @@ onMounted(async () => {
                   {{ docLinesLabel(s) }} · {{ agentName(s.agentId) }}
                 </p>
                 <p class="text-[11px] text-gray-500 mt-1">
-                  {{ formatMoney(s.amount) }} · commission {{ formatMoney(s.commission) }} · {{ formatDate(s.soldAt) }}
+                  {{ formatMoney(s.amount) }}
+                  <span v-if="saleAmountPending(s) > 0.004" class="text-amber-400">
+                    · {{ formatMoney(saleAmountPending(s)) }} due
+                  </span>
+                  · commission {{ formatMoney(s.commission) }} · {{ formatDate(s.soldAt) }}
                 </p>
                 </div>
               </div>

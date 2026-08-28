@@ -876,6 +876,8 @@ export async function refreshFinanceFromApi() {
       cashflow: data.cashflow || []
     })
 
+    await reconcileFinanceFromCash({ sync: true })
+
     return true
   } catch {
     return false
@@ -1055,10 +1057,15 @@ export async function saveSaleToCloud(payload, opts = {}) {
 }
 
 export function deleteSale(id) {
+  const inv = getInvoiceBySale(id)
   markLocalDeleted(SALES_KEY, id, normalizeSale)
+  if (inv && !inv.deleted) {
+    markLocalDeleted(INVOICES_KEY, inv.id, normalizeInvoice)
+  }
   syncFinanceQuiet(async () => {
-    const { apiDeleteSalesOrder } = await import('./api.js')
+    const { apiDeleteSalesOrder, apiDeleteSalesInvoice } = await import('./api.js')
     await apiDeleteSalesOrder(id)
+    if (inv?.id) await apiDeleteSalesInvoice(inv.id)
   })
 }
 
@@ -1182,6 +1189,12 @@ export function listInvoices({ includeDeleted = false } = {}) {
   let list = readJson(INVOICES_KEY, []).map(normalizeInvoice)
   if (!includeDeleted) list = list.filter((inv) => !inv.deleted)
   return list.sort((a, b) => String(b.issuedAt).localeCompare(String(a.issuedAt)))
+}
+
+/** Invoices linked to a non-deleted sale (Sales tab is source of truth). */
+export function listInvoicesForActiveSales({ includeDeleted = false } = {}) {
+  const saleIds = new Set(listSales({ includeDeleted: false }).map((s) => s.id))
+  return listInvoices({ includeDeleted }).filter((inv) => inv.saleId && saleIds.has(inv.saleId))
 }
 
 export function getInvoice(id) {
@@ -1953,6 +1966,150 @@ function cashInForSale(saleId) {
   )
 }
 
+function cashCommissionForSale(saleId) {
+  if (!saleId) return 0
+  return moneyRound(
+    listCashFlow()
+      .filter(
+        (c) =>
+          c.saleId === saleId && c.category === 'commission' && c.type === 'out' && !c.deleted
+      )
+      .reduce((sum, c) => sum + (Number(c.amount) || 0), 0)
+  )
+}
+
+export function cashSaleInTotal({ saleIds = null } = {}) {
+  const ids = saleIds ? new Set(saleIds) : null
+  return moneyRound(
+    listCashFlow()
+      .filter((c) => {
+        if (c.deleted || c.category !== 'sale' || c.type !== 'in') return false
+        if (ids && !ids.has(c.saleId)) return false
+        return true
+      })
+      .reduce((sum, c) => sum + (Number(c.amount) || 0), 0)
+  )
+}
+
+export function cashCommissionTotal({ saleIds = null, agentId = '' } = {}) {
+  const ids = saleIds ? new Set(saleIds) : null
+  return moneyRound(
+    listCashFlow()
+      .filter((c) => {
+        if (c.deleted || c.category !== 'commission' || c.type !== 'out') return false
+        if (agentId && c.agentId !== agentId) return false
+        if (ids && c.saleId && !ids.has(c.saleId)) return false
+        if (ids && !c.saleId) return false
+        return true
+      })
+      .reduce((sum, c) => sum + (Number(c.amount) || 0), 0)
+  )
+}
+
+export function saleAmountPending(sale) {
+  if (!sale || sale.status === 'cancelled') return 0
+  const received = cashInForSale(sale.id)
+  return Math.max(0, moneyRound(moneyRound(sale.amount) - received))
+}
+
+function updateSaleLocal(next) {
+  const list = listSales({ includeDeleted: true })
+  const idx = list.findIndex((s) => s.id === next.id)
+  if (idx < 0) return null
+  const merged = normalizeSale({
+    ...list[idx],
+    ...next,
+    id: list[idx].id,
+    createdAt: list[idx].createdAt,
+    invoiceId: list[idx].invoiceId || next.invoiceId,
+    quoteId: next.quoteId || list[idx].quoteId
+  })
+  list[idx] = merged
+  writeJson(SALES_KEY, list)
+  return merged
+}
+
+function updateInvoiceLocal(next) {
+  const list = listInvoices({ includeDeleted: true })
+  const idx = list.findIndex((inv) => inv.id === next.id)
+  if (idx < 0) return null
+  const merged = normalizeInvoice({
+    ...list[idx],
+    ...next,
+    id: list[idx].id,
+    createdAt: list[idx].createdAt,
+    invoiceNumber: list[idx].invoiceNumber
+  })
+  list[idx] = merged
+  writeJson(INVOICES_KEY, list)
+  return merged
+}
+
+function deriveSaleStatusFromCash(sale, received) {
+  const status = String(sale.status || '').toLowerCase()
+  if (status === 'cancelled' || status === 'fulfilled') return sale.status
+  const amount = moneyRound(sale.amount)
+  if (amount > 0 && received >= amount - 0.004) return 'paid'
+  return 'pending'
+}
+
+/** Sync sale status, commission, and linked invoice from cash ledger entries. */
+export function syncSaleAndInvoiceFromCash(saleId) {
+  const sale = listSales({ includeDeleted: true }).find((s) => s.id === saleId)
+  if (!sale || sale.deleted) return { changed: false, sale: null, invoice: null }
+
+  const received = cashInForSale(saleId)
+  const commissionOut = cashCommissionForSale(saleId)
+  const nextStatus = deriveSaleStatusFromCash(sale, received)
+  const saleChanged =
+    nextStatus !== sale.status || Math.abs(commissionOut - moneyRound(sale.commission)) > 0.004
+
+  let updatedSale = sale
+  if (saleChanged) {
+    updatedSale = updateSaleLocal({ ...sale, status: nextStatus, commission: commissionOut })
+  }
+
+  const inv = getInvoiceBySale(saleId)
+  let updatedInvoice = inv
+  let invoiceChanged = false
+  if (inv && !inv.deleted) {
+    const paidAmount = Math.min(moneyRound(sale.amount), received)
+    const status = invoiceSettlementStatus({ ...inv, paidAmount }, {
+      paidAmount,
+      previousStatus: inv.status
+    })
+    invoiceChanged =
+      Math.abs(paidAmount - invoicePaidAmount(inv)) > 0.004 ||
+      status !== String(inv.status || '').toLowerCase()
+    if (invoiceChanged) {
+      updatedInvoice = updateInvoiceLocal({ ...inv, paidAmount, status })
+    }
+  }
+
+  return {
+    changed: saleChanged || invoiceChanged,
+    sale: updatedSale,
+    invoice: updatedInvoice
+  }
+}
+
+/** Cash is source of truth — align sales/invoices and optionally push corrections to cloud. */
+export async function reconcileFinanceFromCash({ sync = true } = {}) {
+  const changes = []
+  for (const sale of listSales({ includeDeleted: false })) {
+    const result = syncSaleAndInvoiceFromCash(sale.id)
+    if (result.changed) changes.push(result)
+  }
+  if (sync && changes.length) {
+    const { apiUpsertSalesOrder, apiUpsertSalesInvoice } = await import('./api.js')
+    for (const { sale, invoice } of changes) {
+      if (sale) await apiUpsertSalesOrder(sale)
+      if (invoice) await apiUpsertSalesInvoice(invoice)
+    }
+  }
+  return { changed: changes.length, changes }
+}
+
 export function addCashEntry(payload, { sync = true } = {}) {
   const list = listCashFlow()
   const next = normalizeCash(payload)
@@ -2017,11 +2174,15 @@ export function deleteCashEntry(id) {
 }
 
 export async function deleteCashEntryFromCloud(id) {
+  const entry = listCashFlow({ includeDeleted: true }).find((c) => c.id === id)
   markLocalDeleted(CASH_KEY, id, normalizeCash)
   const { apiDeleteSalesCash } = await import('./api.js')
   const res = await apiDeleteSalesCash(id)
   if (!res.ok) {
     return { ok: false, error: res.error || 'Could not delete cash entry' }
+  }
+  if (entry?.saleId) {
+    await reconcileFinanceFromCash({ sync: true })
   }
   return { ok: true, id }
 }
@@ -2031,6 +2192,10 @@ export async function restoreCashEntry(id) {
   const res = await apiRestoreSalesCash(id)
   if (!res.ok) return { ok: false, error: res.error || 'Could not restore cash entry' }
   markLocalRestored(CASH_KEY, id, normalizeCash, res.data?.entry)
+  const entry = listCashFlow({ includeDeleted: true }).find((c) => c.id === id)
+  if (entry?.saleId) {
+    await reconcileFinanceFromCash({ sync: true })
+  }
   return { ok: true, entry: res.data?.entry }
 }
 
@@ -2068,18 +2233,17 @@ export function cashEntriesWithRunningBalance(entries = listCashFlow()) {
 
 export function getSalesStats() {
   const sales = listSales().filter((s) => s.status !== 'cancelled')
-  const paid = sales.filter((s) => s.status === 'paid' || s.status === 'fulfilled')
-  const pending = sales.filter((s) => s.status === 'pending')
-  const cash = listCashFlow()
+  const saleIds = sales.map((s) => s.id)
+  const cash = listCashFlow().filter((c) => !c.deleted)
   const inflow = cash.filter((c) => c.type === 'in').reduce((s, c) => s + c.amount, 0)
   const outflow = cash.filter((c) => c.type === 'out').reduce((s, c) => s + c.amount, 0)
   const agents = listAgents()
 
   return {
     salesCount: sales.length,
-    revenue: paid.reduce((s, x) => s + x.amount, 0),
-    pendingAmount: pending.reduce((s, x) => s + x.amount, 0),
-    commissions: paid.reduce((s, x) => s + x.commission, 0),
+    revenue: cashSaleInTotal({ saleIds }),
+    pendingAmount: sales.reduce((s, sale) => s + saleAmountPending(sale), 0),
+    commissions: cashCommissionTotal({ saleIds }),
     inflow,
     outflow,
     balance: inflow - outflow,
@@ -2090,12 +2254,12 @@ export function getSalesStats() {
 
 export function agentPerformance(agentId) {
   const sales = listSales().filter((s) => s.agentId === agentId && s.status !== 'cancelled')
-  const paid = sales.filter((s) => s.status === 'paid' || s.status === 'fulfilled')
+  const saleIds = sales.map((s) => s.id)
   return {
     salesCount: sales.length,
-    revenue: paid.reduce((s, x) => s + x.amount, 0),
-    commission: paid.reduce((s, x) => s + x.commission, 0),
-    pending: sales.filter((s) => s.status === 'pending').length
+    revenue: cashSaleInTotal({ saleIds }),
+    commission: cashCommissionTotal({ saleIds }),
+    pending: sales.filter((s) => saleAmountPending(s) > 0.004).length
   }
 }
 
