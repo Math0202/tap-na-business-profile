@@ -263,6 +263,7 @@ async function drawBanking(doc, y, { kind, row, number } = {}) {
 
   doc.setFontSize(10)
   const rows = [
+    ['Bank Name', BANKING_DETAILS.bankName],
     ['Account Name', BANKING_DETAILS.accountHolder],
     ['Account Type', BANKING_DETAILS.accountType],
     ['Account Number', BANKING_DETAILS.accountNumber],

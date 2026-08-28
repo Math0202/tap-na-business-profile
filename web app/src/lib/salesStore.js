@@ -48,6 +48,7 @@ export const COMPANY = {
 
 /** Bank details for EFT on quotes and unpaid invoices */
 export const BANKING_DETAILS = {
+  bankName: 'First National Bank FNB',
   accountHolder: 'AUCKMUND INVESTMENT CC',
   accountType: 'GOLD BUSINESS ACCOUNT',
   accountNumber: '64292796992',
@@ -109,6 +110,7 @@ export function bankingReferenceAdvice(docNumber, { kind } = {}) {
 export function bankingDetailsLines(_docNumber, { kind: _kind } = {}) {
   const b = BANKING_DETAILS
   return [
+    `Bank Name ${b.bankName}`,
     `Account Name ${b.accountHolder}`,
     `Account Type ${b.accountType}`,
     `Account Number ${b.accountNumber}`,
@@ -123,6 +125,7 @@ export function bankingDetailsHtml(docNumber, { kind, amount, includePayQr = tru
   const payAmount = moneyRound(amount)
   const payUrl = buddyPaymentUrl({ reference: docNumber, amount: payAmount })
   const rows = [
+    ['Bank Name', b.bankName],
     ['Account Name', b.accountHolder],
     ['Account Type', b.accountType],
     ['Account Number', b.accountNumber],

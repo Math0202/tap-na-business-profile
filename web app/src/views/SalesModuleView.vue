@@ -2911,6 +2911,10 @@ onMounted(async () => {
                 <dd class="font-mono text-right">{{ activeInvoice.invoiceNumber }}</dd>
               </div>
               <div class="flex justify-between gap-3">
+                <dt class="text-gray-500 shrink-0">Bank name</dt>
+                <dd class="text-right">{{ BANKING_DETAILS.bankName }}</dd>
+              </div>
+              <div class="flex justify-between gap-3">
                 <dt class="text-gray-500 shrink-0">Account name</dt>
                 <dd class="text-right">{{ BANKING_DETAILS.accountHolder }}</dd>
               </div>
@@ -3042,6 +3046,10 @@ onMounted(async () => {
             <div class="flex justify-between gap-3">
               <dt class="text-gray-500 shrink-0">Reference</dt>
               <dd class="font-mono text-right">{{ activeQuote.quoteNumber }}</dd>
+            </div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-gray-500 shrink-0">Bank name</dt>
+              <dd class="text-right">{{ BANKING_DETAILS.bankName }}</dd>
             </div>
             <div class="flex justify-between gap-3">
               <dt class="text-gray-500 shrink-0">Account name</dt>

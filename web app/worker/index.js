@@ -6649,6 +6649,7 @@ async function handleApi(request, env, url) {
     const origin = 'https://tapnam.com'
     const logoUrl = `${origin}/images/tap-na_logo.png`
     const banking = {
+      bankName: 'First National Bank FNB',
       accountHolder: 'AUCKMUND INVESTMENT CC',
       accountType: 'GOLD BUSINESS ACCOUNT',
       accountNumber: '64292796992',
@@ -6706,6 +6707,7 @@ async function handleApi(request, env, url) {
 
     const bankingHtml = `
   <div style="margin:16px 0 0;font-size:13px;line-height:1.6;">
+    <div><span style="color:#777;">Bank Name</span> ${escapeHtml(banking.bankName)}</div>
     <div><span style="color:#777;">Account Name</span> ${escapeHtml(banking.accountHolder)}</div>
     <div><span style="color:#777;">Account Type</span> ${escapeHtml(banking.accountType)}</div>
     <div><span style="color:#777;">Account Number</span> ${escapeHtml(banking.accountNumber)}</div>
@@ -6775,6 +6777,7 @@ async function handleApi(request, env, url) {
       `Quoted total: ${money(subtotal)}`,
       'Payment method: eft',
       '',
+      `Bank Name ${banking.bankName}`,
       `Account Name ${banking.accountHolder}`,
       `Account Type ${banking.accountType}`,
       `Account Number ${banking.accountNumber}`,
@@ -6806,6 +6809,7 @@ async function handleApi(request, env, url) {
       `Quoted total: ${money(subtotal)}`,
       'Payment method: eft',
       '',
+      `Bank Name ${banking.bankName}`,
       `Account Name ${banking.accountHolder}`,
       `Account Type ${banking.accountType}`,
       `Account Number ${banking.accountNumber}`,
