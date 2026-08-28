@@ -57,13 +57,19 @@ function moneyRound(n) {
   return Math.round((Number(n) || 0) * 100) / 100
 }
 
+/** Month 1 = July (fiscal year), through current month, up to count months. */
 function monthKeys(count) {
   const keys = []
   const now = new Date()
-  for (let i = count - 1; i >= 0; i--) {
-    const m = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const key = m.getFullYear() + '-' + String(m.getMonth() + 1).padStart(2, '0')
-    const label = m.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  let startYear = now.getFullYear()
+  if (now.getMonth() < 6) startYear -= 1
+
+  for (let i = 0; i < count; i++) {
+    const m = new Date(startYear, 6 + i, 1)
+    if (m > currentMonthStart) break
+    const key = m.getFullYear() + "-" + String(m.getMonth() + 1).padStart(2, "0")
+    const label = m.toLocaleDateString(undefined, { month: "short", year: "numeric" })
     keys.push({ key, label })
   }
   return keys

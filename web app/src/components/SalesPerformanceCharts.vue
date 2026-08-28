@@ -106,7 +106,7 @@ onBeforeUnmount(() => clearCharts())
       <section class="card-item-bg rounded-2xl p-4">
         <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
           Cash in · out · balance · pending
-          <span class="text-gray-600 font-normal normal-case">(monthly)</span>
+          <span class="text-gray-600 font-normal normal-case">(monthly, from Jul)</span>
         </h3>
         <div class="h-72">
           <canvas ref="monthlyCanvas" />
