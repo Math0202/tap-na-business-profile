@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch, onMounted } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import BrandMark from '../components/BrandMark.vue'
 import AdminBottomNav from '../components/AdminBottomNav.vue'
+import SalesPerformanceCharts from '../components/SalesPerformanceCharts.vue'
 import {
   listAgents,
   saveAgent,
@@ -1639,6 +1640,13 @@ onMounted(async () => {
             <p class="text-xl font-bold mt-1">{{ stats.agentsActive }} / {{ stats.agentsTotal }}</p>
           </div>
         </div>
+
+        <SalesPerformanceCharts
+          :sales="sales"
+          :cash="cash"
+          :agents="agents"
+          :is-sales-scoped="isSalesScoped"
+        />
 
         <div>
           <div class="flex items-center justify-between gap-3 mb-3">
