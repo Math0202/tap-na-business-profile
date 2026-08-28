@@ -42,6 +42,7 @@ import {
   getSalesStats,
   agentPerformance,
   saleAmountPending,
+  saleLastPaymentAt,
   cashSaleInTotal,
   cashCommissionTotal,
   formatMoney,
@@ -171,6 +172,7 @@ const quotePdfBusy = ref(false)
 const invoiceEmailTo = ref('')
 const quoteEmailTo = ref('')
 const invoicePaymentAmount = ref('')
+const invoicePaymentDate = ref('')
 const invoicePaying = ref(false)
 const editingSaleId = ref('')
 const editingQuoteId = ref('')
@@ -764,6 +766,7 @@ function openInvoiceModal(invoice) {
   invoiceEmailTo.value = invoice.customerEmail || ''
   const remaining = invoiceRemaining(invoice)
   invoicePaymentAmount.value = remaining > 0.004 ? String(remaining) : ''
+  invoicePaymentDate.value = new Date().toISOString().slice(0, 16)
   showInvoice.value = true
 }
 
@@ -1246,7 +1249,10 @@ async function recordActiveInvoicePayment({ markFullyPaid = false } = {}) {
   invoicePaying.value = true
   try {
     const result = await recordInvoicePayment(activeInvoice.value.id, invoicePaymentAmount.value, {
-      markFullyPaid
+      markFullyPaid,
+      paidAt: invoicePaymentDate.value
+        ? new Date(invoicePaymentDate.value).toISOString()
+        : new Date().toISOString()
     })
     if (!result.ok) {
       flash(result.error || 'Could not record payment')
@@ -1255,6 +1261,7 @@ async function recordActiveInvoicePayment({ markFullyPaid = false } = {}) {
     activeInvoice.value = result.invoice
     const remaining = invoiceRemaining(result.invoice)
     invoicePaymentAmount.value = remaining > 0.004 ? String(remaining) : ''
+  invoicePaymentDate.value = new Date().toISOString().slice(0, 16)
     await refresh()
     const receiptNote =
       result.receipt?.ok
@@ -1679,7 +1686,11 @@ onMounted(async () => {
                     <span v-if="saleAmountPending(s) > 0.004" class="text-amber-400">
                       · {{ formatMoney(saleAmountPending(s)) }} due
                     </span>
-                    · commission {{ formatMoney(s.commission) }} · {{ formatDate(s.soldAt) }}
+                    · commission {{ formatMoney(s.commission) }}
+                    · sold {{ formatDate(s.soldAt) }}
+                    <span v-if="saleLastPaymentAt(s.id)" class="text-emerald-400/90">
+                      · paid {{ formatDate(saleLastPaymentAt(s.id)) }}
+                    </span>
                   </p>
                   </div>
                 </div>
@@ -1858,7 +1869,11 @@ onMounted(async () => {
                   <span v-if="saleAmountPending(s) > 0.004" class="text-amber-400">
                     · {{ formatMoney(saleAmountPending(s)) }} due
                   </span>
-                  · commission {{ formatMoney(s.commission) }} · {{ formatDate(s.soldAt) }}
+                  · commission {{ formatMoney(s.commission) }}
+                  · sold {{ formatDate(s.soldAt) }}
+                  <span v-if="saleLastPaymentAt(s.id)" class="text-emerald-400/90">
+                    · paid {{ formatDate(saleLastPaymentAt(s.id)) }}
+                  </span>
                 </p>
                 </div>
               </div>
@@ -2907,6 +2922,17 @@ onMounted(async () => {
                 class="field-input"
                 :max="invoiceRemaining(activeInvoice)"
                 aria-label="Payment amount"
+              >
+            </div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mt-2">
+              Payment date
+            </label>
+            <div class="field-shell">
+              <input
+                v-model="invoicePaymentDate"
+                type="datetime-local"
+                class="field-input"
+                aria-label="Payment date"
               >
             </div>
             <p class="text-[11px] text-gray-500">

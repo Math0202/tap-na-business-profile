@@ -1264,7 +1264,11 @@ export function updateInvoice(payload) {
  * Record a payment against an invoice. Amounts at or above remaining mark it paid.
  * Partial amounts set status to partially_settled and keep banking / amount due.
  */
-export async function recordInvoicePayment(invoiceId, amount, { markFullyPaid = false } = {}) {
+export async function recordInvoicePayment(
+  invoiceId,
+  amount,
+  { markFullyPaid = false, paidAt = '' } = {}
+) {
   const invoice = getInvoice(invoiceId)
   if (!invoice) return { ok: false, error: 'Invoice not found', invoice: null }
   if (invoice.status === 'void') return { ok: false, error: 'Void invoices cannot take payments', invoice }
@@ -1293,7 +1297,8 @@ export async function recordInvoicePayment(invoiceId, amount, { markFullyPaid = 
         method: updated.paymentMethod,
         description: `Invoice ${updated.invoiceNumber} · ${label} · ${updated.customerName}`,
         saleId: updated.saleId || '',
-        agentId: updated.agentId || ''
+        agentId: updated.agentId || '',
+        at: paidAt || new Date().toISOString()
       }, { sync: false })
     )
   }
@@ -1317,6 +1322,8 @@ export async function recordInvoicePayment(invoiceId, amount, { markFullyPaid = 
   for (const entry of cashCreated) {
     await apiUpsertSalesCash(entry)
   }
+
+  await reconcileFinanceFromCash({ sync: true })
 
   const finalInvoice = getInvoice(updated.id) || updated
   let receipt = null
@@ -1966,6 +1973,116 @@ function cashInForSale(saleId) {
   )
 }
 
+function invoiceNumberFromCashDescription(description) {
+  const m = String(description || '').match(/Invoice\s+(INV[^\s·]+)/i)
+  return m ? m[1].trim() : ''
+}
+
+function saleIdFromOrphanSaleCash(entry, sales) {
+  const m = String(entry.description || '').match(/^Sale(?:\s+balance)?\s·\s(.+?)\s·\s(.+)$/i)
+  if (!m) return ''
+  const productName = m[1].trim()
+  const customerName = m[2].trim()
+  const amount = moneyRound(entry.amount)
+  let candidates = sales.filter(
+    (s) => !s.deleted && s.customerName === customerName && s.productName === productName
+  )
+  if (!candidates.length) {
+    candidates = sales.filter((s) => !s.deleted && s.customerName === customerName)
+  }
+  if (!candidates.length) return ''
+
+  const completing = candidates.filter((s) => {
+    const received = cashInForSale(s.id)
+    return Math.abs(received + amount - moneyRound(s.amount)) < 0.01
+  })
+  if (completing.length === 1) return completing[0].id
+
+  const exactAmount = candidates.filter((s) => Math.abs(moneyRound(s.amount) - amount) < 0.01)
+  if (exactAmount.length === 1) return exactAmount[0].id
+  if (exactAmount.length > 1) {
+    exactAmount.sort((a, b) => String(a.soldAt).localeCompare(String(b.soldAt)))
+    return exactAmount[0].id
+  }
+
+  const unpaid = candidates.filter((s) => cashInForSale(s.id) < moneyRound(s.amount) - 0.004)
+  if (unpaid.length === 1) return unpaid[0].id
+
+  return candidates.length === 1 ? candidates[0].id : ''
+}
+
+function updateCashEntryLocal(payload) {
+  const list = listCashFlow({ includeDeleted: true })
+  const next = normalizeCash(payload)
+  const idx = list.findIndex((c) => c.id === next.id)
+  if (idx < 0) return null
+  list[idx] = { ...list[idx], ...next, id: list[idx].id }
+  writeJson(CASH_KEY, list)
+  return list[idx]
+}
+
+/** Link orphan sale cash (no saleId) to invoices/sales so pending amounts reconcile. */
+export function linkOrphanCashToSales() {
+  const sales = listSales({ includeDeleted: false })
+  const invoices = listInvoices({ includeDeleted: true })
+  const invoiceByNumber = new Map()
+  for (const inv of invoices) {
+    const key = String(inv.invoiceNumber || '').trim().toUpperCase()
+    if (key) invoiceByNumber.set(key, inv)
+  }
+
+  const linked = []
+  for (const c of listCashFlow({ includeDeleted: true })) {
+    if (c.deleted || c.saleId || c.category !== 'sale' || c.type !== 'in') continue
+
+    let saleId = ''
+    const invNum = invoiceNumberFromCashDescription(c.description)
+    if (invNum) {
+      const inv = invoiceByNumber.get(invNum.toUpperCase())
+      if (inv?.saleId) saleId = inv.saleId
+    }
+    if (!saleId) saleId = saleIdFromOrphanSaleCash(c, sales)
+    if (!saleId) continue
+
+    const sale = sales.find((s) => s.id === saleId)
+    const updated = updateCashEntryLocal({
+      ...c,
+      saleId,
+      agentId: c.agentId || sale?.agentId || ''
+    })
+    if (updated) linked.push(updated)
+  }
+  return linked
+}
+
+/** Match standalone invoices to a single active sale (customer + total). */
+function ensureInvoicesLinkedToSales() {
+  const sales = listSales({ includeDeleted: false })
+  const linked = []
+  for (const inv of listInvoices({ includeDeleted: false })) {
+    if (inv.saleId) continue
+    const matches = sales.filter(
+      (s) =>
+        s.customerName === inv.customerName &&
+        Math.abs(moneyRound(s.amount) - moneyRound(inv.amount)) < 0.01
+    )
+    if (matches.length !== 1) continue
+    const updated = updateInvoiceLocal({ ...inv, saleId: matches[0].id })
+    if (updated) linked.push(updated)
+  }
+  return linked
+}
+
+export function saleLastPaymentAt(saleId) {
+  if (!saleId) return ''
+  const dates = listCashFlow()
+    .filter((c) => c.saleId === saleId && c.category === 'sale' && c.type === 'in' && !c.deleted)
+    .map((c) => String(c.at || ''))
+    .filter(Boolean)
+    .sort()
+  return dates.length ? dates[dates.length - 1] : ''
+}
+
 function cashCommissionForSale(saleId) {
   if (!saleId) return 0
   return moneyRound(
@@ -2095,19 +2212,32 @@ export function syncSaleAndInvoiceFromCash(saleId) {
 
 /** Cash is source of truth — align sales/invoices and optionally push corrections to cloud. */
 export async function reconcileFinanceFromCash({ sync = true } = {}) {
+  const invoiceLinks = ensureInvoicesLinkedToSales()
+  const linkedCash = linkOrphanCashToSales()
   const changes = []
   for (const sale of listSales({ includeDeleted: false })) {
     const result = syncSaleAndInvoiceFromCash(sale.id)
     if (result.changed) changes.push(result)
   }
-  if (sync && changes.length) {
-    const { apiUpsertSalesOrder, apiUpsertSalesInvoice } = await import('./api.js')
+  if (sync && (linkedCash.length || invoiceLinks.length || changes.length)) {
+    const { apiUpsertSalesOrder, apiUpsertSalesInvoice, apiUpsertSalesCash } = await import('./api.js')
+    for (const entry of linkedCash) {
+      await apiUpsertSalesCash(entry)
+    }
+    for (const invoice of invoiceLinks) {
+      await apiUpsertSalesInvoice(invoice)
+    }
     for (const { sale, invoice } of changes) {
       if (sale) await apiUpsertSalesOrder(sale)
       if (invoice) await apiUpsertSalesInvoice(invoice)
     }
   }
-  return { changed: changes.length, changes }
+  return {
+    changed: changes.length + linkedCash.length + invoiceLinks.length,
+    changes,
+    linkedCash,
+    invoiceLinks
+  }
 }
 
 export function addCashEntry(payload, { sync = true } = {}) {
@@ -2174,16 +2304,13 @@ export function deleteCashEntry(id) {
 }
 
 export async function deleteCashEntryFromCloud(id) {
-  const entry = listCashFlow({ includeDeleted: true }).find((c) => c.id === id)
   markLocalDeleted(CASH_KEY, id, normalizeCash)
   const { apiDeleteSalesCash } = await import('./api.js')
   const res = await apiDeleteSalesCash(id)
   if (!res.ok) {
     return { ok: false, error: res.error || 'Could not delete cash entry' }
   }
-  if (entry?.saleId) {
-    await reconcileFinanceFromCash({ sync: true })
-  }
+  await reconcileFinanceFromCash({ sync: true })
   return { ok: true, id }
 }
 
@@ -2192,10 +2319,7 @@ export async function restoreCashEntry(id) {
   const res = await apiRestoreSalesCash(id)
   if (!res.ok) return { ok: false, error: res.error || 'Could not restore cash entry' }
   markLocalRestored(CASH_KEY, id, normalizeCash, res.data?.entry)
-  const entry = listCashFlow({ includeDeleted: true }).find((c) => c.id === id)
-  if (entry?.saleId) {
-    await reconcileFinanceFromCash({ sync: true })
-  }
+  await reconcileFinanceFromCash({ sync: true })
   return { ok: true, entry: res.data?.entry }
 }
 
