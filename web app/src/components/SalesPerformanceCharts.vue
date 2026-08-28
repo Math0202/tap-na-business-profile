@@ -3,19 +3,19 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import {
   buildSalesPerformanceData,
   destroyChart,
-  makePerformanceSummaryBar,
-  makePerformanceTrend
+  makeMonthlyPerformanceBar,
+  makeRevenueCategoryBar
 } from '../lib/salesCharts'
 
 const props = defineProps({
   sales: { type: Array, default: () => [] },
   cash: { type: Array, default: () => [] },
   pendingAmount: { type: Number, default: 0 },
-  days: { type: Number, default: 90 }
+  months: { type: Number, default: 12 }
 })
 
-const trendCanvas = ref(null)
-const summaryCanvas = ref(null)
+const monthlyCanvas = ref(null)
+const revenueCanvas = ref(null)
 const charts = []
 
 const data = computed(() =>
@@ -23,7 +23,7 @@ const data = computed(() =>
     sales: props.sales,
     cash: props.cash,
     pendingAmount: props.pendingAmount,
-    days: props.days
+    months: props.months
   })
 )
 
@@ -37,16 +37,16 @@ async function render() {
   const d = data.value
   if (!d.hasData) return
 
-  if (trendCanvas.value && d.byDay.length) {
-    charts.push(makePerformanceTrend(trendCanvas.value, d.byDay))
+  if (monthlyCanvas.value && d.byMonth.length) {
+    charts.push(makeMonthlyPerformanceBar(monthlyCanvas.value, d.byMonth))
   }
-  if (summaryCanvas.value) {
-    charts.push(makePerformanceSummaryBar(summaryCanvas.value, d.totals))
+  if (revenueCanvas.value && d.revenueByCategory.length) {
+    charts.push(makeRevenueCategoryBar(revenueCanvas.value, d.revenueByCategory))
   }
 }
 
 watch(
-  () => [props.sales, props.cash, props.pendingAmount, props.days],
+  () => [props.sales, props.cash, props.pendingAmount, props.months],
   () => {
     render()
   },
@@ -106,19 +106,20 @@ onBeforeUnmount(() => clearCharts())
       <section class="card-item-bg rounded-2xl p-4">
         <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
           Cash in · out · balance · pending
-          <span class="text-gray-600 font-normal normal-case">(last {{ data.days }} days)</span>
+          <span class="text-gray-600 font-normal normal-case">(monthly)</span>
         </h3>
-        <div class="h-64">
-          <canvas ref="trendCanvas" />
+        <div class="h-72">
+          <canvas ref="monthlyCanvas" />
         </div>
       </section>
 
       <section class="card-item-bg rounded-2xl p-4">
         <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
-          Current totals
+          Revenue by category
         </h3>
+        <p class="text-[11px] text-gray-500 mb-3">Cash inflow — Sales vs Tech Services vs Investment</p>
         <div class="h-52">
-          <canvas ref="summaryCanvas" />
+          <canvas ref="revenueCanvas" />
         </div>
       </section>
     </template>
