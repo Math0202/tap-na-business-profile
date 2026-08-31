@@ -829,32 +829,6 @@ onMounted(async () => {
                 : 'Tap camera to change photo'
           }}
         </p>
-        <div class="w-full max-w-xs space-y-2 pt-1">
-          <button
-            type="button"
-            class="w-full py-3 rounded-full bg-zinc-700 text-white font-semibold text-sm hover:bg-zinc-600 transition-colors flex items-center justify-center gap-2"
-            @click="onLogout"
-          >
-            <span class="material-symbols-outlined text-[18px]">logout</span>
-            Log out
-          </button>
-          <button
-            type="button"
-            class="w-full py-3 rounded-full bg-red-500/15 text-red-400 border border-red-500/30 font-semibold text-sm hover:bg-red-500/25 transition-colors flex items-center justify-center gap-2"
-            @click="showDeleteModal = true"
-          >
-            <span class="material-symbols-outlined text-[18px]">phonelink_erase</span>
-            Clear this device
-          </button>
-          <button
-            type="button"
-            class="w-full py-3 rounded-full border border-[var(--border)] text-gray-200 font-semibold text-sm hover:bg-white/5 transition-colors flex items-center justify-center gap-2"
-            @click="openPasswordModal"
-          >
-            <span class="material-symbols-outlined text-[18px]">lock</span>
-            Change password
-          </button>
-        </div>
       </div>
 
       <RouterLink
@@ -869,23 +843,6 @@ onMounted(async () => {
           <p class="text-sm font-semibold">Venue dashboard</p>
           <p class="text-xs text-gray-400 mt-0.5">
             View and export check-ins &amp; customer feedback
-          </p>
-        </div>
-        <span class="material-symbols-outlined text-gray-500">chevron_right</span>
-      </RouterLink>
-
-      <RouterLink
-        v-if="!isTable"
-        to="/connections"
-        class="card-item-bg rounded-2xl p-4 flex items-center gap-3 no-underline text-inherit hover:brightness-110 transition"
-      >
-        <div class="w-11 h-11 rounded-full bg-white/10 flex items-center justify-center shrink-0">
-          <span class="material-symbols-outlined text-[22px]">handshake</span>
-        </div>
-        <div class="min-w-0 flex-1">
-          <p class="text-sm font-semibold">Contacts</p>
-          <p class="text-xs text-gray-400 mt-0.5">
-            People who shared their details from your card
           </p>
         </div>
         <span class="material-symbols-outlined text-gray-500">chevron_right</span>
@@ -1479,6 +1436,33 @@ onMounted(async () => {
         <span class="material-symbols-outlined">save</span>
         Save Profile
       </button>
+
+      <div class="w-full space-y-2 pt-2 pb-4">
+        <button
+          type="button"
+          class="w-full py-3 rounded-full bg-zinc-700 text-white font-semibold text-sm hover:bg-zinc-600 transition-colors flex items-center justify-center gap-2"
+          @click="onLogout"
+        >
+          <span class="material-symbols-outlined text-[18px]">logout</span>
+          Log out
+        </button>
+        <button
+          type="button"
+          class="w-full py-3 rounded-full bg-red-500/15 text-red-400 border border-red-500/30 font-semibold text-sm hover:bg-red-500/25 transition-colors flex items-center justify-center gap-2"
+          @click="showDeleteModal = true"
+        >
+          <span class="material-symbols-outlined text-[18px]">phonelink_erase</span>
+          Clear this device
+        </button>
+        <button
+          type="button"
+          class="w-full py-3 rounded-full border border-[var(--border)] text-gray-200 font-semibold text-sm hover:bg-white/5 transition-colors flex items-center justify-center gap-2"
+          @click="openPasswordModal"
+        >
+          <span class="material-symbols-outlined text-[18px]">lock</span>
+          Change password
+        </button>
+      </div>
     </form>
   </main>
 
