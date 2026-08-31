@@ -1763,7 +1763,7 @@ onMounted(async () => {
             class="px-4 py-2.5 rounded-full text-xs font-semibold border border-[var(--border)] no-underline text-inherit inline-flex items-center gap-1"
           >
             <span class="material-symbols-outlined text-[16px]">qr_code_2</span>
-            Manage slugs
+            Manage card IDs
           </RouterLink>
           <button
             v-if="canManageProducts"

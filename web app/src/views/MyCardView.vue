@@ -25,6 +25,7 @@ import { trackVisit, trackShare, trackClick, LOCAL_ID } from '../lib/adminStore'
 import { apiLogCardEvent, apiPublicCatalog } from '../lib/api'
 import { personalPagePath } from '../lib/profilePaths'
 import { prepareProfileAppInstall, promptProfileAppInstall } from '../lib/profileAppInstall'
+import { CARD_ID_HINT_SHORT, CARD_ID_LABEL } from '../lib/cardLabels'
 
 const route = useRoute()
 const router = useRouter()
@@ -472,8 +473,10 @@ watch(() => route.path, () => {
             <div class="min-w-0">
               <p class="text-sm font-semibold">Your NFC card</p>
               <p class="text-xs text-gray-400 mt-0.5">{{ ownCardPreview.label }}</p>
-              <p v-if="ownCardPreview.serial" class="text-[11px] font-mono text-gray-500 mt-1">
-                {{ ownCardPreview.serial }}
+              <p v-if="ownCardPreview.serial" class="mt-2">
+                <span class="text-[10px] uppercase tracking-wide text-gray-500">{{ CARD_ID_LABEL }}</span>
+                <span class="block text-[11px] font-mono text-gray-400 mt-0.5">{{ ownCardPreview.serial }}</span>
+                <span class="block text-[10px] text-gray-500 mt-1">{{ CARD_ID_HINT_SHORT }}</span>
               </p>
             </div>
           </div>

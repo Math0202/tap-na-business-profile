@@ -3369,7 +3369,7 @@ async function handleApi(request, env, url) {
     const other = (linked || []).find((c) => c.slug !== slug)
     if (other) {
       return bad(
-        `This profile already uses slug ${other.slug}. Each profile can only link one card.`,
+        `This profile already uses Card ID ${other.slug}. Each profile can only link one card.`,
         409
       )
     }

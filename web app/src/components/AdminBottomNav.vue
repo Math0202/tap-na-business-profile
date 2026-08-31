@@ -7,7 +7,7 @@ const route = useRoute()
 
 const allItems = [
   { to: '/admin', label: 'Dashboard', icon: 'dashboard', adminOnly: true, match: (p) => p === '/admin' || p.startsWith('/admin/profiles') },
-  { to: '/admin/slugs', label: 'Slugs', icon: 'qr_code_2', adminOnly: true, match: (p) => p.startsWith('/admin/slugs') },
+  { to: '/admin/slugs', label: 'Card IDs', icon: 'qr_code_2', adminOnly: true, match: (p) => p.startsWith('/admin/slugs') },
   { to: '/admin/sales', label: 'Sales', icon: 'point_of_sale', adminOnly: false, match: (p) => p.startsWith('/admin/sales') },
   { to: '/admin/shop', label: 'Shop', icon: 'storefront', adminOnly: true, match: (p) => p.startsWith('/admin/shop') },
   { to: '/', label: 'Storefront', icon: 'shopping_bag', adminOnly: false, match: (p) => p === '/' || p === '/cart' }

@@ -25,6 +25,7 @@ import { isLoggedIn, isTableBusiness, loadProfile } from '../lib/profileStore'
 import { RouterLink, useRouter } from 'vue-router'
 import TeamIntegrationsFields from '../components/TeamIntegrationsFields.vue'
 import { validateTeamIntegrations } from '../lib/teamIntegrations'
+import { CARD_ID_HINT, CARD_ID_LABEL } from '../lib/cardLabels'
 
 const router = useRouter()
 const loading = ref(true)
@@ -207,14 +208,14 @@ async function saveShareCatalog() {
 async function addMember() {
   const slug = addSlug.value.trim()
   if (!slug) {
-    flash('Enter a card slug')
+    flash(`Enter a ${CARD_ID_LABEL.toLowerCase()}`)
     return
   }
   saving.value = true
   try {
     const resolved = await apiResolveCard(slug)
     if (!resolved?.card) {
-      flash('Card not found for that slug')
+      flash(`Card not found for that ${CARD_ID_LABEL.toLowerCase()}`)
       return
     }
     if (resolved.card.kind !== 'personal') {
@@ -375,7 +376,7 @@ onMounted(() => {
             class="card-item-bg rounded-2xl p-4"
           >
             <p class="text-sm font-semibold">{{ personalTypeLabel(inv.role) }}</p>
-            <p class="text-xs text-gray-400 mt-1">Slug {{ inv.slug || '—' }} · {{ memberStatusLabel(inv.status) }}</p>
+            <p class="text-xs text-gray-400 mt-1">{{ CARD_ID_LABEL }} {{ inv.slug || '—' }} · {{ memberStatusLabel(inv.status) }}</p>
             <div class="flex gap-2 mt-3">
               <button type="button" class="flex-1 py-2 rounded-xl bg-white text-black text-sm font-semibold" @click="respondInvite(inv, 'accept')">Accept</button>
               <button type="button" class="flex-1 py-2 rounded-xl bg-zinc-800 text-sm" @click="respondInvite(inv, 'reject')">Reject</button>
@@ -465,8 +466,9 @@ onMounted(() => {
         </div>
 
         <div class="card-item-bg rounded-2xl p-4 mb-6 space-y-3">
-          <h2 class="text-sm font-semibold">Add member by slug</h2>
-          <input v-model="addSlug" type="text" class="field-input w-full" placeholder="Card slug" autocomplete="off">
+          <h2 class="text-sm font-semibold">Add member by {{ CARD_ID_LABEL.toLowerCase() }}</h2>
+          <p class="text-xs text-gray-500">{{ CARD_ID_HINT }}</p>
+          <input v-model="addSlug" type="text" class="field-input w-full" :placeholder="CARD_ID_LABEL" autocomplete="off">
           <input v-model="addEmail" type="email" class="field-input w-full" placeholder="Email (required if unclaimed)">
           <select v-model="addRole" class="field-input w-full bg-transparent">
             <option v-for="r in roleOptions" :key="r.id" :value="r.id">{{ r.label }}</option>
@@ -499,7 +501,7 @@ onMounted(() => {
               <div class="min-w-0">
                 <p class="text-sm font-semibold truncate">{{ m.memberName || m.slug || 'Member' }}</p>
                 <p class="text-xs text-gray-400 truncate">{{ m.memberEmail || m.inviteEmail || '—' }}</p>
-                <p v-if="m.slug" class="text-xs text-gray-500 mt-0.5">Slug {{ m.slug }}</p>
+                <p v-if="m.slug" class="text-xs text-gray-500 mt-0.5">{{ CARD_ID_LABEL }} {{ m.slug }}</p>
               </div>
               <span class="text-[10px] uppercase tracking-wide px-2 py-1 rounded-full bg-zinc-800 text-gray-300 shrink-0">
                 {{ m.deleted ? 'Removed' : memberStatusLabel(m.status) }}

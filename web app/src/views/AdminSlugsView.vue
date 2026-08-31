@@ -32,6 +32,7 @@ import {
 } from '../lib/api'
 import { downloadSlugQrPng, downloadSlugsQrZip } from '../lib/qrExport'
 import CardExportPreviewModal from '../components/CardExportPreviewModal.vue'
+import { CARD_ID_HINT, CARD_ID_LABEL } from '../lib/cardLabels'
 import QRCode from 'qrcode'
 
 const query = ref('')
@@ -347,7 +348,7 @@ async function generateSlugs() {
     expandFolder(created[0]?.batchId || batchId)
     await refresh()
     await refreshSlugQrs(created)
-    flash(`${created.length} slug${created.length === 1 ? '' : 's'} in “${batchName}”`)
+    flash(`${created.length} ${CARD_ID_LABEL.toLowerCase()}${created.length === 1 ? '' : 's'} in “${batchName}”`)
   } finally {
     slugGenerating.value = false
   }
@@ -399,34 +400,34 @@ async function unlinkSlug(serial) {
   unlinkCard(serial)
   const res = await apiUnlinkCard(serial)
   await refresh()
-  flash(res.ok ? 'Slug unlinked' : `Unlinked locally (${res.error || 'offline'})`)
+  flash(res.ok ? `${CARD_ID_LABEL} unlinked` : `Unlinked locally (${res.error || 'offline'})`)
 }
 
 async function removeSlug(serial) {
-  if (!confirm(`Mark slug ${serial} as deleted? You can restore it later.`)) return
+  if (!confirm(`Mark ${CARD_ID_LABEL.toLowerCase()} ${serial} as deleted? You can restore it later.`)) return
   deleteCard(serial)
   const res = await apiDeleteCard(serial)
   await refresh()
-  flash(res.ok ? 'Slug marked deleted' : `Marked deleted locally (${res.error || 'offline'})`)
+  flash(res.ok ? `${CARD_ID_LABEL} marked deleted` : `Marked deleted locally (${res.error || 'offline'})`)
 }
 
 async function undeleteSlug(serial) {
   restoreCard(serial)
   const res = await apiRestoreCard(serial)
   await refresh()
-  flash(res.ok ? 'Slug restored' : `Restored locally (${res.error || 'offline'})`)
+  flash(res.ok ? `${CARD_ID_LABEL} restored` : `Restored locally (${res.error || 'offline'})`)
 }
 
 async function removeSelectedSlugs() {
   const serials = [...selected.value]
   if (!serials.length) {
-    flash('Select at least one slug to delete')
+    flash(`Select at least one ${CARD_ID_LABEL.toLowerCase()} to delete`)
     return
   }
   const linked = filteredSlugs.value.filter((c) => selected.value.has(c.serial) && c.profileId).length
   const msg = linked
-    ? `Mark ${serials.length} selected slug(s) as deleted? ${linked} are still linked to profiles. You can restore later.`
-    : `Mark ${serials.length} selected slug(s) as deleted? You can restore them later.`
+    ? `Mark ${serials.length} selected ${CARD_ID_LABEL.toLowerCase()}(s) as deleted? ${linked} are still linked to profiles. You can restore later.`
+    : `Mark ${serials.length} selected ${CARD_ID_LABEL.toLowerCase()}(s) as deleted? You can restore them later.`
   if (!confirm(msg)) return
 
   slugDeleting.value = true
@@ -439,7 +440,7 @@ async function removeSelectedSlugs() {
     if (res.ok) {
       const failed = Number(res.data?.failedCount || 0)
       const n = res.data?.deletedCount || serials.length
-      flash(failed ? `Marked ${n} deleted; ${failed} failed` : `Marked ${n} slug(s) deleted`)
+      flash(failed ? `Marked ${n} deleted; ${failed} failed` : `Marked ${n} ${CARD_ID_LABEL.toLowerCase()}(s) deleted`)
     } else {
       flash(`Marked deleted locally (${res.error || 'offline'})`)
     }
@@ -450,10 +451,10 @@ async function removeSelectedSlugs() {
 
 function downloadCsv(rows, filename) {
   if (!rows.length) {
-    flash('No slugs to export')
+    flash(`No ${CARD_ID_LABEL.toLowerCase()}s to export`)
     return
   }
-  const header = ['batch', 'slug', 'kind', 'status', 'nfc_url', 'qr_url', 'profile', 'sale_id', 'created_at']
+  const header = ['batch', 'card_id', 'kind', 'status', 'nfc_url', 'qr_url', 'profile', 'sale_id', 'created_at']
   const lines = [header.join(',')]
   for (const c of rows) {
     lines.push(
@@ -478,13 +479,13 @@ function downloadCsv(rows, filename) {
   a.download = filename
   a.click()
   URL.revokeObjectURL(a.href)
-  flash(`Exported ${rows.length} slug(s)`)
+  flash(`Exported ${rows.length} ${CARD_ID_LABEL.toLowerCase()}(s)`)
 }
 
 function exportSlugsCsv() {
   const rows = exportRows.value
   if (!rows.length) {
-    flash(selectMode.value ? 'Select at least one slug to export' : 'No slugs to export')
+    flash(selectMode.value ? `Select at least one ${CARD_ID_LABEL.toLowerCase()} to export` : `No ${CARD_ID_LABEL.toLowerCase()}s to export`)
     return
   }
   downloadCsv(rows, `tap-na-slugs-${new Date().toISOString().slice(0, 10)}.csv`)
@@ -506,7 +507,7 @@ async function downloadOneSlugQr(serial) {
 async function exportSlugsQrZip(rows, zipName) {
   const list = Array.isArray(rows) ? rows : exportRows.value
   if (!list.length) {
-    flash(selectMode.value ? 'Select at least one slug to export' : 'No slugs to export')
+    flash(selectMode.value ? `Select at least one ${CARD_ID_LABEL.toLowerCase()} to export` : `No ${CARD_ID_LABEL.toLowerCase()}s to export`)
     return
   }
   slugExporting.value = true
@@ -535,7 +536,7 @@ async function exportGroupQrZip(group) {
 function openCardExport(rows, zipName = '') {
   const list = Array.isArray(rows) ? rows.filter((c) => c?.serial) : []
   if (!list.length) {
-    flash(selectMode.value ? 'Select at least one slug to export' : 'No slugs to export')
+    flash(selectMode.value ? `Select at least one ${CARD_ID_LABEL.toLowerCase()} to export` : `No ${CARD_ID_LABEL.toLowerCase()}s to export`)
     return
   }
   exportMenuOpen.value = false
@@ -591,9 +592,9 @@ watch(filteredSlugs, (rows) => {
           <span class="material-symbols-outlined text-[16px]">arrow_back</span>
           Dashboard
         </RouterLink>
-        <h1 class="text-2xl font-bold tracking-tight mt-1">Slugs</h1>
+        <h1 class="text-2xl font-bold tracking-tight mt-1">{{ CARD_ID_LABEL }}s</h1>
         <p class="text-gray-400 text-sm mt-1">
-          Generate and manage NFC / QR slugs. Link them to profiles from setup or Link cards.
+          Generate and manage NFC / QR card IDs. {{ CARD_ID_HINT }} Link them to profiles from setup or Link cards.
         </p>
       </header>
 
@@ -619,7 +620,7 @@ watch(filteredSlugs, (rows) => {
 
         <div class="card-item-bg rounded-2xl p-4 space-y-3">
           <div>
-            <p class="text-sm font-semibold">Generate slugs</p>
+            <p class="text-sm font-semibold">Generate {{ CARD_ID_LABEL.toLowerCase() }}s</p>
             <p class="text-[11px] text-gray-500 mt-0.5">
               Name the batch, then pick personal or table. For personal cards, choose the tier.
             </p>
@@ -664,7 +665,7 @@ watch(filteredSlugs, (rows) => {
           </div>
           <div class="flex flex-col sm:flex-row gap-2">
             <div class="field-shell sm:w-28 !rounded-2xl">
-              <input v-model="slugForm.count" type="number" min="1" max="200" class="field-input" aria-label="How many slugs">
+              <input v-model="slugForm.count" type="number" min="1" max="200" class="field-input" :aria-label="`How many ${CARD_ID_LABEL.toLowerCase()}s`">
             </div>
             <button
               type="button"
@@ -680,7 +681,7 @@ watch(filteredSlugs, (rows) => {
         <div class="flex flex-col sm:flex-row gap-3">
           <div class="field-shell flex-1 !rounded-2xl">
             <span class="material-symbols-outlined field-icon">search</span>
-            <input v-model="query" type="search" class="field-input" placeholder="Search slug, type, profile…">
+            <input v-model="query" type="search" class="field-input" placeholder="Search card ID, type, profile…">
           </div>
           <button
             type="button"
@@ -703,7 +704,7 @@ watch(filteredSlugs, (rows) => {
               v-if="exportMenuOpen"
               class="absolute right-0 top-full mt-2 z-40 min-w-[200px] rounded-2xl border border-[var(--border)] bg-zinc-950 shadow-xl p-2 space-y-1"
             >
-              <p class="px-3 pt-1 text-[10px] uppercase tracking-wide text-gray-500">Slugs only</p>
+              <p class="px-3 pt-1 text-[10px] uppercase tracking-wide text-gray-500">Card IDs only</p>
               <button
                 type="button"
                 class="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-gray-200 hover:bg-white/10"
@@ -832,7 +833,7 @@ watch(filteredSlugs, (rows) => {
                   <button type="button" class="text-left w-full" @click="toggleFolder(group.id)">
                     <p class="text-sm font-semibold truncate">{{ group.name }}</p>
                     <p class="text-[11px] text-gray-500 mt-0.5">
-                      {{ group.slugs.length }} slug{{ group.slugs.length === 1 ? '' : 's' }}
+                      {{ group.slugs.length }} {{ CARD_ID_LABEL.toLowerCase() }}{{ group.slugs.length === 1 ? '' : 's' }}
                       <template v-if="groupTypeLabel(group)"> · {{ groupTypeLabel(group) }}</template>
                       <template v-if="formatSlugDate(group.createdAt)"> · {{ formatSlugDate(group.createdAt) }}</template>
                       <template v-if="selectedInGroup(group)"> · {{ selectedInGroup(group) }} selected</template>
@@ -995,7 +996,7 @@ watch(filteredSlugs, (rows) => {
           </div>
         </div>
         <p v-if="!filteredSlugs.length" class="text-sm text-gray-500">
-          {{ allSlugs.length ? 'No slugs match these filters.' : 'No slugs yet. Generate a batch above to start writing tags.' }}
+          {{ allSlugs.length ? `No ${CARD_ID_LABEL.toLowerCase()}s match these filters.` : `No ${CARD_ID_LABEL.toLowerCase()}s yet. Generate a batch above to start writing tags.` }}
         </p>
       </section>
     </main>

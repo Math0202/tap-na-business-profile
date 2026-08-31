@@ -406,7 +406,7 @@ onMounted(() => {
             <p class="text-2xl font-bold mt-1">{{ stats.business }}</p>
           </div>
           <div class="card-item-bg rounded-2xl p-4">
-            <p class="text-[11px] uppercase tracking-wide text-gray-500">Slugs</p>
+            <p class="text-[11px] uppercase tracking-wide text-gray-500">Card IDs</p>
             <p class="text-2xl font-bold mt-1">{{ stats.slugs }}</p>
           </div>
           <div class="card-item-bg rounded-2xl p-4">
@@ -426,7 +426,7 @@ onMounted(() => {
               v-model="query"
               type="search"
               class="field-input"
-              placeholder="Search name, company, email, slug…"
+              placeholder="Search name, company, email, card ID…"
             >
           </div>
           <div class="flex gap-2 shrink-0">
@@ -516,7 +516,7 @@ onMounted(() => {
                 <template v-if="p.slugs?.length">
                   {{ p.slugs.map((s) => s.slug).join(' · ') }}
                 </template>
-                <template v-else>No slug</template>
+                <template v-else>No card ID</template>
               </p>
             </div>
 

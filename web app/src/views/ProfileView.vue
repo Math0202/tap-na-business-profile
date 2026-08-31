@@ -28,6 +28,7 @@ import {
 } from '../lib/cardLinkStore'
 import { LOCAL_ID } from '../lib/adminStore'
 import { profileShareUrl } from '../lib/shareHelpers'
+import { CARD_ID_HINT_SHORT, CARD_ID_LABEL } from '../lib/cardLabels'
 import { apiUploadAsset, apiUpdateMe, apiGetMe, ensureApiSession, getApiToken } from '../lib/api'
 import {
   BUSINESS_LINK_DEFS,
@@ -927,8 +928,10 @@ onMounted(async () => {
           <div class="min-w-0">
             <p class="text-sm font-semibold">Your NFC card</p>
             <p class="text-xs text-gray-400 mt-0.5">{{ linkedCardPreviewLabel }}</p>
-            <p v-if="primaryLinkedCard?.serial" class="text-[11px] font-mono text-gray-500 mt-1">
-              {{ primaryLinkedCard.serial }}
+            <p v-if="primaryLinkedCard?.serial" class="mt-2">
+              <span class="text-[10px] uppercase tracking-wide text-gray-500">{{ CARD_ID_LABEL }}</span>
+              <span class="block text-[11px] font-mono text-gray-400 mt-0.5">{{ primaryLinkedCard.serial }}</span>
+              <span class="block text-[10px] text-gray-500 mt-1">{{ CARD_ID_HINT_SHORT }}</span>
             </p>
           </div>
         </div>

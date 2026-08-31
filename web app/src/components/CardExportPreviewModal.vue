@@ -341,7 +341,7 @@ onBeforeUnmount(() => {
           <div class="rounded-2xl overflow-hidden border border-zinc-700 bg-black">
             <canvas ref="backCanvas" class="w-full h-auto block" />
           </div>
-          <p class="text-[10px] text-gray-500 mt-1">Each card gets its own labeled QR (slug in the centre) on the back.</p>
+          <p class="text-[10px] text-gray-500 mt-1">Each card gets its own labeled QR (card ID in the centre) on the back.</p>
         </div>
       </div>
 

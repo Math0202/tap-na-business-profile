@@ -293,7 +293,7 @@ function copySlugUrl(serial) {
   const url = cardPublicUrl(serial, undefined, { kind: card?.kind || (entry.value?.cardType === 'table' ? 'table' : 'personal') })
   navigator.clipboard?.writeText(url).then(
     () => {
-      toast.value = 'Slug URL copied'
+      toast.value = 'Card URL copied'
       setTimeout(() => { toast.value = '' }, 2000)
     },
     () => {
@@ -364,21 +364,21 @@ onMounted(load)
                 Created {{ formatDate(entry.createdAt) }} · Updated {{ formatDate(entry.updatedAt) }}
               </p>
               <p v-if="linkedCards.length" class="text-xs font-mono text-sky-300/90 mt-2">
-                Slug{{ linkedCards.length === 1 ? '' : 's' }}:
+                {{ linkedCards.length === 1 ? 'Card ID' : 'Card IDs' }}:
                 {{ linkedCards.map((c) => c.serial).join(' · ') }}
               </p>
               <p v-else-if="entry.shareSlug" class="text-xs font-mono text-sky-300/90 mt-2">
-                Slug: {{ entry.shareSlug }}
+                Card ID: {{ entry.shareSlug }}
               </p>
-              <p v-else class="text-xs text-amber-300/80 mt-2">No slug linked yet</p>
+              <p v-else class="text-xs text-amber-300/80 mt-2">No card ID linked yet</p>
             </div>
           </div>
         </header>
 
-        <!-- Associated slugs -->
+        <!-- Associated card IDs -->
         <section class="mb-6">
           <div class="flex items-center justify-between gap-3 mb-3">
-            <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-400">Associated slugs</h2>
+            <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-400">Associated card IDs</h2>
             <RouterLink to="/admin/slugs" class="text-xs font-semibold text-gray-400 hover:text-white underline underline-offset-2">
               Manage all
             </RouterLink>
@@ -408,7 +408,7 @@ onMounted(load)
             </li>
           </ul>
           <div v-else class="card-item-bg rounded-2xl p-4 text-sm text-gray-400">
-            No slug linked to this profile yet.
+            No card ID linked to this profile yet.
           </div>
         </section>
 

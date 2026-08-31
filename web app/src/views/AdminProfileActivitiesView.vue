@@ -189,7 +189,7 @@ onMounted(() => {
         />
 
         <p class="text-xs text-gray-500 font-mono mb-4">
-          Slugs: {{ (profile?.slugs || []).map((s) => s.slug).join(' · ') || 'None' }}
+          Card IDs: {{ (profile?.slugs || []).map((s) => s.slug).join(' · ') || 'None' }}
         </p>
 
         <div class="flex gap-2 mb-4 overflow-x-auto pb-1">
@@ -233,7 +233,7 @@ onMounted(() => {
                 · {{ a.browser || 'browser?' }}
               </p>
               <p class="text-xs text-gray-500 mt-0.5">{{ place(a) }}</p>
-              <p class="text-[11px] font-mono text-sky-300/80 mt-1 truncate">slug {{ a.slug || '—' }}</p>
+              <p class="text-[11px] font-mono text-sky-300/80 mt-1 truncate">Card ID {{ a.slug || '—' }}</p>
             </div>
           </article>
         </section>

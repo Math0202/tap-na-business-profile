@@ -13,6 +13,7 @@ import {
   validateTeamIntegrations
 } from '../lib/teamIntegrations'
 import TeamIntegrationsFields from '../components/TeamIntegrationsFields.vue'
+import { CARD_ID_HINT_SHORT, CARD_ID_LABEL } from '../lib/cardLabels'
 
 const route = useRoute()
 const router = useRouter()
@@ -210,9 +211,11 @@ function finish() {
           <p class="text-gray-400 text-sm mt-1">
             {{ cardType === 'table' ? 'Create the account for this venue card' : 'Create the account for your personal card' }}
           </p>
-          <p v-if="slug" class="text-xs font-mono text-gray-500 mt-2">
-            {{ slug }} · {{ kindLabel(cardKind) }}
-          </p>
+          <div v-if="slug" class="mt-2">
+            <p class="text-[10px] uppercase tracking-wide text-gray-500">{{ CARD_ID_LABEL }}</p>
+            <p class="text-xs font-mono text-gray-400 mt-0.5">{{ slug }} · {{ kindLabel(cardKind) }}</p>
+            <p class="text-[10px] text-gray-500 mt-1">{{ CARD_ID_HINT_SHORT }}</p>
+          </div>
           <p class="text-[11px] text-gray-500 mt-1 mb-4">
             Profile type is fixed by how this QR was generated — it cannot be changed later.
           </p>
@@ -305,9 +308,10 @@ function finish() {
         <span class="material-symbols-outlined text-5xl text-emerald-400" style="font-variation-settings: 'FILL' 1">check_circle</span>
         <h1 class="text-xl font-bold">Card linked</h1>
         <p class="text-sm text-gray-400">
-          Your {{ cardType === 'table' ? 'business' : 'personal' }} account is ready and card
+          Your {{ cardType === 'table' ? 'business' : 'personal' }} account is ready. {{ CARD_ID_LABEL }}
           <span class="font-mono">{{ slug }}</span> now opens your profile.
         </p>
+        <p class="text-[10px] text-gray-500">{{ CARD_ID_HINT_SHORT }}</p>
         <p v-if="offlineNote" class="text-xs text-amber-300">{{ offlineNote }}</p>
         <button type="button" class="w-full py-3 rounded-full bg-white text-black text-sm font-bold" @click="finish">
           Complete your profile

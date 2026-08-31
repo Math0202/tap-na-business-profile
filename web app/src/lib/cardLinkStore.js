@@ -491,7 +491,7 @@ export function linkCardToProfile(serial, {
   if (already) {
     return {
       ok: false,
-      error: `This profile already uses slug ${already.serial}. Each profile can only link one card.`,
+      error: `This profile already uses Card ID ${already.serial}. Each profile can only link one card.`,
       card: already
     }
   }
@@ -580,7 +580,7 @@ export function assignSaleCardsToProfile(saleId, profileOpts) {
   if (existing.length) {
     return [{
       ok: false,
-      error: `This profile already uses slug ${existing[0].serial}. Each profile can only link one card.`
+      error: `This profile already uses Card ID ${existing[0].serial}. Each profile can only link one card.`
     }]
   }
   if (!cards.length) return []
