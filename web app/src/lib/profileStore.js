@@ -16,6 +16,7 @@ export const DEFAULT_PROFILE = {
   linkedin: '',
   youtube: '',
   x: '',
+  facebook: '',
   instagram: '',
   tiktok: '',
   website: '',
@@ -245,6 +246,7 @@ export function deleteProfile() {
     linkedin: '',
     youtube: '',
     x: '',
+    facebook: '',
     instagram: '',
     tiktok: '',
     website: '',
@@ -404,6 +406,11 @@ export function resolveSocialUrl(network, value) {
       return 'https://www.youtube.com/@' + handle.replace(/^@/, '')
     case 'x':
       return 'https://x.com/' + handle
+    case 'facebook':
+      if (/facebook\.com/i.test(raw)) {
+        return raw.startsWith('http') ? raw.replace(/^http:\/\//i, 'https://') : 'https://' + raw.replace(/^\/+/, '')
+      }
+      return 'https://www.facebook.com/' + handle.replace(/^@/, '')
     case 'instagram':
       return 'https://www.instagram.com/' + handle
     case 'tiktok':
@@ -416,7 +423,7 @@ export function resolveSocialUrl(network, value) {
 }
 
 export function normalizeSocialFields(data) {
-  const networks = ['whatsapp', 'linkedin', 'youtube', 'x', 'instagram', 'tiktok', 'website']
+  const networks = ['whatsapp', 'linkedin', 'youtube', 'x', 'facebook', 'instagram', 'tiktok', 'website']
   const out = Object.assign({}, data)
   networks.forEach((key) => {
     if (typeof out[key] === 'string') {

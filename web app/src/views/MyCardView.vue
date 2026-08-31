@@ -171,9 +171,9 @@ function contactDetail(kind, value) {
     const digits = raw.replace(/[^\d]/g, '')
     return digits ? 'wa.me/' + digits : raw
   }
-  if (kind === 'instagram' || kind === 'tiktok' || kind === 'x') {
+  if (kind === 'instagram' || kind === 'tiktok' || kind === 'x' || kind === 'facebook') {
     let handle = raw.replace(/^https?:\/\/(www\.)?/i, '')
-    handle = handle.replace(/^(instagram\.com|tiktok\.com|x\.com|twitter\.com)\//i, '')
+    handle = handle.replace(/^(instagram\.com|tiktok\.com|x\.com|twitter\.com|facebook\.com|fb\.com)\//i, '')
     handle = handle.split(/[/?#]/)[0].replace(/^@/, '')
     return handle ? '@' + handle : raw
   }
@@ -541,6 +541,26 @@ watch(() => route.path, () => {
             track-key="linkedin"
             :detail="contactDetail('linkedin', profile.linkedin)"
             :href="filledHref(profile.linkedin, 'linkedin')"
+            :external="true"
+            @track="onLinkTrack"
+          />
+          <LinkRow
+            v-if="filledHref(profile.facebook, 'facebook')"
+            icon="facebook"
+            label="Facebook"
+            track-key="facebook"
+            :detail="contactDetail('facebook', profile.facebook)"
+            :href="filledHref(profile.facebook, 'facebook')"
+            :external="true"
+            @track="onLinkTrack"
+          />
+          <LinkRow
+            v-if="filledHref(profile.x, 'x')"
+            icon="x"
+            label="X"
+            track-key="x"
+            :detail="contactDetail('x', profile.x)"
+            :href="filledHref(profile.x, 'x')"
             :external="true"
             @track="onLinkTrack"
           />

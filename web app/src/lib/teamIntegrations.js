@@ -10,6 +10,11 @@ export const MEETING_TOOLS = [
     id: 'microsoft',
     label: 'Microsoft',
     logo: '/images/email/outlook.png'
+  },
+  {
+    id: 'apple',
+    label: 'Apple Calendar',
+    logo: ''
   }
 ]
 
@@ -68,7 +73,7 @@ export function emptyTeamIntegrations() {
 
 export function validateTeamIntegrations(form) {
   const meetingTool = normalizeMeetingTool(form?.meetingTool)
-  if (!meetingTool) return { ok: false, error: 'Choose Google Meet or Microsoft.' }
+  if (!meetingTool) return { ok: false, error: 'Choose a meeting calendar.' }
   const usesCrm = !!form?.usesCrm
   const crmProvider = usesCrm ? normalizeCrmProvider(form?.crmProvider) : ''
   if (usesCrm && !crmProvider) return { ok: false, error: 'Choose the CRM you use.' }

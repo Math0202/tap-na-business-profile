@@ -115,15 +115,15 @@ const navItems = computed(() => {
   if (loggedIn.value) {
     items.splice(1, 0, {
       to: '/profile',
-      label: 'Edit',
+      label: 'Edit Profile',
       icon: 'edit',
       match: (p) => p === '/profile'
     })
     if (canUseTeam.value) {
       items.push({
         to: '/team',
-        label: 'Team',
-        icon: 'groups',
+        label: 'Settings',
+        icon: 'settings',
         match: (p) => p === '/team'
       })
     }

@@ -1340,6 +1340,7 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
     linkedin: row.linkedin,
     youtube: row.youtube,
     x: row.x,
+    facebook: row.facebook || '',
     instagram: row.instagram,
     tiktok: row.tiktok,
     website: row.website,
@@ -1997,7 +1998,7 @@ function escapeHtml(s) {
 }
 
 /** Known bouncing / undeliverable mailboxes — never send transactional mail here. */
-const BLOCKED_EMAILS = new Set(['chris@oyeetunam.com.na', 'admin@01'])
+const BLOCKED_EMAILS = new Set(['admin@01'])
 
 /** Real mailbox only — rejects placeholders and known bounce addresses. */
 function isDeliverableEmail(value) {
@@ -2292,7 +2293,7 @@ function parseTeamIntegrationsFromBody(body) {
     .trim()
     .toLowerCase()
   const crmOther = String(body?.crmOther || body?.crm_other || '').trim().slice(0, 80)
-  const meetingOk = meetingTool === 'google' || meetingTool === 'microsoft'
+  const meetingOk = meetingTool === 'google' || meetingTool === 'microsoft' || meetingTool === 'apple'
   const crmOk = !usesCrm || ['salesforce', 'zoho', 'hubspot', 'odoo', 'sage', 'other'].includes(crmProvider)
   return {
     meetingTool: meetingOk ? meetingTool : '',
@@ -2357,6 +2358,8 @@ function calendarAddLinksHtml({ googleUrl, outlookUrl, icsUrl, meetingTool = '',
     rows.push(calendarButtonRow(outlookUrl, outlookLogo, 'Outlook'))
   } else if (isTeam && meetingTool === 'google') {
     rows.push(calendarButtonRow(googleUrl, gmailLogo, 'Google Calendar'))
+  } else if (isTeam && meetingTool === 'apple') {
+    rows.push(calendarButtonRow(icsUrl, '', 'Apple Calendar'))
   } else if (isTeam) {
     rows.push(calendarButtonRow(googleUrl, gmailLogo, 'Google Calendar'))
     rows.push(calendarButtonRow(outlookUrl, outlookLogo, 'Outlook'))
@@ -2371,6 +2374,7 @@ function calendarAddLinksText({ googleUrl, outlookUrl, icsUrl, meetingTool = '',
   const lines = ['Add to your calendar']
   if (isTeam && meetingTool === 'microsoft') lines.push(`Outlook: ${outlookUrl}`)
   else if (isTeam && meetingTool === 'google') lines.push(`Google Calendar: ${googleUrl}`)
+  else if (isTeam && meetingTool === 'apple') lines.push(`Apple Calendar: ${icsUrl}`)
   else if (isTeam) {
     lines.push(`Google Calendar: ${googleUrl}`)
     lines.push(`Outlook: ${outlookUrl}`)
@@ -5241,6 +5245,7 @@ async function handleApi(request, env, url) {
       linkedin: body.linkedin !== undefined ? String(body.linkedin || '').trim() : profile.linkedin,
       youtube: body.youtube !== undefined ? String(body.youtube || '').trim() : profile.youtube,
       x: body.x !== undefined ? String(body.x || '').trim() : profile.x,
+      facebook: body.facebook !== undefined ? String(body.facebook || '').trim() : (profile.facebook || ''),
       instagram: body.instagram !== undefined ? String(body.instagram || '').trim() : profile.instagram,
       tiktok: body.tiktok !== undefined ? String(body.tiktok || '').trim() : profile.tiktok,
       website: body.website !== undefined ? String(body.website || '').trim() : profile.website,
@@ -5465,6 +5470,7 @@ async function handleApi(request, env, url) {
         linkedin: body.linkedin ?? profile.linkedin,
         youtube: body.youtube ?? profile.youtube,
         x: body.x ?? profile.x,
+        facebook: body.facebook ?? profile.facebook ?? '',
         instagram: body.instagram ?? profile.instagram,
         tiktok: body.tiktok ?? profile.tiktok,
         website: body.website ?? profile.website,

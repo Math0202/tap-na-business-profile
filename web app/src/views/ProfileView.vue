@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
 import BrandMark from '../components/BrandMark.vue'
+import AvatarCropModal from '../components/AvatarCropModal.vue'
 import {
   loadProfile,
   saveProfile,
@@ -76,6 +77,7 @@ const usePhoneAsWhatsapp = ref(false)
 const linkedin = ref('')
 const youtube = ref('')
 const x = ref('')
+const facebook = ref('')
 const instagram = ref('')
 const tiktok = ref('')
 const website = ref('')
@@ -100,6 +102,8 @@ const showPasswordModal = ref(false)
 const showToast = ref(false)
 const avatarUploading = ref(false)
 const avatarInput = ref(null)
+const showAvatarCrop = ref(false)
+const cropSource = ref('')
 const videoInput = ref(null)
 const videoPreview = ref(null)
 
@@ -181,6 +185,7 @@ function fillForm(profile) {
     linkedin.value = ''
     youtube.value = ''
     x.value = ''
+    facebook.value = ''
     instagram.value = ''
     tiktok.value = ''
     website.value = ''
@@ -220,6 +225,7 @@ function fillForm(profile) {
     linkedin.value = profile.linkedin || ''
     youtube.value = profile.youtube || ''
     x.value = profile.x || ''
+    facebook.value = profile.facebook || ''
     instagram.value = profile.instagram || ''
     tiktok.value = profile.tiktok || ''
     website.value = profile.website || ''
@@ -263,21 +269,12 @@ function onDisabledChange() {
   loginFeedbackClass.value = 'text-xs text-center min-h-[1rem] text-gray-400'
 }
 
-async function onAvatarChange(e) {
-  const file = e.target.files && e.target.files[0]
-  if (!file) return
-  // Table logos keep a small limit; personal profile photos have no client size cap
-  if (isTable.value && file.size > 3 * 1024 * 1024) {
-    alert('Please choose an image under 3 MB.')
-    e.target.value = ''
-    return
-  }
+async function uploadAvatarFile(file) {
   const kind = isTable.value ? 'logo' : 'avatar'
   avatarUploading.value = true
   try {
     await ensureApiSession()
     let uploaded = await apiUploadAsset(file, { kind })
-    // Token may have gone stale — force re-auth once and retry
     if (!uploaded.ok && uploaded.status === 401 && (await ensureApiSession({ force: true }))) {
       uploaded = await apiUploadAsset(file, { kind })
     }
@@ -286,7 +283,6 @@ async function onAvatarChange(e) {
       if (isTable.value) logoData.value = url
       else avatarData.value = url
 
-      // Persist to local + Supabase immediately so card taps see the logo
       const patch = isTable.value
         ? { logo: url, cardType: 'table' }
         : { avatar: url, cardType: cardType.value }
@@ -306,7 +302,6 @@ async function onAvatarChange(e) {
       }
       return
     }
-    // Offline fallback: local preview only — never write data URLs to Supabase
     const dataUrl = await new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = () => resolve(reader.result)
@@ -325,8 +320,59 @@ async function onAvatarChange(e) {
     alert(hint)
   } finally {
     avatarUploading.value = false
+  }
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(new Error('read failed'))
+    reader.readAsDataURL(file)
+  })
+}
+
+async function onAvatarChange(e) {
+  const file = e.target.files && e.target.files[0]
+  if (!file) return
+  if (isTable.value && file.size > 3 * 1024 * 1024) {
+    alert('Please choose an image under 3 MB.')
+    e.target.value = ''
+    return
+  }
+  try {
+    cropSource.value = await readFileAsDataUrl(file)
+    showAvatarCrop.value = true
+  } catch {
+    alert('Could not open that image.')
+  } finally {
     e.target.value = ''
   }
+}
+
+async function openAvatarAdjust() {
+  const src = previewSrc.value
+  if (!src || src.includes('data:image/svg')) return
+  try {
+    if (src.startsWith('data:')) {
+      cropSource.value = src
+    } else {
+      const res = await fetch(src)
+      if (!res.ok) throw new Error('fetch failed')
+      const blob = await res.blob()
+      cropSource.value = await readFileAsDataUrl(blob)
+    }
+    showAvatarCrop.value = true
+  } catch {
+    alert('Could not load photo for editing.')
+  }
+}
+
+async function onAvatarCropConfirm(blob) {
+  showAvatarCrop.value = false
+  cropSource.value = ''
+  const file = new File([blob], isTable.value ? 'logo.jpg' : 'avatar.jpg', { type: 'image/jpeg' })
+  await uploadAvatarFile(file)
 }
 
 function onVideoUrlChange() {
@@ -410,7 +456,7 @@ watch(phone, () => {
 })
 
 function testSocial(network) {
-  const map = { whatsapp, linkedin, youtube, x, instagram, tiktok, website }
+  const map = { whatsapp, linkedin, youtube, x, facebook, instagram, tiktok, website }
   const field = map[network]
   const url = resolveSocialUrl(network, field?.value || '')
   if (!url) {
@@ -613,8 +659,9 @@ async function onSave(e) {
   const socials = normalizeSocialFields({
     whatsapp: (usePhoneAsWhatsapp.value ? phone.value : whatsapp.value).trim(),
     linkedin: linkedin.value.trim(),
-    youtube: '',
-    x: '',
+    youtube: youtube.value.trim(),
+    x: x.value.trim(),
+    facebook: facebook.value.trim(),
     instagram: instagram.value.trim(),
     tiktok: tiktok.value.trim(),
     website: website.value.trim()
@@ -622,8 +669,9 @@ async function onSave(e) {
   whatsapp.value = socials.whatsapp || ''
   if (usePhoneAsWhatsapp.value) usePhoneAsWhatsapp.value = phonesMatch(phone.value, whatsapp.value)
   linkedin.value = socials.linkedin || ''
-  youtube.value = ''
-  x.value = ''
+  youtube.value = socials.youtube || ''
+  x.value = socials.x || ''
+  facebook.value = socials.facebook || ''
   instagram.value = socials.instagram || ''
   tiktok.value = socials.tiktok || ''
   website.value = socials.website || ''
@@ -673,6 +721,7 @@ async function onSave(e) {
       linkedin: socials.linkedin,
       youtube: socials.youtube,
       x: socials.x,
+      facebook: socials.facebook,
       instagram: socials.instagram,
       tiktok: socials.tiktok,
       website: socials.website,
@@ -698,6 +747,7 @@ async function onSave(e) {
         linkedin: saved.linkedin,
         youtube: saved.youtube,
         x: saved.x,
+        facebook: saved.facebook,
         instagram: saved.instagram,
         tiktok: saved.tiktok,
         website: saved.website,
@@ -829,6 +879,14 @@ onMounted(async () => {
                 : 'Tap camera to change photo'
           }}
         </p>
+        <button
+          v-if="previewSrc && !avatarUploading"
+          type="button"
+          class="text-xs font-semibold text-emerald-400 hover:text-emerald-300"
+          @click="openAvatarAdjust"
+        >
+          Adjust crop &amp; position
+        </button>
       </div>
 
       <RouterLink
@@ -1137,6 +1195,22 @@ onMounted(async () => {
               <div class="social-icon"><span class="material-symbols-outlined text-[20px]">work</span></div>
               <input v-model="linkedin" type="text" class="field-input" placeholder="Paste your LinkedIn profile link" />
               <button type="button" class="social-test-btn" @click="testSocial('linkedin')">Visit</button>
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Facebook</label>
+            <div class="social-row">
+              <div class="social-icon"><span class="material-symbols-outlined text-[20px]">groups</span></div>
+              <input v-model="facebook" type="text" class="field-input" placeholder="@username or profile link" />
+              <button type="button" class="social-test-btn" @click="testSocial('facebook')">Visit</button>
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="field-label">X (Twitter)</label>
+            <div class="social-row">
+              <div class="social-icon"><span class="material-symbols-outlined text-[20px]">alternate_email</span></div>
+              <input v-model="x" type="text" class="field-input" placeholder="@username or profile link" />
+              <button type="button" class="social-test-btn" @click="testSocial('x')">Visit</button>
             </div>
           </div>
         </template>
@@ -1467,6 +1541,14 @@ onMounted(async () => {
   </main>
 
   <Teleport to="body">
+    <AvatarCropModal
+      :open="showAvatarCrop"
+      :src="cropSource"
+      :round="!isTable"
+      :title="isTable ? 'Adjust logo' : 'Adjust photo'"
+      @close="showAvatarCrop = false"
+      @confirm="onAvatarCropConfirm"
+    />
     <div v-if="showPasswordModal" class="app-dialog-overlay fixed inset-0 z-[200] flex items-center justify-center p-6">
       <div class="absolute inset-0 bg-black/70" @click="showPasswordModal = false" />
       <div class="relative w-full max-w-sm card-item-bg rounded-3xl p-6 shadow-2xl space-y-4">

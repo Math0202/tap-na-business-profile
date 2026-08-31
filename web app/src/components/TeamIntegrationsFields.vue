@@ -14,30 +14,25 @@ const emit = defineEmits(['update:meetingTool', 'update:usesCrm', 'update:crmPro
 
 <template>
   <div class="space-y-4 text-left">
-    <div>
-      <p class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">
-        Meeting calendar
-      </p>
+    <div class="field-group">
+      <label class="field-label" for="meeting-tool-select">Meeting calendar</label>
       <p class="text-[12px] text-gray-500 mb-2 leading-snug">
-        Choose Google Meet or Microsoft. Guests get that button on booking emails.
+        Guests see this calendar option on booking emails.
       </p>
-      <div class="grid grid-cols-2 gap-2">
-        <button
-          v-for="tool in MEETING_TOOLS"
-          :key="tool.id"
-          type="button"
-          class="flex items-center gap-2 rounded-2xl border px-3 py-3 text-left transition-colors"
-          :class="
-            meetingTool === tool.id
-              ? 'border-white bg-white/10 text-white'
-              : 'border-zinc-700 bg-zinc-900/50 text-gray-300 hover:border-zinc-500'
-          "
+      <div class="field-shell">
+        <span class="material-symbols-outlined field-icon">event</span>
+        <select
+          id="meeting-tool-select"
+          class="field-input"
+          :value="meetingTool"
           :disabled="disabled"
-          @click="emit('update:meetingTool', tool.id)"
+          @change="emit('update:meetingTool', $event.target.value)"
         >
-          <img :src="tool.logo" :alt="tool.label" class="w-7 h-7 object-contain shrink-0" width="28" height="28">
-          <span class="text-sm font-semibold">{{ tool.label }}</span>
-        </button>
+          <option value="">Choose calendar…</option>
+          <option v-for="tool in MEETING_TOOLS" :key="tool.id" :value="tool.id">
+            {{ tool.label }}
+          </option>
+        </select>
       </div>
     </div>
 
@@ -57,29 +52,24 @@ const emit = defineEmits(['update:meetingTool', 'update:usesCrm', 'update:crmPro
       </span>
     </label>
 
-    <div v-if="usesCrm" class="space-y-2">
-      <p class="block text-xs font-semibold uppercase tracking-wide text-gray-400">
-        Which CRM?
-      </p>
-      <div class="grid grid-cols-2 gap-2">
-        <button
-          v-for="crm in CRM_PROVIDERS"
-          :key="crm.id"
-          type="button"
-          class="flex items-center gap-2 rounded-2xl border px-3 py-2.5 text-left transition-colors"
-          :class="
-            crmProvider === crm.id
-              ? 'border-white bg-white/10 text-white'
-              : 'border-zinc-700 bg-zinc-900/50 text-gray-300 hover:border-zinc-500'
-          "
+    <div v-if="usesCrm" class="field-group">
+      <label class="field-label" for="crm-provider-select">Which CRM?</label>
+      <div class="field-shell">
+        <span class="material-symbols-outlined field-icon">hub</span>
+        <select
+          id="crm-provider-select"
+          class="field-input"
+          :value="crmProvider"
           :disabled="disabled"
-          @click="emit('update:crmProvider', crm.id)"
+          @change="emit('update:crmProvider', $event.target.value)"
         >
-          <img :src="crm.logo" :alt="crm.label" class="w-7 h-7 object-contain shrink-0" width="28" height="28">
-          <span class="text-sm font-semibold">{{ crm.label }}</span>
-        </button>
+          <option value="">Choose CRM…</option>
+          <option v-for="crm in CRM_PROVIDERS" :key="crm.id" :value="crm.id">
+            {{ crm.label }}
+          </option>
+        </select>
       </div>
-      <div v-if="crmProvider === 'other'">
+      <div v-if="crmProvider === 'other'" class="mt-3">
         <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5" for="crm-other">
           CRM name
         </label>
