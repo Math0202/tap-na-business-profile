@@ -437,7 +437,7 @@ onMounted(() => {
         <div class="card-item-bg rounded-2xl p-4 mb-4 space-y-3">
           <h2 class="text-sm font-semibold">Meeting calendar &amp; CRM</h2>
           <p v-if="isOwner && !meetingTool" class="text-xs text-amber-300/90 leading-relaxed">
-            Choose Google Meet or Microsoft so booking emails include your calendar button.
+            Choose a meeting calendar so booking emails include your calendar button.
           </p>
           <p v-else-if="!isOwner" class="text-xs text-gray-500 leading-relaxed">
             Inherited from the team owner. Members are not asked to set this again.

@@ -1,7 +1,8 @@
 <script setup>
+import { computed } from 'vue'
 import { MEETING_TOOLS, CRM_PROVIDERS } from '../lib/teamIntegrations'
 
-defineProps({
+const props = defineProps({
   meetingTool: { type: String, default: '' },
   usesCrm: { type: Boolean, default: false },
   crmProvider: { type: String, default: '' },
@@ -10,6 +11,21 @@ defineProps({
 })
 
 const emit = defineEmits(['update:meetingTool', 'update:usesCrm', 'update:crmProvider', 'update:crmOther'])
+
+const crmSelectValue = computed(() => (props.usesCrm && props.crmProvider ? props.crmProvider : ''))
+
+function onCrmChange(value) {
+  const provider = String(value || '').trim()
+  if (!provider) {
+    emit('update:usesCrm', false)
+    emit('update:crmProvider', '')
+    emit('update:crmOther', '')
+    return
+  }
+  emit('update:usesCrm', true)
+  emit('update:crmProvider', provider)
+  if (provider !== 'other') emit('update:crmOther', '')
+}
 </script>
 
 <template>
@@ -36,34 +52,21 @@ const emit = defineEmits(['update:meetingTool', 'update:usesCrm', 'update:crmPro
       </div>
     </div>
 
-    <label class="flex items-start gap-3 cursor-pointer">
-      <input
-        :checked="usesCrm"
-        type="checkbox"
-        class="mt-1 rounded border-zinc-600"
-        :disabled="disabled"
-        @change="emit('update:usesCrm', $event.target.checked)"
-      >
-      <span class="min-w-0">
-        <span class="block text-sm font-semibold">We use CRM</span>
-        <span class="block text-[12px] text-gray-500 mt-0.5 leading-snug">
-          Add a CRM button on your meeting emails so you can save the guest as a lead.
-        </span>
-      </span>
-    </label>
-
-    <div v-if="usesCrm" class="field-group">
-      <label class="field-label" for="crm-provider-select">Which CRM?</label>
+    <div class="field-group">
+      <label class="field-label" for="crm-provider-select">CRM</label>
+      <p class="text-[12px] text-gray-500 mb-2 leading-snug">
+        Add a CRM button on meeting emails so you can save guests as leads.
+      </p>
       <div class="field-shell">
         <span class="material-symbols-outlined field-icon">hub</span>
         <select
           id="crm-provider-select"
           class="field-input"
-          :value="crmProvider"
+          :value="crmSelectValue"
           :disabled="disabled"
-          @change="emit('update:crmProvider', $event.target.value)"
+          @change="onCrmChange($event.target.value)"
         >
-          <option value="">Choose CRM…</option>
+          <option value="">No CRM</option>
           <option v-for="crm in CRM_PROVIDERS" :key="crm.id" :value="crm.id">
             {{ crm.label }}
           </option>
