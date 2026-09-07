@@ -8,6 +8,8 @@ import ShareQrModal from '../components/ShareQrModal.vue'
 import CheckinPopup from '../components/CheckinPopup.vue'
 import FeedbackPopup from '../components/FeedbackPopup.vue'
 import {
+  loadProfile,
+  loadViewedProfile,
   loadPublicProfile,
   logoUrl,
   bannerUrl,
@@ -327,18 +329,37 @@ function onKeydown(e) {
   shareOpen.value = false
 }
 
-onMounted(() => {
-  profile.value = loadPublicProfile()
+function refresh() {
+  const mine = loadProfile()
+  const myId = String(mine.remoteProfileId || mine.id || '').trim()
+  const viewed = loadViewedProfile()
+  const viewedId = String(viewed?.remoteProfileId || viewed?.id || '').trim()
+
+  if (route.path === '/business' && isLoggedIn()) {
+    profile.value = mine
+  } else if (isLoggedIn() && (!viewed || !viewedId || (myId && viewedId === myId))) {
+    profile.value = mine
+  } else {
+    profile.value = loadPublicProfile()
+  }
   document.title = name.value + ' - tap-na Table'
+}
+
+onMounted(() => {
+  refresh()
   if (!deleted.value && !disabled.value) trackVisit(LOCAL_ID)
   window.openShareProfile = openShare
   document.addEventListener('keydown', onKeydown)
+  window.addEventListener('focus', refresh)
+  window.addEventListener('pageshow', refresh)
   queueVenuePopups()
 })
 
 onUnmounted(() => {
   if (window.openShareProfile === openShare) delete window.openShareProfile
   document.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('focus', refresh)
+  window.removeEventListener('pageshow', refresh)
 })
 </script>
 

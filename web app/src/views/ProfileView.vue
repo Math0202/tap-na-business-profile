@@ -7,6 +7,7 @@ import BannerCropModal from '../components/BannerCropModal.vue'
 import {
   loadProfile,
   saveProfile,
+  clearViewedProfile,
   setDisabled,
   updateLoginCredentials,
   logout,
@@ -407,6 +408,7 @@ async function uploadBannerFile(file) {
       const url = uploaded.data.url
       bannerData.value = url
       const saved = saveProfile({ banner: url })
+      clearViewedProfile()
       await ensureApiSession()
       const sync = await apiUpdateMe({
         banner: saved.banner
@@ -423,6 +425,8 @@ async function uploadBannerFile(file) {
     const dataUrl = await readFileAsDataUrl(file).catch(() => null)
     if (dataUrl) {
       bannerData.value = dataUrl
+      saveProfile({ banner: dataUrl })
+      clearViewedProfile()
     }
     const hint = uploaded.status === 401
       ? 'Could not upload to the cloud — please log out and log in again, then retry.'
@@ -486,6 +490,7 @@ async function onBannerCropConfirm(blob) {
 function resetBanner() {
   bannerData.value = ''
   saveProfile({ banner: '' })
+  clearViewedProfile()
   apiUpdateMe({ banner: '' }).catch(() => {})
 }
 
@@ -803,6 +808,7 @@ async function onSave(e) {
 
   // Never sync giant data: URLs to Supabase — keep cloud http(s) assets only
   const cloudSafe = (value, fallback = '') => {
+    if (value === '') return ''
     const v = String(value || '').trim()
     if (!v) return fallback
     if (v.startsWith('data:')) return fallback
@@ -854,6 +860,7 @@ async function onSave(e) {
       loginEmail: loginEmail.value.trim(),
       loginPhone: loginPhone.value.trim()
     })
+    clearViewedProfile()
 
     let authed = await ensureApiSession()
     if (!authed) authed = await ensureApiSession({ force: true })
@@ -964,8 +971,8 @@ onMounted(async () => {
       >
         <div class="banner-overlay absolute inset-0" />
 
-        <!-- Bottom-Left Banner Controls: Camera Icon & Edit Icon -->
-        <div class="absolute bottom-3 left-4 flex items-center gap-2 z-20">
+        <!-- Bottom-Right Banner Controls: Camera Icon & Edit Icon -->
+        <div class="absolute bottom-3 right-4 flex items-center gap-2 z-20">
           <label
             for="banner-input"
             class="w-9 h-9 rounded-full bg-black/70 hover:bg-black/90 text-white flex items-center justify-center cursor-pointer shadow-lg border border-white/20 transition-all active:scale-95"
@@ -1158,7 +1165,7 @@ onMounted(async () => {
               rows="3"
               maxlength="500"
               class="field-input !h-auto resize-none"
-              placeholder="Short bio or note. This is displayed on your profile and saved as the note when contacts are downloaded."
+              placeholder="Add a short introduction about what your business does."
             />
           </div>
           <p class="field-hint">Included as the note when people import your digital contact.</p>

@@ -260,9 +260,20 @@ onMounted(async () => {
         setClaimChrome(true)
         return
       }
-      setViewedProfile({ ...remote.profile, shareSlug: remote.card.slug || serial.value })
+      const mine = loadProfile()
+      const isMine =
+        remote.profile.id && (mine.remoteProfileId === remote.profile.id || mine.id === remote.profile.id)
+      const profileToView = isMine
+        ? {
+            ...remote.profile,
+            ...mine,
+            banner: mine.banner || remote.profile.banner,
+            bio: mine.bio || remote.profile.bio,
+            shareSlug: remote.card.slug || serial.value
+          }
+        : { ...remote.profile, shareSlug: remote.card.slug || serial.value }
+      setViewedProfile(profileToView)
       try {
-        const mine = loadProfile()
         if (remote.profile.id && (mine.remoteProfileId === remote.profile.id || !mine.remoteProfileId)) {
           const patch = {}
           if (!mine.shareSlug) patch.shareSlug = remote.card.slug || serial.value

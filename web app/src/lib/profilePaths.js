@@ -68,7 +68,19 @@ export async function ensureViewedProfileFromSlug(serial) {
   try {
     const remote = await apiResolveCard(code)
     if (remote?.ok && remote.profile && !isTableBusiness(remote.profile)) {
-      setViewedProfile({ ...remote.profile, shareSlug: remote.card?.slug || code })
+      const mine = loadProfile()
+      const isMine =
+        remote.profile.id && (mine.remoteProfileId === remote.profile.id || mine.id === remote.profile.id)
+      const profileToView = isMine
+        ? {
+            ...remote.profile,
+            ...mine,
+            banner: mine.banner || remote.profile.banner,
+            bio: mine.bio || remote.profile.bio,
+            shareSlug: remote.card?.slug || code
+          }
+        : { ...remote.profile, shareSlug: remote.card?.slug || code }
+      setViewedProfile(profileToView)
     }
   } catch {
     /* keep whatever is already in session */

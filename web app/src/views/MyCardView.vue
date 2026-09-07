@@ -194,10 +194,17 @@ function linkHref(value, network) {
 }
 
 function refresh() {
-  // /me always shows the logged-in owner's profile (not a tapped card)
+  const mine = loadProfile()
+  const myId = String(mine.remoteProfileId || mine.id || '').trim()
+  const viewed = loadViewedProfile()
+  const viewedId = String(viewed?.remoteProfileId || viewed?.id || '').trim()
+
+  // /me or logged-in owner viewing their own card always shows the latest local profile
   if (route.path === '/me' && isLoggedIn()) {
     clearViewedProfile()
-    profile.value = loadProfile()
+    profile.value = mine
+  } else if (isLoggedIn() && (!viewed || !viewedId || (myId && viewedId === myId))) {
+    profile.value = mine
   } else {
     profile.value = loadPublicProfile()
   }
@@ -374,6 +381,8 @@ onMounted(() => {
   if (!deleted.value && !disabled.value) trackVisit(LOCAL_ID)
   window.openShareProfile = openShare
   document.addEventListener('keydown', onKeydown)
+  window.addEventListener('focus', refresh)
+  window.addEventListener('pageshow', refresh)
   if (route.hash === '#share') openShare()
 })
 
@@ -382,6 +391,8 @@ onUnmounted(() => {
     delete window.openShareProfile
   }
   document.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('focus', refresh)
+  window.removeEventListener('pageshow', refresh)
 })
 
 watch(() => route.hash, (hash) => {

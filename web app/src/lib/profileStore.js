@@ -120,6 +120,16 @@ export function saveProfile(data) {
   const current = loadProfile()
   const next = Object.assign({}, current, data, { deleted: false })
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+  try {
+    const raw = sessionStorage.getItem(VIEW_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed?.profile) {
+        parsed.profile = Object.assign({}, parsed.profile, data)
+        sessionStorage.setItem(VIEW_KEY, JSON.stringify(parsed))
+      }
+    }
+  } catch {}
   import('./adminStore.js')
     .then((m) => m.syncLocalProfileToDirectory(next))
     .catch(() => {})
