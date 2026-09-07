@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
 import BrandMark from '../components/BrandMark.vue'
 import AvatarCropModal from '../components/AvatarCropModal.vue'
+import BannerCropModal from '../components/BannerCropModal.vue'
 import {
   loadProfile,
   saveProfile,
@@ -12,6 +13,7 @@ import {
   deleteProfile,
   avatarUrl,
   logoUrl,
+  bannerUrl,
   isProfileDeleted,
   normalizeSocialFields,
   resolveSocialUrl,
@@ -53,6 +55,12 @@ const company = ref('')
 const phone = ref('')
 const email = ref('')
 const address = ref('')
+const bio = ref('')
+const bannerData = ref('')
+const bannerUploading = ref(false)
+const bannerInput = ref(null)
+const showBannerCrop = ref(false)
+const bannerCropSource = ref('')
 const menuUrl = ref('')
 const menuPdf = ref('')
 const menuImages = ref([])
@@ -109,6 +117,15 @@ const videoInput = ref(null)
 const videoPreview = ref(null)
 
 const isTable = computed(() => cardType.value === 'table')
+const bannerPreviewSrc = computed(() => {
+  return bannerUrl({ banner: bannerData.value, deleted: false })
+})
+const publicCardPath = computed(() => {
+  return publicPage({
+    cardType: cardType.value,
+    shareSlug: shareSlug.value
+  })
+})
 const previewSrc = computed(() => {
   if (isTable.value) {
     if (logoData.value) return logoData.value
@@ -206,6 +223,8 @@ function fillForm(profile) {
     phone.value = profile.phone || ''
     email.value = profile.email || ''
     address.value = profile.address || ''
+    bio.value = profile.bio || ''
+    bannerData.value = profile.banner || ''
     menuUrl.value = profile.menuUrl || ''
     menuPdf.value = profile.menuPdf || ''
     menuImages.value = normalizeMenuImages(profile.menuImages)
@@ -374,6 +393,100 @@ async function onAvatarCropConfirm(blob) {
   cropSource.value = ''
   const file = new File([blob], isTable.value ? 'logo.jpg' : 'avatar.jpg', { type: 'image/jpeg' })
   await uploadAvatarFile(file)
+}
+
+async function uploadBannerFile(file) {
+  bannerUploading.value = true
+  try {
+    await ensureApiSession()
+    let uploaded = await apiUploadAsset(file, { kind: 'banner' })
+    if (!uploaded.ok && uploaded.status === 401 && (await ensureApiSession({ force: true }))) {
+      uploaded = await apiUploadAsset(file, { kind: 'banner' })
+    }
+    if (uploaded.ok && uploaded.data?.url) {
+      const url = uploaded.data.url
+      bannerData.value = url
+      const saved = saveProfile({ banner: url })
+      await ensureApiSession()
+      const sync = await apiUpdateMe({
+        banner: saved.banner
+      })
+      if (!sync.ok) {
+        alert(
+          sync.error
+            ? `Banner uploaded, but profile sync failed (${sync.error}). Tap Save Profile.`
+            : 'Banner uploaded, but profile sync failed. Tap Save Profile.'
+        )
+      }
+      return
+    }
+    const dataUrl = await readFileAsDataUrl(file).catch(() => null)
+    if (dataUrl) {
+      bannerData.value = dataUrl
+    }
+    const hint = uploaded.status === 401
+      ? 'Could not upload to the cloud — please log out and log in again, then retry.'
+      : uploaded.error
+        ? `Could not upload (${uploaded.error}). Showing a local preview only.`
+        : 'Could not upload banner. Showing a local preview only.'
+    alert(hint)
+  } finally {
+    bannerUploading.value = false
+  }
+}
+
+async function onBannerChange(e) {
+  const file = e.target.files && e.target.files[0]
+  if (!file) return
+  if (!file.type.startsWith('image/')) {
+    alert('Please choose an image file for your banner.')
+    e.target.value = ''
+    return
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    alert('Please choose a banner image under 5 MB.')
+    e.target.value = ''
+    return
+  }
+  try {
+    bannerCropSource.value = await readFileAsDataUrl(file)
+    showBannerCrop.value = true
+  } catch {
+    alert('Could not open banner image.')
+  } finally {
+    e.target.value = ''
+  }
+}
+
+async function openBannerAdjust() {
+  const src = bannerPreviewSrc.value
+  if (!src) return
+  try {
+    if (src.startsWith('data:')) {
+      bannerCropSource.value = src
+    } else {
+      const res = await fetch(src)
+      if (!res.ok) throw new Error('fetch failed')
+      const blob = await res.blob()
+      bannerCropSource.value = await readFileAsDataUrl(blob)
+    }
+    showBannerCrop.value = true
+  } catch {
+    alert('Could not load banner for editing.')
+  }
+}
+
+async function onBannerCropConfirm(blob) {
+  showBannerCrop.value = false
+  bannerCropSource.value = ''
+  const file = new File([blob], 'banner.jpg', { type: 'image/jpeg' })
+  await uploadBannerFile(file)
+}
+
+function resetBanner() {
+  bannerData.value = ''
+  saveProfile({ banner: '' })
+  apiUpdateMe({ banner: '' }).catch(() => {})
 }
 
 function onVideoUrlChange() {
@@ -728,6 +841,8 @@ async function onSave(e) {
       website: socials.website,
       avatar: avatarData.value || '/images/personal.png',
       logo: logoData.value || '',
+      banner: bannerData.value || '',
+      bio: bio.value.trim().slice(0, 500),
       video: videoData.value || '',
       disabled: disabled.value,
       loginEmail: loginEmail.value.trim(),
@@ -769,6 +884,8 @@ async function onSave(e) {
         feedbackForm: saved.feedbackForm || nextFeedbackForm,
         avatar: cloudSafe(saved.avatar, cloudSafe(previous.avatar, '/images/personal.png')),
         logo: cloudSafe(saved.logo, cloudSafe(previous.logo, '')),
+        banner: cloudSafe(saved.banner, cloudSafe(previous.banner, '')),
+        bio: saved.bio || '',
         video: cloudSafe(saved.video, cloudSafe(previous.video, '')),
         disabled: saved.disabled
       })
@@ -827,21 +944,90 @@ onMounted(async () => {
 
 <template>
   <main class="w-full max-w-md min-h-screen mx-auto flex flex-col relative pb-32">
-    <header class="px-6 pt-16 pb-4 text-center">
-      <BrandMark size="sm" class="mb-3 mx-auto" />
-      <h1 class="text-2xl font-bold tracking-tight">
-        {{ isTable ? 'Edit business profile' : 'Edit Profile' }}
-      </h1>
-      <p class="text-gray-400 text-sm mt-1">
-        {{ isTable ? 'Set up what guests see when they tap your card' : 'Update your digital business card' }}
-      </p>
-    </header>
+    <!-- Hero Profile Banner with Avatar in front (matches public card layout) -->
+    <header class="relative w-full">
+      <!-- Banner Background fitting width without stretching -->
+      <div
+        class="profile-banner w-full relative h-[180px] sm:h-[210px] overflow-hidden bg-zinc-900"
+        :style="{
+          backgroundImage: `url(${JSON.stringify(bannerPreviewSrc)})`,
+          backgroundSize: '100% auto',
+          backgroundRepeat: 'no-repeat',
+          backgroundPosition: 'center top'
+        }"
+      >
+        <div class="banner-overlay absolute inset-0" />
 
-    <form class="px-6 space-y-5 flex-1" @submit="onSave">
-      <div class="flex flex-col items-center gap-3 py-2">
-        <div class="relative">
+        <!-- Top Navigation & Banner Controls -->
+        <div class="absolute top-4 left-4 right-4 flex items-center justify-between z-20">
+          <RouterLink
+            :to="publicCardPath"
+            class="h-8 px-3 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur text-white text-xs font-semibold flex items-center gap-1.5 border border-white/10 transition-colors"
+          >
+            <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+            <span>View card</span>
+          </RouterLink>
+
+          <!-- Banner Controls -->
+          <div class="flex items-center gap-1.5">
+            <button
+              v-if="bannerData"
+              type="button"
+              class="h-8 px-2.5 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur text-gray-300 hover:text-white text-xs font-medium flex items-center gap-1 border border-white/10 transition-colors"
+              title="Reset to default banner"
+              @click="resetBanner"
+            >
+              <span class="material-symbols-outlined text-[15px]">refresh</span>
+              <span class="hidden sm:inline">Reset</span>
+            </button>
+
+            <button
+              v-if="bannerPreviewSrc && !bannerUploading"
+              type="button"
+              class="h-8 px-2.5 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur text-emerald-400 hover:text-emerald-300 text-xs font-medium flex items-center gap-1 border border-white/10 transition-colors"
+              title="Adjust banner crop & position"
+              @click="openBannerAdjust"
+            >
+              <span class="material-symbols-outlined text-[15px]">crop</span>
+              <span class="hidden sm:inline">Adjust banner</span>
+            </button>
+
+            <label
+              for="banner-input"
+              class="h-8 px-3 rounded-full bg-white text-black hover:bg-gray-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-lg transition-colors"
+              :class="{ 'opacity-50 pointer-events-none': bannerUploading }"
+              title="Change banner image"
+            >
+              <span class="material-symbols-outlined text-[16px]">photo_camera</span>
+              <span>{{ bannerData ? 'Change banner' : 'Add banner' }}</span>
+            </label>
+            <input
+              id="banner-input"
+              ref="bannerInput"
+              type="file"
+              accept="image/*"
+              class="hidden"
+              :disabled="bannerUploading"
+              @change="onBannerChange"
+            />
+          </div>
+        </div>
+
+        <!-- Banner Uploading Indicator -->
+        <div
+          v-if="bannerUploading"
+          class="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-1.5 z-30"
+        >
+          <span class="material-symbols-outlined text-white text-[28px] animate-spin">progress_activity</span>
+          <span class="text-xs text-white/90 font-medium">Uploading banner…</span>
+        </div>
+      </div>
+
+      <!-- Avatar Overlapping the Banner (exact same visual framing as public card) -->
+      <div class="px-6 -mt-14 relative z-10 flex flex-col items-center sm:items-start sm:flex-row sm:gap-4 text-center sm:text-left">
+        <div class="relative shrink-0">
           <div
-            class="relative w-28 h-28 overflow-hidden border-2 border-zinc-700 shadow-xl bg-zinc-800"
+            class="relative w-28 h-28 overflow-hidden border-[3px] border-[var(--avatar-border)] shadow-2xl bg-zinc-800"
             :class="isTable ? 'rounded-3xl' : 'rounded-full'"
           >
             <img :src="previewSrc" :alt="isTable ? 'Business logo' : 'Profile photo'" class="w-full h-full object-cover" />
@@ -849,17 +1035,18 @@ onMounted(async () => {
               v-if="avatarUploading"
               class="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-1"
             >
-              <span class="material-symbols-outlined text-white text-[28px] animate-spin">progress_activity</span>
-              <span class="text-[10px] text-white/80 font-medium">Uploading…</span>
+              <span class="material-symbols-outlined text-white text-[24px] animate-spin">progress_activity</span>
+              <span class="text-[9px] text-white/80 font-medium">Uploading…</span>
             </div>
           </div>
+
           <label
             for="avatar-input"
-            class="absolute bottom-0 right-0 w-9 h-9 rounded-full bg-white text-black flex items-center justify-center cursor-pointer shadow-lg hover:bg-gray-200 transition-colors"
+            class="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-white text-black flex items-center justify-center cursor-pointer shadow-lg hover:bg-gray-200 transition-colors"
             :class="{ 'opacity-50 pointer-events-none': avatarUploading }"
-            aria-label="Change photo"
+            :aria-label="isTable ? 'Change logo' : 'Change photo'"
           >
-            <span class="material-symbols-outlined text-[18px]">photo_camera</span>
+            <span class="material-symbols-outlined text-[16px]">photo_camera</span>
           </label>
           <input
             id="avatar-input"
@@ -871,24 +1058,29 @@ onMounted(async () => {
             @change="onAvatarChange"
           />
         </div>
-        <p class="text-gray-500 text-xs">
-          {{
-            avatarUploading
-              ? 'Uploading…'
-              : isTable
-                ? 'Tap camera to change business logo'
-                : 'Tap camera to change photo'
-          }}
-        </p>
-        <button
-          v-if="previewSrc && !avatarUploading"
-          type="button"
-          class="text-xs font-semibold text-emerald-400 hover:text-emerald-300"
-          @click="openAvatarAdjust"
-        >
-          Adjust crop &amp; position
-        </button>
+
+        <div class="pt-2 sm:pt-4 min-w-0 flex-1">
+          <h1 class="text-xl font-bold tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">
+            {{ isTable ? (company || 'Business Name') : (name || 'Your Name') }}
+          </h1>
+          <p class="text-xs text-gray-400 mt-0.5 truncate">
+            {{ isTable ? 'Edit business profile' : (title || 'Edit digital business card') }}
+          </p>
+          <div class="mt-2 flex items-center justify-center sm:justify-start gap-2">
+            <button
+              v-if="previewSrc && !avatarUploading"
+              type="button"
+              class="text-xs font-semibold text-emerald-400 hover:text-emerald-300"
+              @click="openAvatarAdjust"
+            >
+              Adjust photo crop
+            </button>
+          </div>
+        </div>
       </div>
+    </header>
+
+    <form class="px-6 space-y-5 flex-1 mt-6" @submit="onSave">
 
       <RouterLink
         v-if="isTable"
@@ -970,6 +1162,23 @@ onMounted(async () => {
             <input id="field-company" v-model="company" type="text" class="field-input"/>
           </div>
         </div>
+        <div class="field-group">
+          <div class="flex items-center justify-between">
+            <label class="field-label" for="field-bio">Bio / About</label>
+            <span class="text-[10px] text-gray-500">{{ bio.length }}/500</span>
+          </div>
+          <div class="field-shell !items-start !h-auto !py-2.5">
+            <textarea
+              id="field-bio"
+              v-model="bio"
+              rows="3"
+              maxlength="500"
+              class="field-input !h-auto resize-none"
+              placeholder="Short bio or note. This is displayed on your profile and saved as the note when contacts are downloaded."
+            />
+          </div>
+          <p class="field-hint">Included as the note when people import your digital contact.</p>
+        </div>
       </section>
 
       <!-- Business / table card fields -->
@@ -986,6 +1195,22 @@ onMounted(async () => {
               placeholder="Your venue or business"
               autocomplete="organization"
               required
+            />
+          </div>
+        </div>
+        <div class="field-group">
+          <div class="flex items-center justify-between">
+            <label class="field-label" for="field-business-bio">About the business</label>
+            <span class="text-[10px] text-gray-500">{{ bio.length }}/500</span>
+          </div>
+          <div class="field-shell !items-start !h-auto !py-2.5">
+            <textarea
+              id="field-business-bio"
+              v-model="bio"
+              rows="3"
+              maxlength="500"
+              class="field-input !h-auto resize-none"
+              placeholder="Tell guests about your business, specialties, or mission."
             />
           </div>
         </div>
@@ -1551,6 +1776,13 @@ onMounted(async () => {
       :title="isTable ? 'Adjust logo' : 'Adjust photo'"
       @close="showAvatarCrop = false"
       @confirm="onAvatarCropConfirm"
+    />
+    <BannerCropModal
+      :open="showBannerCrop"
+      :src="bannerCropSource"
+      title="Adjust banner"
+      @close="showBannerCrop = false"
+      @confirm="onBannerCropConfirm"
     />
     <div v-if="showPasswordModal" class="app-dialog-overlay fixed inset-0 z-[200] flex items-center justify-center p-6">
       <div class="absolute inset-0 bg-black/70" @click="showPasswordModal = false" />

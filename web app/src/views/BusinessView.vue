@@ -10,6 +10,7 @@ import FeedbackPopup from '../components/FeedbackPopup.vue'
 import {
   loadPublicProfile,
   logoUrl,
+  bannerUrl,
   isProfileDeleted,
   isProfileDisabled,
   resolveSocialUrl,
@@ -35,6 +36,7 @@ const popupQueue = ref([])
 
 const deleted = computed(() => isProfileDeleted(profile.value))
 const disabled = computed(() => isProfileDisabled(profile.value))
+const bannerSrc = computed(() => bannerUrl(profile.value))
 const venueName = computed(
   () => profile.value.company || profile.value.name || 'Venue'
 )
@@ -257,6 +259,10 @@ async function saveContact() {
   logRemote('click:save_contact')
   const n = venueName.value
   const photo = await vcardPhotoLine(logo.value || profile.value.logo || profile.value.avatar)
+  const bioText = String(profile.value.bio || '').trim()
+  const noteLine = bioText
+    ? 'NOTE:' + bioText.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n')
+    : 'NOTE:tap-na Table venue profile'
   downloadVcard(n.replace(/\s+/g, '_') + '.vcf', [
     'BEGIN:VCARD',
     'VERSION:3.0',
@@ -271,7 +277,7 @@ async function saveContact() {
       : '',
     'URL:' + shareUrl.value,
     photo,
-    'NOTE:tap-na Table venue profile',
+    noteLine,
     'END:VCARD'
   ])
 }
@@ -338,7 +344,7 @@ onUnmounted(() => {
 
 <template>
   <div class="min-h-screen flex flex-col items-center overflow-x-hidden">
-    <PageBanner banner-height="200px" />
+    <PageBanner banner-height="200px" :src="bannerSrc" />
     <main class="w-full max-w-md min-h-screen flex flex-col relative z-10 pb-28">
       <div class="h-[120px] shrink-0" aria-hidden="true" />
       <div class="page-sheet rounded-t-3xl px-6 pt-0 pb-10 flex-1">
@@ -408,6 +414,20 @@ onUnmounted(() => {
         >
           <p class="text-amber-300 text-sm font-semibold">Profile disabled</p>
           <p class="text-amber-200/70 text-xs mt-0.5">This venue profile is temporarily hidden.</p>
+        </div>
+
+        <!-- About business card -->
+        <div
+          v-if="profile.bio"
+          class="mb-4 card-item-bg rounded-2xl p-4 border border-[var(--border)] text-left"
+        >
+          <div class="flex items-center gap-2 mb-2 text-gray-400">
+            <span class="material-symbols-outlined text-[18px]">format_quote</span>
+            <span class="text-xs font-semibold uppercase tracking-wider">About</span>
+          </div>
+          <p class="text-sm text-gray-200 leading-relaxed whitespace-pre-line">
+            {{ profile.bio }}
+          </p>
         </div>
 
         <section class="space-y-3" :class="{ 'opacity-40 pointer-events-none': disabled }">

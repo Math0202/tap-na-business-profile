@@ -12,6 +12,7 @@ import {
   loadProfile,
   clearViewedProfile,
   avatarUrl,
+  bannerUrl,
   displayName,
   isProfileDeleted,
   isProfileDisabled,
@@ -46,6 +47,7 @@ const useEmbed = ref(false)
 const deleted = computed(() => isProfileDeleted(profile.value))
 const disabled = computed(() => isProfileDisabled(profile.value))
 const name = computed(() => displayName(profile.value))
+const bannerSrc = computed(() => bannerUrl(profile.value))
 const showBooking = computed(
   () => !deleted.value && !disabled.value && profile.value.showBooking !== false
 )
@@ -211,7 +213,8 @@ function syncVisitorAppInstall() {
   prepareProfileAppInstall({
     slug: shareSlug.value,
     avatar: avatar.value,
-    name: name.value
+    name: name.value,
+    company: profile.value.company || ''
   }).catch(() => {})
 }
 
@@ -273,6 +276,10 @@ async function saveContact() {
   const contactUrl = websiteRaw
     ? resolveSocialUrl('website', websiteRaw)
     : shareUrl.value
+  const bioText = String(profile.value.bio || '').trim()
+  const noteLine = bioText
+    ? 'NOTE:' + bioText.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n')
+    : 'NOTE:Digital business card'
   downloadVcard(profile.value.name.replace(/\s+/g, '_') + '.vcf', [
     'BEGIN:VCARD',
     'VERSION:3.0',
@@ -284,7 +291,7 @@ async function saveContact() {
     profile.value.email ? 'EMAIL:' + profile.value.email : '',
     contactUrl ? 'URL:' + contactUrl : '',
     photo,
-    'NOTE:Digital business card',
+    noteLine,
     'END:VCARD'
   ])
 }
@@ -388,7 +395,7 @@ watch(() => route.path, () => {
 
 <template>
   <div class="min-h-screen flex flex-col items-center overflow-x-hidden">
-    <PageBanner />
+    <PageBanner :src="bannerSrc" />
     <main class="w-full max-w-md min-h-screen flex flex-col relative z-10 pb-32">
       <section class="relative w-full">
         <div class="w-full h-[160px]" aria-hidden="true" />
@@ -503,6 +510,20 @@ watch(() => route.path, () => {
               </RouterLink>
             </div>
           </div>
+        </div>
+
+        <!-- About / Bio card -->
+        <div
+          v-if="profile.bio"
+          class="mx-6 mb-4 card-item-bg rounded-2xl p-4 border border-[var(--border)]"
+        >
+          <div class="flex items-center gap-2 mb-2 text-gray-400">
+            <span class="material-symbols-outlined text-[18px]">format_quote</span>
+            <span class="text-xs font-semibold uppercase tracking-wider">About</span>
+          </div>
+          <p class="text-sm text-gray-200 leading-relaxed whitespace-pre-line">
+            {{ profile.bio }}
+          </p>
         </div>
 
         <section

@@ -117,7 +117,7 @@ onBeforeUnmount(() => clearCharts())
         <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">
           Revenue by category
         </h3>
-        <p class="text-[11px] text-gray-500 mb-3">Cash inflow — Sales vs Tech Services vs Investment</p>
+        <p class="text-[11px] text-gray-500 mb-3">Cash inflow — Sales vs Tech Services vs Investment vs Transport</p>
         <div class="h-52">
           <canvas ref="revenueCanvas" />
         </div>

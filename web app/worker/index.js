@@ -921,6 +921,7 @@ function salesCashToDb(body, { isNew = false } = {}) {
     'sale',
     'investment',
     'tech_services',
+    'transport',
     'commission',
     'refund',
     'expense',
@@ -1362,6 +1363,8 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
     catalogItems: normalizeCatalogItems(row.catalog_items),
     avatar: row.avatar,
     logo: row.logo,
+    banner: row.banner || '',
+    bio: row.bio || '',
     video: row.video,
     disabled: !!row.disabled,
     shareSlug: shareHit?.slug || '',
@@ -5259,6 +5262,8 @@ async function handleApi(request, env, url) {
         body.feedbackUrl !== undefined ? String(body.feedbackUrl || '').trim() : profile.feedback_url,
       avatar: body.avatar !== undefined ? String(body.avatar || '').trim() : profile.avatar,
       logo: body.logo !== undefined ? String(body.logo || '').trim() : profile.logo,
+      banner: body.banner !== undefined ? String(body.banner || '').trim() : (profile.banner || ''),
+      bio: body.bio !== undefined ? String(body.bio || '').trim().slice(0, 500) : (profile.bio || ''),
       video: body.video !== undefined ? String(body.video || '').trim() : profile.video,
       disabled: body.disabled !== undefined ? !!body.disabled : !!profile.disabled,
       updated_at: new Date().toISOString()
@@ -5356,7 +5361,7 @@ async function handleApi(request, env, url) {
     if (!file || typeof file === 'string') return bad('file is required')
 
     const kindRaw = String(form.get('kind') || 'avatar').toLowerCase()
-    const kind = ['avatar', 'logo', 'video', 'product', 'menu', 'catalog'].includes(kindRaw)
+    const kind = ['avatar', 'logo', 'video', 'product', 'menu', 'catalog', 'banner'].includes(kindRaw)
       ? kindRaw
       : 'avatar'
     if (staff && !profile && kind !== 'product') {
@@ -5382,9 +5387,11 @@ async function handleApi(request, env, url) {
           ? 15 * 1024 * 1024
           : kind === 'video'
             ? 8 * 1024 * 1024
-            : kind === 'avatar'
-              ? 0
-              : 3 * 1024 * 1024
+            : kind === 'banner'
+              ? 5 * 1024 * 1024
+              : kind === 'avatar'
+                ? 0
+                : 3 * 1024 * 1024
     if (maxBytes > 0 && file.size > maxBytes) {
       const limitLabel =
         kind === 'product'
@@ -5393,7 +5400,9 @@ async function handleApi(request, env, url) {
             ? '15 MB'
             : kind === 'video'
               ? '8 MB'
-              : '3 MB'
+              : kind === 'banner'
+                ? '5 MB'
+                : '3 MB'
       const label =
         kind === 'video'
           ? 'Video'
@@ -5401,7 +5410,9 @@ async function handleApi(request, env, url) {
             ? 'Menu file'
             : kind === 'catalog'
               ? 'Catalog file'
-              : 'Image'
+              : kind === 'banner'
+                ? 'Banner image'
+                : 'Image'
       return bad(`${label} must be under ${limitLabel}`, 413)
     }
 
@@ -5506,6 +5517,8 @@ async function handleApi(request, env, url) {
             : [],
         avatar: body.avatar ?? profile.avatar,
         logo: body.logo ?? profile.logo,
+        banner: body.banner !== undefined ? String(body.banner || '').trim() : (profile.banner || ''),
+        bio: body.bio !== undefined ? String(body.bio || '').trim().slice(0, 500) : (profile.bio || ''),
         video: body.video ?? profile.video,
         disabled: body.disabled !== undefined ? !!body.disabled : !!profile.disabled,
         updated_at: new Date().toISOString()
@@ -7304,8 +7317,10 @@ export default {
         if (!profile || profile.disabled || profile.card_type === 'table') {
           return new Response('Not found', { status: 404 })
         }
-        const displayName = String(profile.name || 'Contact').trim() || 'Contact'
-        const shortName = (displayName.split(/\s+/)[0] || displayName).slice(0, 12)
+        const companyName = String(profile.company || '').trim()
+        const personName = String(profile.name || '').trim()
+        const displayName = companyName || personName || 'Contact'
+        const shortName = (companyName || personName || 'Contact').slice(0, 16)
         const startUrl = `/c/${encodeURIComponent(slug)}`
         let iconUrl = absolutePublicUrl(url.origin, profile.avatar)
         if (!iconUrl || iconUrl.startsWith('data:')) {

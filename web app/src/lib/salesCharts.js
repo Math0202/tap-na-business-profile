@@ -9,7 +9,7 @@ const PALETTE = {
   cashOut: '#f87171',
   balance: '#38bdf8',
   pending: '#fbbf24',
-  revenue: ['#34d399', '#38bdf8', '#a78bfa'],
+  revenue: ['#34d399', '#38bdf8', '#a78bfa', '#f59e0b'],
   muted: '#71717a',
   grid: 'rgba(255,255,255,0.06)',
   text: '#a1a1aa'
@@ -18,7 +18,8 @@ const PALETTE = {
 const REVENUE_CATEGORIES = [
   { key: 'sale', label: 'Sales' },
   { key: 'tech_services', label: 'Tech Services' },
-  { key: 'investment', label: 'Investment' }
+  { key: 'investment', label: 'Investment' },
+  { key: 'transport', label: 'Transport' }
 ]
 
 function baseOptions(extra = {}) {

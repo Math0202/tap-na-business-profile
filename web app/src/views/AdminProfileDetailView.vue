@@ -47,6 +47,7 @@ const form = ref({
   name: '',
   title: '',
   company: '',
+  bio: '',
   email: '',
   phone: '',
   whatsapp: '',
@@ -115,6 +116,8 @@ function applyProfile(p) {
     feedbackUrl: p.feedbackUrl || '',
     avatar: p.avatar || '',
     logo: p.logo || '',
+    banner: p.banner || '',
+    bio: p.bio || '',
     shareSlug: p.shareSlug || '',
     remoteProfileId: p.id,
     createdAt: p.createdAt || '',
@@ -134,6 +137,7 @@ function applyProfile(p) {
     name: p.name || '',
     title: p.title || '',
     company: p.company || '',
+    bio: p.bio || '',
     email: p.email || '',
     phone: p.phone || '',
     whatsapp: p.whatsapp || '',
@@ -250,6 +254,7 @@ async function saveManage(e) {
     name: form.value.name,
     title: form.value.title,
     company: form.value.company,
+    bio: form.value.bio,
     email: form.value.email,
     phone: form.value.phone,
     whatsapp: form.value.whatsapp,
@@ -573,6 +578,21 @@ onMounted(load)
                 <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">Company / venue</label>
                 <div class="field-shell">
                   <input v-model="form.company" type="text" class="field-input" placeholder="Company">
+                </div>
+              </div>
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400">Bio / About</label>
+                  <span class="text-[10px] text-gray-500">{{ (form.bio || '').length }}/500</span>
+                </div>
+                <div class="field-shell !items-start !h-auto !py-2.5">
+                  <textarea
+                    v-model="form.bio"
+                    rows="3"
+                    maxlength="500"
+                    class="field-input !h-auto resize-none"
+                    placeholder="Short bio (saved as note on vCard)"
+                  />
                 </div>
               </div>
               <div>

@@ -51,7 +51,7 @@ function waitForInstallPrompt(timeoutMs = 2500) {
 }
 
 /** Register manifest, icons, and service worker as early as possible (page load). */
-export async function prepareProfileAppInstall({ slug, avatar, name }) {
+export async function prepareProfileAppInstall({ slug, avatar, name, company }) {
   const manifestUrl = profileManifestUrl(slug)
   if (!manifestUrl) return { ok: false, error: 'Missing profile link.' }
 
@@ -77,7 +77,8 @@ export async function prepareProfileAppInstall({ slug, avatar, name }) {
   }
   appleIcon.href = safeIcon
 
-  if (name) document.title = `${name} — tap-na`
+  const appTitle = String(company || name || '').trim()
+  if (appTitle) document.title = `${appTitle} — tap-na`
 
   if ('serviceWorker' in navigator) {
     try {

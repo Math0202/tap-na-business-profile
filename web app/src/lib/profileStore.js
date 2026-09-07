@@ -38,6 +38,8 @@ export const DEFAULT_PROFILE = {
   catalogItems: [],
   avatar: '/images/personal.png',
   logo: '',
+  banner: '',
+  bio: '',
   video: '',
   disabled: false,
   deleted: false,
@@ -304,6 +306,13 @@ export function avatarUrl(profile) {
   }
   if (profile.avatar === 'personal.png') return '/images/personal.png'
   return profile.avatar
+}
+
+export function bannerUrl(profile) {
+  if (isProfileDeleted(profile) || !profile?.banner) {
+    return '/images/background.png'
+  }
+  return profile.banner
 }
 
 export function isTableBusiness(profile) {
