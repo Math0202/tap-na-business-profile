@@ -72,6 +72,8 @@ const teamForm = ref({
   shareCatalog: false,
   shareBio: false,
   shareBanner: false,
+  shareWebsite: false,
+  shareSocialLinks: false,
   shareContacts: false,
   shareCalendarCrm: false
 })
@@ -401,6 +403,8 @@ function openCreateTeamModal() {
     shareCatalog: false,
     shareBio: false,
     shareBanner: false,
+    shareWebsite: false,
+    shareSocialLinks: false,
     shareContacts: false,
     shareCalendarCrm: false
   }
@@ -418,6 +422,8 @@ function openEditTeamModal(t) {
     shareCatalog: !!t.shareCatalog,
     shareBio: !!t.shareBio,
     shareBanner: !!t.shareBanner,
+    shareWebsite: !!t.shareWebsite,
+    shareSocialLinks: !!t.shareSocialLinks,
     shareContacts: !!t.shareContacts,
     shareCalendarCrm: !!t.shareCalendarCrm
   }
@@ -780,6 +786,18 @@ onMounted(() => {
                     </span>
                     <span
                       class="text-[10px] font-medium px-2 py-0.5 rounded-md border"
+                      :class="t.shareWebsite ? 'bg-sky-950/50 border-sky-700/60 text-sky-300' : 'bg-zinc-800/40 border-zinc-700/30 text-gray-500'"
+                    >
+                      Website
+                    </span>
+                    <span
+                      class="text-[10px] font-medium px-2 py-0.5 rounded-md border"
+                      :class="t.shareSocialLinks ? 'bg-sky-950/50 border-sky-700/60 text-sky-300' : 'bg-zinc-800/40 border-zinc-700/30 text-gray-500'"
+                    >
+                      Social Links
+                    </span>
+                    <span
+                      class="text-[10px] font-medium px-2 py-0.5 rounded-md border"
                       :class="t.shareContacts ? 'bg-emerald-950/50 border-emerald-700/60 text-emerald-300' : 'bg-zinc-800/40 border-zinc-700/30 text-gray-500'"
                     >
                       Contacts
@@ -1127,6 +1145,14 @@ onMounted(() => {
               <label class="flex items-center gap-2.5 cursor-pointer text-sm">
                 <input v-model="teamForm.shareBanner" type="checkbox" class="rounded border-zinc-700">
                 <span>Share Profile Banner with team members</span>
+              </label>
+              <label class="flex items-center gap-2.5 cursor-pointer text-sm">
+                <input v-model="teamForm.shareWebsite" type="checkbox" class="rounded border-zinc-700">
+                <span>Share Website with team members</span>
+              </label>
+              <label class="flex items-center gap-2.5 cursor-pointer text-sm">
+                <input v-model="teamForm.shareSocialLinks" type="checkbox" class="rounded border-zinc-700">
+                <span>Share Social Links with team members</span>
               </label>
               <label class="flex items-center gap-2.5 cursor-pointer text-sm">
                 <input v-model="teamForm.shareContacts" type="checkbox" class="rounded border-zinc-700">

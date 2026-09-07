@@ -36,16 +36,12 @@ const members = ref([])
 const myRole = ref(DEFAULT_PERSONAL_TYPE)
 const ownerRole = ref(DEFAULT_PERSONAL_TYPE)
 const isOwner = ref(false)
+const currentProfileId = computed(() => loadProfile()?.id || '')
 const canUseTeam = ref(true)
 const packageCeiling = ref('business')
 const pendingInvites = ref([])
 
 const teamName = ref('')
-const shareCatalog = ref(false)
-const shareBio = ref(false)
-const shareBanner = ref(false)
-const shareContacts = ref(false)
-const shareCalendarCrm = ref(false)
 const meetingTool = ref('')
 const usesCrm = ref(false)
 const crmProvider = ref('')
@@ -55,10 +51,57 @@ const addEmail = ref('')
 const addRole = ref(DEFAULT_PERSONAL_TYPE)
 const showDeleted = ref(false)
 
+const addMyChoiceOpen = ref(false)
+const addSharing = ref({
+  shareCatalog: true,
+  shareBio: true,
+  shareBanner: true,
+  shareWebsite: true,
+  shareSocialLinks: true,
+  shareContacts: true,
+  shareCalendarCrm: true
+})
+
+const confirmModal = ref({
+  isOpen: false,
+  title: '',
+  message: '',
+  confirmText: 'Confirm',
+  cancelText: 'Cancel',
+  confirmClass: 'bg-red-600 hover:bg-red-700 text-white',
+  onConfirm: null
+})
+
+function openConfirmModal({
+  title,
+  message,
+  confirmText = 'Confirm',
+  cancelText = 'Cancel',
+  confirmClass = 'bg-red-600 hover:bg-red-700 text-white',
+  onConfirm
+}) {
+  confirmModal.value = {
+    isOpen: true,
+    title,
+    message,
+    confirmText,
+    cancelText,
+    confirmClass,
+    onConfirm
+  }
+}
+
+function handleConfirmModalAction() {
+  const fn = confirmModal.value.onConfirm
+  confirmModal.value.isOpen = false
+  if (typeof fn === 'function') {
+    fn()
+  }
+}
+
 const tierGateOpen = ref(false)
 const tierGateTitle = ref('')
 const tierGateMessage = ref('')
-const transferConfirm = ref(null)
 
 function flash(msg) {
   toast.value = msg
@@ -121,11 +164,6 @@ async function refresh() {
     isOwner.value = !!res.data.isOwner
     pendingInvites.value = res.data.pendingInvites || []
     teamName.value = team.value?.name || ''
-    shareCatalog.value = !!team.value?.shareCatalog
-    shareBio.value = !!team.value?.shareBio
-    shareBanner.value = !!team.value?.shareBanner
-    shareContacts.value = !!team.value?.shareContacts
-    shareCalendarCrm.value = !!team.value?.shareCalendarCrm
     meetingTool.value = team.value?.meetingTool || ''
     usesCrm.value = !!team.value?.usesCrm
     crmProvider.value = team.value?.crmProvider || ''
@@ -195,41 +233,126 @@ async function saveIntegrations() {
   }
 }
 
-async function saveSharing(key) {
+function isAllShared(m) {
+  return (
+    !!m.shareCatalog &&
+    !!m.shareBio &&
+    !!m.shareBanner &&
+    !!m.shareWebsite &&
+    !!m.shareSocialLinks &&
+    !!m.shareContacts &&
+    !!m.shareCalendarCrm
+  )
+}
+
+function toggleMemberMyChoice(m) {
+  if (!isOwner.value) return
+  const nextVal = !isAllShared(m)
+  m.shareCatalog = nextVal
+  m.shareBio = nextVal
+  m.shareBanner = nextVal
+  m.shareWebsite = nextVal
+  m.shareSocialLinks = nextVal
+  m.shareContacts = nextVal
+  m.shareCalendarCrm = nextVal
+  updateMemberSharing(m)
+}
+
+async function updateMemberSharing(member) {
   if (!isOwner.value) return
   saving.value = true
   try {
-    const res = await apiUpdateMyTeam({
-      shareCatalog: shareCatalog.value,
-      shareBio: shareBio.value,
-      shareBanner: shareBanner.value,
-      shareContacts: shareContacts.value,
-      shareCalendarCrm: shareCalendarCrm.value
+    const res = await apiUpdateTeamMember(member.id, {
+      shareCatalog: !!member.shareCatalog,
+      shareBio: !!member.shareBio,
+      shareBanner: !!member.shareBanner,
+      shareWebsite: !!member.shareWebsite,
+      shareSocialLinks: !!member.shareSocialLinks,
+      shareContacts: !!member.shareContacts,
+      shareCalendarCrm: !!member.shareCalendarCrm
     })
     if (!res.ok) {
-      flash(res.error || 'Could not update sharing setting')
+      flash(res.error || 'Could not update member sharing')
       await refresh()
       return
     }
-    team.value = res.data.team
-    shareCatalog.value = !!res.data.team?.shareCatalog
-    shareBio.value = !!res.data.team?.shareBio
-    shareBanner.value = !!res.data.team?.shareBanner
-    shareContacts.value = !!res.data.team?.shareContacts
-    shareCalendarCrm.value = !!res.data.team?.shareCalendarCrm
-    flash('Team sharing updated')
+    flash(`Updated sharing for ${member.memberName || member.slug || 'member'}`)
+  } catch (err) {
+    flash('Failed to update member sharing')
+    await refresh()
   } finally {
     saving.value = false
   }
 }
 
-async function toggleCardStatus(member) {
+function promptApplySharingToAll(sourceMember) {
+  if (!isOwner.value) return
+  const label = sourceMember.memberName || sourceMember.slug || 'this member'
+  const activeOpts = []
+  if (sourceMember.shareCatalog) activeOpts.push('Catalog')
+  if (sourceMember.shareBio) activeOpts.push('Bio')
+  if (sourceMember.shareBanner) activeOpts.push('Banner')
+  if (sourceMember.shareWebsite) activeOpts.push('Website')
+  if (sourceMember.shareSocialLinks) activeOpts.push('Social Links')
+  if (sourceMember.shareContacts) activeOpts.push('Contacts')
+  if (sourceMember.shareCalendarCrm) activeOpts.push('Calendar & CRM')
+
+  const optsDesc = activeOpts.length ? activeOpts.join(', ') : 'No shared assets'
+
+  openConfirmModal({
+    title: 'Apply to All Members',
+    message: `Apply ${label}'s sharing settings (${optsDesc}) to all other active team members?`,
+    confirmText: 'Apply to All',
+    confirmClass: 'bg-sky-600 hover:bg-sky-700 text-white',
+    onConfirm: () => executeApplySharingToAll(sourceMember)
+  })
+}
+
+async function executeApplySharingToAll(sourceMember) {
+  if (!isOwner.value) return
+  saving.value = true
+  try {
+    const res = await apiUpdateTeamMember(sourceMember.id, {
+      action: 'apply_to_all',
+      shareCatalog: !!sourceMember.shareCatalog,
+      shareBio: !!sourceMember.shareBio,
+      shareBanner: !!sourceMember.shareBanner,
+      shareWebsite: !!sourceMember.shareWebsite,
+      shareSocialLinks: !!sourceMember.shareSocialLinks,
+      shareContacts: !!sourceMember.shareContacts,
+      shareCalendarCrm: !!sourceMember.shareCalendarCrm
+    })
+    if (!res.ok) {
+      flash(res.error || 'Could not apply sharing to all members')
+      return
+    }
+    flash('Sharing settings applied to all members')
+    await refresh()
+  } catch (err) {
+    flash('Error applying sharing to all members')
+  } finally {
+    saving.value = false
+  }
+}
+
+function promptToggleCardStatus(member) {
   if (!isOwner.value) return
   const willDisable = member.cardStatus !== 'disabled'
-  const confirmMsg = willDisable
-    ? `Deactivate card for ${member.memberName || member.slug || 'this member'}? Visitors tapping this card will see it as deactivated.`
-    : `Activate card for ${member.memberName || member.slug || 'this member'}?`
-  if (!confirm(confirmMsg)) return
+  const label = member.memberName || member.slug || 'this member'
+  openConfirmModal({
+    title: willDisable ? 'Deactivate Card' : 'Activate Card',
+    message: willDisable
+      ? `Deactivate card for ${label}?\nVisitors tapping this card will see it as deactivated.`
+      : `Activate card for ${label}? Visitors tapping this card will see the public profile.`,
+    confirmText: willDisable ? 'Deactivate Card' : 'Activate Card',
+    confirmClass: willDisable
+      ? 'bg-amber-600 hover:bg-amber-700 text-white'
+      : 'bg-emerald-600 hover:bg-emerald-700 text-white',
+    onConfirm: () => executeToggleCardStatus(member, willDisable)
+  })
+}
+
+async function executeToggleCardStatus(member, willDisable) {
   saving.value = true
   try {
     const res = await apiUpdateTeamMember(member.id, {
@@ -280,11 +403,16 @@ async function addMember() {
         ? cardType
         : addRole.value
 
-    const res = await apiAddTeamMember({
+    const payload = {
       slug,
       email: addEmail.value.trim(),
       role
-    })
+    }
+    if (addMyChoiceOpen.value) {
+      Object.assign(payload, addSharing.value)
+    }
+
+    const res = await apiAddTeamMember(payload)
     if (!res.ok) {
       const err = String(res.error || '')
       if (/executive|business|professional|role|type/i.test(err)) {
@@ -314,37 +442,73 @@ async function changeRole(member, role) {
   await refresh()
 }
 
-async function removeMember(member) {
+function promptRemoveMember(member) {
   if (!canEditMember(member)) return
-  if (!confirm(`Remove ${member.memberName || member.slug || 'this member'} from the team? You can restore them later.`)) return
-  const res = await apiUpdateTeamMember(member.id, { action: 'remove' })
-  if (!res.ok) {
-    flash(res.error || 'Could not remove member')
-    return
-  }
-  flash('Member removed')
-  await refresh()
+  const label = member.memberName || member.slug || 'this member'
+  openConfirmModal({
+    title: 'Remove Member',
+    message: `Remove ${label} from the team?\nYou can restore them later from the removed list.`,
+    confirmText: 'Remove',
+    confirmClass: 'bg-red-600 hover:bg-red-700 text-white',
+    onConfirm: () => executeRemoveMember(member)
+  })
 }
 
-async function restoreMember(member) {
+async function executeRemoveMember(member) {
+  saving.value = true
+  try {
+    const res = await apiUpdateTeamMember(member.id, { action: 'remove' })
+    if (!res.ok) {
+      flash(res.error || 'Could not remove member')
+      return
+    }
+    flash('Member removed')
+    await refresh()
+  } finally {
+    saving.value = false
+  }
+}
+
+function promptRestoreMember(member) {
   if (!isOwner.value && !canManageRole(myRole.value, member.role)) return
-  const res = await apiUpdateTeamMember(member.id, { action: 'restore' })
-  if (!res.ok) {
-    flash(res.error || 'Could not restore member')
-    return
+  const label = member.memberName || member.slug || 'this member'
+  openConfirmModal({
+    title: 'Restore Member',
+    message: `Restore ${label} to the active team list?`,
+    confirmText: 'Restore',
+    confirmClass: 'bg-emerald-600 hover:bg-emerald-700 text-white',
+    onConfirm: () => executeRestoreMember(member)
+  })
+}
+
+async function executeRestoreMember(member) {
+  saving.value = true
+  try {
+    const res = await apiUpdateTeamMember(member.id, { action: 'restore' })
+    if (!res.ok) {
+      flash(res.error || 'Could not restore member')
+      return
+    }
+    flash('Member restored')
+    await refresh()
+  } finally {
+    saving.value = false
   }
-  flash('Member restored')
-  await refresh()
 }
 
-async function transferOwnership(member) {
+function promptTransferOwnership(member) {
   if (!isOwner.value || !member?.profileId) return
-  transferConfirm.value = member
+  const label = member.memberName || member.slug || 'this member'
+  openConfirmModal({
+    title: 'Transfer Team Ownership',
+    message: `Make ${label} the team leader?\nYou will transfer ownership and become a regular team member.`,
+    confirmText: 'Transfer Ownership',
+    confirmClass: 'bg-sky-600 hover:bg-sky-700 text-white',
+    onConfirm: () => executeTransferOwnership(member)
+  })
 }
 
-async function confirmTransfer() {
-  const member = transferConfirm.value
-  if (!member?.id) return
+async function executeTransferOwnership(member) {
   saving.value = true
   try {
     const res = await apiTransferTeamOwnership(member.id)
@@ -352,7 +516,6 @@ async function confirmTransfer() {
       flash(res.error || 'Could not transfer ownership')
       return
     }
-    transferConfirm.value = null
     flash('Ownership transferred')
     await refresh()
   } finally {
@@ -448,105 +611,6 @@ onMounted(() => {
             Save name
           </button>
 
-          <!-- Team Sharing Settings -->
-          <div class="pt-3 border-t border-zinc-800 space-y-3">
-            <h3 class="text-xs uppercase tracking-wider font-bold text-gray-400">Team Sharing &amp; Visibility</h3>
-
-            <div v-if="isOwner" class="space-y-3">
-              <label class="flex items-start gap-3 cursor-pointer">
-                <input
-                  v-model="shareCatalog"
-                  type="checkbox"
-                  class="mt-1 rounded border-zinc-600"
-                  :disabled="saving"
-                  @change="saveSharing('catalog')"
-                >
-                <span class="min-w-0">
-                  <span class="block text-sm font-semibold">Share catalog with team</span>
-                  <span class="block text-xs text-gray-400 mt-0.5 leading-relaxed">
-                    Active team members show your catalog items on their cards. Quotes go to the member whose card was scanned.
-                  </span>
-                </span>
-              </label>
-
-              <label class="flex items-start gap-3 cursor-pointer">
-                <input
-                  v-model="shareBio"
-                  type="checkbox"
-                  class="mt-1 rounded border-zinc-600"
-                  :disabled="saving"
-                  @change="saveSharing('bio')"
-                >
-                <span class="min-w-0">
-                  <span class="block text-sm font-semibold">Share company bio with team</span>
-                  <span class="block text-xs text-gray-400 mt-0.5 leading-relaxed">
-                    Team members show your company bio/introduction on their public cards.
-                  </span>
-                </span>
-              </label>
-
-              <label class="flex items-start gap-3 cursor-pointer">
-                <input
-                  v-model="shareBanner"
-                  type="checkbox"
-                  class="mt-1 rounded border-zinc-600"
-                  :disabled="saving"
-                  @change="saveSharing('banner')"
-                >
-                <span class="min-w-0">
-                  <span class="block text-sm font-semibold">Share profile banner with team</span>
-                  <span class="block text-xs text-gray-400 mt-0.5 leading-relaxed">
-                    Team members display your company header banner on their public cards.
-                  </span>
-                </span>
-              </label>
-
-              <label class="flex items-start gap-3 cursor-pointer">
-                <input
-                  v-model="shareContacts"
-                  type="checkbox"
-                  class="mt-1 rounded border-zinc-600"
-                  :disabled="saving"
-                  @change="saveSharing('contacts')"
-                >
-                <span class="min-w-0">
-                  <span class="block text-sm font-semibold">Share contacts across team</span>
-                  <span class="block text-xs text-gray-400 mt-0.5 leading-relaxed">
-                    When enabled, all team members can see connections collected by any team member. When disabled, members see only their own.
-                  </span>
-                </span>
-              </label>
-
-              <label class="flex items-start gap-3 cursor-pointer">
-                <input
-                  v-model="shareCalendarCrm"
-                  type="checkbox"
-                  class="mt-1 rounded border-zinc-600"
-                  :disabled="saving"
-                  @change="saveSharing('calendarCrm')"
-                >
-                <span class="min-w-0">
-                  <span class="block text-sm font-semibold">Share calendar &amp; CRM settings with team</span>
-                  <span class="block text-xs text-gray-400 mt-0.5 leading-relaxed">
-                    When enabled, team members inherit your meeting calendar and CRM integration for client bookings and contact additions.
-                  </span>
-                </span>
-              </label>
-            </div>
-
-            <div v-else class="space-y-1.5 text-xs text-sky-300/90 leading-relaxed bg-sky-950/30 border border-sky-900/40 rounded-xl p-3">
-              <p class="font-medium text-sky-200">Shared by team owner:</p>
-              <ul class="list-disc list-inside space-y-1 text-sky-300">
-                <li v-if="shareCatalog">Team catalog is displayed on your card</li>
-                <li v-if="shareBio">Company bio is displayed on your card</li>
-                <li v-if="shareBanner">Company banner is displayed on your card</li>
-                <li v-if="shareContacts">Team-wide contacts are visible in your Contacts tab</li>
-                <li v-if="shareCalendarCrm">Calendar &amp; CRM settings are shared with your card</li>
-                <li v-if="!shareCatalog && !shareBio && !shareBanner && !shareContacts && !shareCalendarCrm" class="list-none text-gray-400">No shared team assets currently enabled</li>
-              </ul>
-            </div>
-          </div>
-
           <p v-if="isOwner" class="text-xs text-gray-300 font-medium pt-1">
             You are the team leader.
           </p>
@@ -559,35 +623,19 @@ onMounted(() => {
         <div class="card-item-bg rounded-2xl p-4 mb-4 space-y-3">
           <div class="flex items-center justify-between gap-2 flex-wrap">
             <h2 class="text-sm font-semibold">Meeting calendar &amp; CRM</h2>
-            <label v-if="isOwner" class="inline-flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
-              <input
-                v-model="shareCalendarCrm"
-                type="checkbox"
-                class="rounded border-zinc-600"
-                :disabled="saving"
-                @change="saveSharing('calendarCrm')"
-              >
-              <span>Share with team</span>
-            </label>
           </div>
 
           <template v-if="isOwner">
             <p v-if="!meetingTool" class="text-xs text-amber-300/90 leading-relaxed">
               Choose a meeting calendar so booking emails include your calendar button.
             </p>
-            <p v-else-if="shareCalendarCrm" class="text-xs text-emerald-400 leading-relaxed">
-              Active team members will inherit these settings on their public cards and emails.
-            </p>
             <p v-else class="text-xs text-gray-400 leading-relaxed">
-              Sharing is off. These settings apply only to your own card.
+              Manage calendar and CRM access for each member individually below.
             </p>
           </template>
           <template v-else>
-            <p v-if="shareCalendarCrm" class="text-xs text-emerald-400 leading-relaxed">
-              Inherited from the team leader. Members are not asked to set this again.
-            </p>
-            <p v-else class="text-xs text-gray-400 leading-relaxed">
-              Calendar &amp; CRM sharing is currently disabled by the team leader.
+            <p class="text-xs text-emerald-400 leading-relaxed">
+              Inherited from the team leader when enabled for your card.
             </p>
           </template>
           <TeamIntegrationsFields
@@ -620,6 +668,56 @@ onMounted(() => {
           <select v-model="addRole" class="field-input w-full bg-transparent">
             <option v-for="r in roleOptions" :key="r.id" :value="r.id">{{ r.label }}</option>
           </select>
+
+          <!-- Member My Choice Toggle Button for Add Member -->
+          <div class="pt-1">
+            <button
+              type="button"
+              class="w-full py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-between border transition"
+              :class="addMyChoiceOpen ? 'bg-zinc-800 text-sky-300 border-zinc-700' : 'bg-zinc-900/60 text-gray-400 border-zinc-800 hover:text-gray-200'"
+              @click="addMyChoiceOpen = !addMyChoiceOpen"
+            >
+              <span class="flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-[16px]">tune</span>
+                <span>Member sharing: {{ addMyChoiceOpen ? 'My choice (custom)' : 'All shared (default)' }}</span>
+              </span>
+              <span class="material-symbols-outlined text-[16px]">{{ addMyChoiceOpen ? 'expand_less' : 'expand_more' }}</span>
+            </button>
+            <div v-if="addMyChoiceOpen" class="mt-2.5 p-3 rounded-xl bg-zinc-900/90 border border-zinc-800 space-y-2">
+              <p class="text-[11px] text-gray-400">Choose what to share with this new member:</p>
+              <div class="grid grid-cols-2 gap-1.5 text-xs">
+                <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-zinc-800/60 border border-zinc-700/60">
+                  <input v-model="addSharing.shareCatalog" type="checkbox" class="rounded border-zinc-600 text-sky-500">
+                  <span class="text-gray-200">Catalog</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-zinc-800/60 border border-zinc-700/60">
+                  <input v-model="addSharing.shareBio" type="checkbox" class="rounded border-zinc-600 text-sky-500">
+                  <span class="text-gray-200">Company Bio</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-zinc-800/60 border border-zinc-700/60">
+                  <input v-model="addSharing.shareBanner" type="checkbox" class="rounded border-zinc-600 text-sky-500">
+                  <span class="text-gray-200">Profile Banner</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-zinc-800/60 border border-zinc-700/60">
+                  <input v-model="addSharing.shareWebsite" type="checkbox" class="rounded border-zinc-600 text-sky-500">
+                  <span class="text-gray-200">Website</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-zinc-800/60 border border-zinc-700/60">
+                  <input v-model="addSharing.shareSocialLinks" type="checkbox" class="rounded border-zinc-600 text-sky-500">
+                  <span class="text-gray-200">Social Links</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-zinc-800/60 border border-zinc-700/60">
+                  <input v-model="addSharing.shareContacts" type="checkbox" class="rounded border-zinc-600 text-sky-500">
+                  <span class="text-gray-200">Team Contacts</span>
+                </label>
+                <label class="col-span-2 flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-zinc-800/60 border border-zinc-700/60">
+                  <input v-model="addSharing.shareCalendarCrm" type="checkbox" class="rounded border-zinc-600 text-sky-500">
+                  <span class="text-gray-200">Calendar &amp; CRM</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
           <button
             type="button"
             class="w-full py-3 rounded-full bg-white text-black text-sm font-bold disabled:opacity-50"
@@ -680,11 +778,123 @@ onMounted(() => {
                 class="py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"
                 :class="m.cardStatus === 'disabled' ? 'bg-emerald-950/70 border border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/60' : 'bg-zinc-800/90 border border-zinc-700 text-amber-300 hover:bg-zinc-700'"
                 :disabled="saving"
-                @click="toggleCardStatus(m)"
+                @click="promptToggleCardStatus(m)"
               >
                 <span class="material-symbols-outlined text-[16px]">{{ m.cardStatus === 'disabled' ? 'check_circle' : 'block' }}</span>
                 <span>{{ m.cardStatus === 'disabled' ? 'Activate Card' : 'Deactivate Card' }}</span>
               </button>
+
+              <!-- Individual Member Sharing Checkboxes (Team Owner) -->
+              <div
+                v-if="isOwner && m.profileId !== team?.ownerProfileId && !m.deleted"
+                class="pt-3 pb-1 border-t border-zinc-800 space-y-2"
+              >
+                <div class="flex items-center justify-between">
+                  <span class="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                    Shared with this member
+                  </span>
+                  <button
+                    type="button"
+                    class="text-[11px] font-semibold px-2 py-0.5 rounded-full border transition flex items-center gap-1"
+                    :class="isAllShared(m) ? 'bg-sky-950 text-sky-300 border-sky-700/60' : 'bg-zinc-800 text-gray-300 border-zinc-700'"
+                    :disabled="saving"
+                    @click="toggleMemberMyChoice(m)"
+                  >
+                    <span class="material-symbols-outlined text-[13px]">{{ isAllShared(m) ? 'select_all' : 'tune' }}</span>
+                    <span>{{ isAllShared(m) ? 'All Shared' : 'My Choice' }}</span>
+                  </button>
+                </div>
+                <div class="grid grid-cols-2 gap-1.5 text-xs">
+                  <label class="flex items-center gap-2 cursor-pointer bg-zinc-900/80 hover:bg-zinc-800/80 p-2.5 rounded-xl border border-zinc-800/80 transition-colors">
+                    <input
+                      v-model="m.shareCatalog"
+                      type="checkbox"
+                      class="rounded border-zinc-600 text-sky-500 focus:ring-0 focus:ring-offset-0"
+                      :disabled="saving"
+                      @change="updateMemberSharing(m)"
+                    >
+                    <span class="text-gray-200">Catalog</span>
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer bg-zinc-900/80 hover:bg-zinc-800/80 p-2.5 rounded-xl border border-zinc-800/80 transition-colors">
+                    <input
+                      v-model="m.shareBio"
+                      type="checkbox"
+                      class="rounded border-zinc-600 text-sky-500 focus:ring-0 focus:ring-offset-0"
+                      :disabled="saving"
+                      @change="updateMemberSharing(m)"
+                    >
+                    <span class="text-gray-200">Company Bio</span>
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer bg-zinc-900/80 hover:bg-zinc-800/80 p-2.5 rounded-xl border border-zinc-800/80 transition-colors">
+                    <input
+                      v-model="m.shareBanner"
+                      type="checkbox"
+                      class="rounded border-zinc-600 text-sky-500 focus:ring-0 focus:ring-offset-0"
+                      :disabled="saving"
+                      @change="updateMemberSharing(m)"
+                    >
+                    <span class="text-gray-200">Profile Banner</span>
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer bg-zinc-900/80 hover:bg-zinc-800/80 p-2.5 rounded-xl border border-zinc-800/80 transition-colors">
+                    <input
+                      v-model="m.shareWebsite"
+                      type="checkbox"
+                      class="rounded border-zinc-600 text-sky-500 focus:ring-0 focus:ring-offset-0"
+                      :disabled="saving"
+                      @change="updateMemberSharing(m)"
+                    >
+                    <span class="text-gray-200">Website</span>
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer bg-zinc-900/80 hover:bg-zinc-800/80 p-2.5 rounded-xl border border-zinc-800/80 transition-colors">
+                    <input
+                      v-model="m.shareSocialLinks"
+                      type="checkbox"
+                      class="rounded border-zinc-600 text-sky-500 focus:ring-0 focus:ring-offset-0"
+                      :disabled="saving"
+                      @change="updateMemberSharing(m)"
+                    >
+                    <span class="text-gray-200">Social Links</span>
+                  </label>
+                  <label class="flex items-center gap-2 cursor-pointer bg-zinc-900/80 hover:bg-zinc-800/80 p-2.5 rounded-xl border border-zinc-800/80 transition-colors">
+                    <input
+                      v-model="m.shareContacts"
+                      type="checkbox"
+                      class="rounded border-zinc-600 text-sky-500 focus:ring-0 focus:ring-offset-0"
+                      :disabled="saving"
+                      @change="updateMemberSharing(m)"
+                    >
+                    <span class="text-gray-200">Team Contacts</span>
+                  </label>
+                  <label class="col-span-2 flex items-center gap-2 cursor-pointer bg-zinc-900/80 hover:bg-zinc-800/80 p-2.5 rounded-xl border border-zinc-800/80 transition-colors">
+                    <input
+                      v-model="m.shareCalendarCrm"
+                      type="checkbox"
+                      class="rounded border-zinc-600 text-sky-500 focus:ring-0 focus:ring-offset-0"
+                      :disabled="saving"
+                      @change="updateMemberSharing(m)"
+                    >
+                    <span class="text-gray-200">Calendar &amp; CRM</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Member's own view of shared assets (when non-owner views their own entry) -->
+              <div
+                v-else-if="!isOwner && m.profileId === currentProfileId && !m.deleted"
+                class="pt-2.5 border-t border-zinc-800 text-[11px] space-y-1.5"
+              >
+                <span class="text-gray-400 font-medium">Shared with you:</span>
+                <div class="flex flex-wrap gap-1.5">
+                  <span v-if="m.shareCatalog" class="px-2 py-0.5 rounded-full bg-sky-950/70 border border-sky-800/50 text-sky-300">Catalog</span>
+                  <span v-if="m.shareBio" class="px-2 py-0.5 rounded-full bg-sky-950/70 border border-sky-800/50 text-sky-300">Bio</span>
+                  <span v-if="m.shareBanner" class="px-2 py-0.5 rounded-full bg-sky-950/70 border border-sky-800/50 text-sky-300">Banner</span>
+                  <span v-if="m.shareWebsite" class="px-2 py-0.5 rounded-full bg-sky-950/70 border border-sky-800/50 text-sky-300">Website</span>
+                  <span v-if="m.shareSocialLinks" class="px-2 py-0.5 rounded-full bg-sky-950/70 border border-sky-800/50 text-sky-300">Social Links</span>
+                  <span v-if="m.shareContacts" class="px-2 py-0.5 rounded-full bg-sky-950/70 border border-sky-800/50 text-sky-300">Contacts</span>
+                  <span v-if="m.shareCalendarCrm" class="px-2 py-0.5 rounded-full bg-sky-950/70 border border-sky-800/50 text-sky-300">Calendar &amp; CRM</span>
+                  <span v-if="!m.shareCatalog && !m.shareBio && !m.shareBanner && !m.shareWebsite && !m.shareSocialLinks && !m.shareContacts && !m.shareCalendarCrm" class="text-gray-500">None</span>
+                </div>
+              </div>
 
               <button
                 v-if="canEditMember(m) && m.profileId === team?.ownerProfileId"
@@ -697,25 +907,42 @@ onMounted(() => {
               <button
                 v-else-if="isOwner && m.status === 'active' && m.profileId && m.profileId !== team?.ownerProfileId && !m.deleted"
                 type="button"
-                class="py-2 rounded-xl bg-zinc-800 text-sm text-sky-300"
+                class="py-2 rounded-xl bg-zinc-800 text-sm text-sky-300 hover:bg-zinc-700 transition"
                 :disabled="saving"
-                @click="transferOwnership(m)"
+                @click="promptTransferOwnership(m)"
               >
                 Make owner
               </button>
-              <button
-                v-if="canEditMember(m) && m.profileId !== team?.ownerProfileId"
-                type="button"
-                class="py-2 rounded-xl bg-zinc-800 text-sm text-red-300"
-                @click="removeMember(m)"
-              >
-                Remove
-              </button>
+
+              <!-- Apply to all members button next to Remove -->
+              <div v-if="canEditMember(m) && m.profileId !== team?.ownerProfileId && !m.deleted" class="flex gap-2">
+                <button
+                  v-if="isOwner"
+                  type="button"
+                  class="flex-1 py-2 px-3 rounded-xl bg-zinc-800 text-xs font-semibold text-sky-300 hover:bg-zinc-700 border border-zinc-700 flex items-center justify-center gap-1.5 transition disabled:opacity-50"
+                  :disabled="saving"
+                  @click="promptApplySharingToAll(m)"
+                >
+                  <span class="material-symbols-outlined text-[15px]">sync</span>
+                  <span>Apply to all members</span>
+                </button>
+                <button
+                  type="button"
+                  class="py-2 px-3 rounded-xl bg-zinc-800 text-xs font-semibold text-red-300 hover:bg-zinc-700 border border-zinc-700 flex items-center justify-center gap-1 transition shrink-0 disabled:opacity-50"
+                  :disabled="saving"
+                  @click="promptRemoveMember(m)"
+                >
+                  <span class="material-symbols-outlined text-[15px]">person_remove</span>
+                  <span>Remove</span>
+                </button>
+              </div>
+
               <button
                 v-else-if="m.deleted && (isOwner || canManageRole(myRole, m.role))"
                 type="button"
-                class="py-2 rounded-xl bg-zinc-800 text-sm text-emerald-300"
-                @click="restoreMember(m)"
+                class="py-2 rounded-xl bg-zinc-800 text-sm text-emerald-300 hover:bg-zinc-700 transition"
+                :disabled="saving"
+                @click="promptRestoreMember(m)"
               >
                 Restore
               </button>
@@ -731,6 +958,42 @@ onMounted(() => {
         >
           {{ toast }}
         </p>
+      </Teleport>
+
+      <!-- Normalized Popup Confirmation Dialog -->
+      <Teleport to="body">
+        <div
+          v-if="confirmModal.isOpen"
+          class="app-dialog-overlay fixed inset-0 z-[230] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          @click.self="confirmModal.isOpen = false"
+        >
+          <div class="w-full max-w-sm rounded-2xl bg-zinc-900 border border-zinc-700 p-5 shadow-2xl space-y-4">
+            <h3 class="text-base font-bold text-white tracking-tight">
+              {{ confirmModal.title }}
+            </h3>
+            <p class="text-xs text-gray-300 leading-relaxed whitespace-pre-line">
+              {{ confirmModal.message }}
+            </p>
+            <div class="flex gap-2 pt-2">
+              <button
+                type="button"
+                class="flex-1 py-2.5 rounded-xl bg-zinc-800 text-xs font-semibold text-gray-300 hover:bg-zinc-700 transition"
+                @click="confirmModal.isOpen = false"
+              >
+                {{ confirmModal.cancelText }}
+              </button>
+              <button
+                type="button"
+                class="flex-1 py-2.5 rounded-xl text-xs font-bold transition disabled:opacity-50"
+                :class="confirmModal.confirmClass"
+                :disabled="saving"
+                @click="handleConfirmModalAction"
+              >
+                {{ confirmModal.confirmText }}
+              </button>
+            </div>
+          </div>
+        </div>
       </Teleport>
 
       <Teleport to="body">
@@ -756,41 +1019,6 @@ onMounted(() => {
             >
               Got it
             </button>
-          </div>
-        </div>
-      </Teleport>
-
-      <Teleport to="body">
-        <div
-          v-if="transferConfirm"
-          class="app-dialog-overlay fixed inset-0 z-[210] flex items-end sm:items-center justify-center p-4"
-          @click.self="transferConfirm = null"
-        >
-          <div class="w-full max-w-sm rounded-2xl bg-zinc-900 border border-zinc-700 p-5 shadow-xl">
-            <h2 class="text-lg font-bold tracking-tight">Transfer ownership?</h2>
-            <p class="text-sm text-gray-400 mt-2 leading-relaxed">
-              Make
-              <strong class="text-gray-200">{{ transferConfirm.memberName || transferConfirm.slug || 'this member' }}</strong>
-              the team owner. You’ll keep your seat as a normal member and lose owner controls.
-            </p>
-            <div class="mt-5 flex gap-2">
-              <button
-                type="button"
-                class="flex-1 py-3 rounded-full bg-zinc-800 text-sm font-semibold"
-                :disabled="saving"
-                @click="transferConfirm = null"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                class="flex-1 py-3 rounded-full bg-white text-black text-sm font-bold disabled:opacity-50"
-                :disabled="saving"
-                @click="confirmTransfer"
-              >
-                {{ saving ? 'Transferring…' : 'Transfer' }}
-              </button>
-            </div>
           </div>
         </div>
       </Teleport>

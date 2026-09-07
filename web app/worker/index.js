@@ -1330,6 +1330,14 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
   const personalType = row.card_type === 'table' ? '' : personalHit?.personalType || 'business'
   let banner = row.banner || ''
   let bio = row.bio || ''
+  let website = row.website || ''
+  let whatsapp = row.whatsapp || ''
+  let linkedin = row.linkedin || ''
+  let youtube = row.youtube || ''
+  let x = row.x || ''
+  let facebook = row.facebook || ''
+  let instagram = row.instagram || ''
+  let tiktok = row.tiktok || ''
   try {
     const sharedAssets = await resolveSharedTeamAssetsForProfile(env, row.id)
     if (sharedAssets) {
@@ -1338,6 +1346,19 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
       }
       if (sharedAssets.shareBio && sharedAssets.bio) {
         bio = sharedAssets.bio
+      }
+      if (sharedAssets.shareWebsite && sharedAssets.website) {
+        website = sharedAssets.website
+      }
+      if (sharedAssets.shareSocialLinks && sharedAssets.socialLinks) {
+        const sl = sharedAssets.socialLinks
+        if (sl.whatsapp) whatsapp = sl.whatsapp
+        if (sl.linkedin) linkedin = sl.linkedin
+        if (sl.youtube) youtube = sl.youtube
+        if (sl.x) x = sl.x
+        if (sl.facebook) facebook = sl.facebook
+        if (sl.instagram) instagram = sl.instagram
+        if (sl.tiktok) tiktok = sl.tiktok
       }
     }
   } catch {}
@@ -1350,14 +1371,14 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
     company: row.company,
     phone: row.phone,
     email: row.email,
-    whatsapp: row.whatsapp,
-    linkedin: row.linkedin,
-    youtube: row.youtube,
-    x: row.x,
-    facebook: row.facebook || '',
-    instagram: row.instagram,
-    tiktok: row.tiktok,
-    website: row.website,
+    whatsapp,
+    linkedin,
+    youtube,
+    x,
+    facebook,
+    instagram,
+    tiktok,
+    website,
     address: row.address,
     menuUrl: row.menu_url,
     menuPdf: row.menu_pdf || '',
@@ -1601,6 +1622,8 @@ function mapTeamRow(row) {
     shareCatalog: row.share_catalog === true,
     shareBio: row.share_bio === true,
     shareBanner: row.share_banner === true,
+    shareWebsite: row.share_website === true,
+    shareSocialLinks: row.share_social_links === true,
     shareContacts: row.share_contacts === true,
     shareCalendarCrm: row.share_calendar_crm === true,
     meetingTool: String(row.meeting_tool || '').trim().toLowerCase(),
@@ -1622,6 +1645,13 @@ function mapTeamMemberRow(row) {
     role: normalizePersonalType(row.role),
     status: row.status || 'pending_claim',
     cardStatus: row.card_status || 'linked',
+    shareCatalog: row.share_catalog === true,
+    shareBio: row.share_bio === true,
+    shareBanner: row.share_banner === true,
+    shareWebsite: row.share_website === true,
+    shareSocialLinks: row.share_social_links === true,
+    shareContacts: row.share_contacts === true,
+    shareCalendarCrm: row.share_calendar_crm === true,
     inviteEmail: row.invite_email || '',
     invitedByProfileId: row.invited_by_profile_id || '',
     joinedAt: row.joined_at || null,
@@ -1926,7 +1956,7 @@ async function resolveSharedTeamAssetsForProfile(env, profileId) {
   if (!id) return null
   const memberships = await sb(
     env,
-    `team_members?profile_id=eq.${encodeURIComponent(id)}&deleted=eq.false&status=eq.active&select=team_id&limit=20`
+    `team_members?profile_id=eq.${encodeURIComponent(id)}&deleted=eq.false&status=eq.active&select=team_id,share_catalog,share_bio,share_banner,share_website,share_social_links,share_contacts,share_calendar_crm&limit=20`
   )
   const teamIds = [...new Set((memberships || []).map((m) => m.team_id).filter(Boolean))]
   if (!teamIds.length) return null
@@ -1936,13 +1966,23 @@ async function resolveSharedTeamAssetsForProfile(env, profileId) {
   )
   const team = (teams || []).find((t) => t.owner_profile_id && t.owner_profile_id !== id) || null
   if (!team) return null
+  const membership = (memberships || []).find((m) => m.team_id === team.id)
   const owners = await sb(
     env,
-    `profiles?id=eq.${encodeURIComponent(team.owner_profile_id)}&select=id,name,company,catalog_items,bio,banner,disabled`
+    `profiles?id=eq.${encodeURIComponent(team.owner_profile_id)}&select=id,name,company,catalog_items,bio,banner,disabled,website,whatsapp,linkedin,youtube,x,facebook,instagram,tiktok`
   )
   const owner = owners?.[0]
   if (!owner || owner.disabled) return null
-  const items = team.share_catalog === true
+
+  const canShareCatalog = membership?.share_catalog === true
+  const canShareBio = membership?.share_bio === true
+  const canShareBanner = membership?.share_banner === true
+  const canShareWebsite = membership?.share_website === true
+  const canShareSocialLinks = membership?.share_social_links === true
+  const canShareContacts = membership?.share_contacts === true
+  const canShareCalendarCrm = membership?.share_calendar_crm === true
+
+  const items = canShareCatalog
     ? normalizeCatalogItems(owner.catalog_items).filter((x) => x.active !== false)
     : null
   return {
@@ -1950,14 +1990,28 @@ async function resolveSharedTeamAssetsForProfile(env, profileId) {
     teamName: team.name || 'Team',
     ownerId: owner.id,
     ownerName: String(owner.name || owner.company || 'Team owner').trim() || 'Team owner',
-    shareCatalog: team.share_catalog === true,
-    shareBio: team.share_bio === true,
-    shareBanner: team.share_banner === true,
-    shareContacts: team.share_contacts === true,
-    shareCalendarCrm: team.share_calendar_crm === true,
+    shareCatalog: canShareCatalog,
+    shareBio: canShareBio,
+    shareBanner: canShareBanner,
+    shareWebsite: canShareWebsite,
+    shareSocialLinks: canShareSocialLinks,
+    shareContacts: canShareContacts,
+    shareCalendarCrm: canShareCalendarCrm,
     catalogItems: items,
-    bio: team.share_bio === true ? (owner.bio || '') : null,
-    banner: team.share_banner === true ? (owner.banner || '') : null
+    bio: canShareBio ? (owner.bio || '') : null,
+    banner: canShareBanner ? (owner.banner || '') : null,
+    website: canShareWebsite ? (owner.website || '') : null,
+    socialLinks: canShareSocialLinks
+      ? {
+          whatsapp: owner.whatsapp || '',
+          linkedin: owner.linkedin || '',
+          youtube: owner.youtube || '',
+          x: owner.x || '',
+          facebook: owner.facebook || '',
+          instagram: owner.instagram || '',
+          tiktok: owner.tiktok || ''
+        }
+      : null
   }
 }
 
@@ -2392,7 +2446,7 @@ async function teamIntegrationsForProfile(env, profileId) {
   if (!id) return null
   const mems = await sb(
     env,
-    `team_members?profile_id=eq.${encodeURIComponent(id)}&deleted=eq.false&status=eq.active&select=team_id&limit=10`
+    `team_members?profile_id=eq.${encodeURIComponent(id)}&deleted=eq.false&status=eq.active&select=team_id,share_calendar_crm&limit=10`
   )
   const teamIds = [...new Set((mems || []).map((m) => m.team_id).filter(Boolean))]
   if (!teamIds.length) {
@@ -2409,11 +2463,11 @@ async function teamIntegrationsForProfile(env, profileId) {
   const ownedTeam = (teams || []).find((t) => t.owner_profile_id === id)
   if (ownedTeam) return mapTeamRow(ownedTeam)
 
-  const memberTeam = teams?.[0]
+  const activeMem = (mems || []).find((m) => m.share_calendar_crm === true)
+  if (!activeMem) return null
+
+  const memberTeam = (teams || []).find((t) => t.id === activeMem.team_id)
   if (!memberTeam) return null
-  if (memberTeam.share_calendar_crm !== true) {
-    return null
-  }
   return mapTeamRow(memberTeam)
 }
 
@@ -3842,6 +3896,13 @@ async function handleApi(request, env, url) {
         slug,
         role: defaultRole,
         status,
+        share_catalog: body?.shareCatalog !== undefined ? !!body.shareCatalog : (team.share_catalog === true),
+        share_bio: body?.shareBio !== undefined ? !!body.shareBio : (team.share_bio === true),
+        share_banner: body?.shareBanner !== undefined ? !!body.shareBanner : (team.share_banner === true),
+        share_website: body?.shareWebsite !== undefined ? !!body.shareWebsite : (team.share_website === true),
+        share_social_links: body?.shareSocialLinks !== undefined ? !!body.shareSocialLinks : (team.share_social_links === true),
+        share_contacts: body?.shareContacts !== undefined ? !!body.shareContacts : (team.share_contacts === true),
+        share_calendar_crm: body?.shareCalendarCrm !== undefined ? !!body.shareCalendarCrm : (team.share_calendar_crm === true),
         invite_email: inviteEmail,
         invited_by_profile_id: profile.id,
         invite_token: uid('tinv'),
@@ -4028,6 +4089,82 @@ async function handleApi(request, env, url) {
         prefer: 'return=minimal'
       })
       return json({ ok: true, id: memberId, cardStatus: targetStatus })
+    }
+
+    // Apply member sharing settings to all other active team members (team owner only)
+    if (body?.action === 'apply_to_all' || body?.action === 'apply_sharing_to_all') {
+      if (!isOwner) return bad('Only the team owner can manage member sharing', 403)
+      const now = new Date().toISOString()
+      const patch = {
+        share_catalog: member.share_catalog === true,
+        share_bio: member.share_bio === true,
+        share_banner: member.share_banner === true,
+        share_website: member.share_website === true,
+        share_social_links: member.share_social_links === true,
+        share_contacts: member.share_contacts === true,
+        share_calendar_crm: member.share_calendar_crm === true,
+        updated_at: now
+      }
+      if (body?.shareCatalog !== undefined) patch.share_catalog = !!body.shareCatalog
+      if (body?.shareBio !== undefined) patch.share_bio = !!body.shareBio
+      if (body?.shareBanner !== undefined) patch.share_banner = !!body.shareBanner
+      if (body?.shareWebsite !== undefined) patch.share_website = !!body.shareWebsite
+      if (body?.shareSocialLinks !== undefined) patch.share_social_links = !!body.shareSocialLinks
+      if (body?.shareContacts !== undefined) patch.share_contacts = !!body.shareContacts
+      if (body?.shareCalendarCrm !== undefined) patch.share_calendar_crm = !!body.shareCalendarCrm
+
+      await sb(
+        env,
+        `team_members?team_id=eq.${encodeURIComponent(team.id)}&profile_id=neq.${encodeURIComponent(team.owner_profile_id)}&deleted=eq.false`,
+        {
+          method: 'PATCH',
+          body: patch,
+          prefer: 'return=minimal'
+        }
+      )
+      return json({ ok: true, id: memberId, applied: true })
+    }
+
+    // Update individual member sharing settings (team owner only)
+    if (
+      body?.shareCatalog !== undefined || body?.share_catalog !== undefined ||
+      body?.shareBio !== undefined || body?.share_bio !== undefined ||
+      body?.shareBanner !== undefined || body?.share_banner !== undefined ||
+      body?.shareWebsite !== undefined || body?.share_website !== undefined ||
+      body?.shareSocialLinks !== undefined || body?.share_social_links !== undefined ||
+      body?.shareContacts !== undefined || body?.share_contacts !== undefined ||
+      body?.shareCalendarCrm !== undefined || body?.share_calendar_crm !== undefined
+    ) {
+      if (!isOwner) return bad('Only the team owner can manage member sharing', 403)
+      const patch = { updated_at: new Date().toISOString() }
+      if (body?.shareCatalog !== undefined || body?.share_catalog !== undefined) {
+        patch.share_catalog = !!(body.shareCatalog ?? body.share_catalog)
+      }
+      if (body?.shareBio !== undefined || body?.share_bio !== undefined) {
+        patch.share_bio = !!(body.shareBio ?? body.share_bio)
+      }
+      if (body?.shareBanner !== undefined || body?.share_banner !== undefined) {
+        patch.share_banner = !!(body.shareBanner ?? body.share_banner)
+      }
+      if (body?.shareWebsite !== undefined || body?.share_website !== undefined) {
+        patch.share_website = !!(body.shareWebsite ?? body.share_website)
+      }
+      if (body?.shareSocialLinks !== undefined || body?.share_social_links !== undefined) {
+        patch.share_social_links = !!(body.shareSocialLinks ?? body.share_social_links)
+      }
+      if (body?.shareContacts !== undefined || body?.share_contacts !== undefined) {
+        patch.share_contacts = !!(body.shareContacts ?? body.share_contacts)
+      }
+      if (body?.shareCalendarCrm !== undefined || body?.share_calendar_crm !== undefined) {
+        patch.share_calendar_crm = !!(body.shareCalendarCrm ?? body.share_calendar_crm)
+      }
+      await sb(env, `team_members?id=eq.${encodeURIComponent(memberId)}`, {
+        method: 'PATCH',
+        body: patch,
+        prefer: 'return=minimal'
+      })
+      const updatedMem = await sb(env, `team_members?id=eq.${encodeURIComponent(memberId)}&select=*`)
+      return json({ ok: true, id: memberId, member: mapTeamMemberRow(updatedMem?.[0] || { ...member, ...patch }) })
     }
 
     // Members cannot leave after accepting
@@ -5541,6 +5678,8 @@ async function handleApi(request, env, url) {
         share_catalog: !!body?.shareCatalog,
         share_bio: !!body?.shareBio,
         share_banner: !!body?.shareBanner,
+        share_website: !!body?.shareWebsite,
+        share_social_links: !!body?.shareSocialLinks,
         share_contacts: !!body?.shareContacts,
         share_calendar_crm: !!(body?.shareCalendarCrm ?? body?.share_calendar_crm),
         created_at: now,
@@ -5559,6 +5698,13 @@ async function handleApi(request, env, url) {
         slug: '',
         role: ceiling,
         status: 'active',
+        share_catalog: !!body?.shareCatalog,
+        share_bio: !!body?.shareBio,
+        share_banner: !!body?.shareBanner,
+        share_website: !!body?.shareWebsite,
+        share_social_links: !!body?.shareSocialLinks,
+        share_contacts: !!body?.shareContacts,
+        share_calendar_crm: !!(body?.shareCalendarCrm ?? body?.share_calendar_crm),
         invite_email: ownerEmail,
         invited_by_profile_id: ownerProfile.id,
         invite_token: '',
@@ -5594,6 +5740,8 @@ async function handleApi(request, env, url) {
     if (body?.shareCatalog !== undefined) patch.share_catalog = !!body.shareCatalog
     if (body?.shareBio !== undefined) patch.share_bio = !!body.shareBio
     if (body?.shareBanner !== undefined) patch.share_banner = !!body.shareBanner
+    if (body?.shareWebsite !== undefined) patch.share_website = !!body.shareWebsite
+    if (body?.shareSocialLinks !== undefined) patch.share_social_links = !!body.shareSocialLinks
     if (body?.shareContacts !== undefined) patch.share_contacts = !!body.shareContacts
     if (body?.shareCalendarCrm !== undefined) patch.share_calendar_crm = !!body.shareCalendarCrm
 
@@ -6479,23 +6627,23 @@ async function handleApi(request, env, url) {
       })
     }
 
-    // Check if user is an active team member of any team
+    // Check if user is an active team member of any team with share_contacts enabled
     const mems = await sb(
       env,
-      `team_members?profile_id=eq.${encodeURIComponent(profile.id)}&deleted=eq.false&status=eq.active&select=team_id&limit=5`
+      `team_members?profile_id=eq.${encodeURIComponent(profile.id)}&deleted=eq.false&status=eq.active&select=team_id,share_contacts&limit=5`
     )
-    const tIds = (mems || []).map((m) => m.team_id).filter(Boolean)
+    const activeSharedMem = (mems || []).find((m) => m.share_contacts === true)
     let memberTeam = null
-    if (tIds.length) {
+    if (activeSharedMem?.team_id) {
       const teams = await sb(
         env,
-        `teams?id=in.(${tIds.map(encodeURIComponent).join(',')})&deleted=eq.false&select=*&limit=1`
+        `teams?id=eq.${encodeURIComponent(activeSharedMem.team_id)}&deleted=eq.false&select=*&limit=1`
       )
       memberTeam = teams?.[0] || null
     }
 
-    if (memberTeam && memberTeam.share_contacts === true) {
-      // Team owner made contacts public to all team members
+    if (memberTeam) {
+      // Team owner made contacts public to this team member
       const memRows = await sb(
         env,
         `team_members?team_id=eq.${encodeURIComponent(memberTeam.id)}&deleted=eq.false&status=eq.active&select=profile_id`
