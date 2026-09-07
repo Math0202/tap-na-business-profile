@@ -447,11 +447,6 @@ async function onBannerChange(e) {
     e.target.value = ''
     return
   }
-  if (file.size > 5 * 1024 * 1024) {
-    alert('Please choose a banner image under 5 MB.')
-    e.target.value = ''
-    return
-  }
   try {
     bannerCropSource.value = await readFileAsDataUrl(file)
     showBannerCrop.value = true

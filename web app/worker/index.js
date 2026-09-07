@@ -5387,11 +5387,9 @@ async function handleApi(request, env, url) {
           ? 15 * 1024 * 1024
           : kind === 'video'
             ? 8 * 1024 * 1024
-            : kind === 'banner'
-              ? 5 * 1024 * 1024
-              : kind === 'avatar'
-                ? 0
-                : 3 * 1024 * 1024
+            : kind === 'avatar' || kind === 'banner'
+              ? 0
+              : 3 * 1024 * 1024
     if (maxBytes > 0 && file.size > maxBytes) {
       const limitLabel =
         kind === 'product'
@@ -5400,9 +5398,7 @@ async function handleApi(request, env, url) {
             ? '15 MB'
             : kind === 'video'
               ? '8 MB'
-              : kind === 'banner'
-                ? '5 MB'
-                : '3 MB'
+              : '3 MB'
       const label =
         kind === 'video'
           ? 'Video'
@@ -5410,9 +5406,7 @@ async function handleApi(request, env, url) {
             ? 'Menu file'
             : kind === 'catalog'
               ? 'Catalog file'
-              : kind === 'banner'
-                ? 'Banner image'
-                : 'Image'
+              : 'Image'
       return bad(`${label} must be under ${limitLabel}`, 413)
     }
 
