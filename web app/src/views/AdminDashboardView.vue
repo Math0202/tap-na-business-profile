@@ -16,8 +16,13 @@ import {
   apiRestoreSalesInvoice,
   apiRestoreSalesCash,
   apiRestoreSalesProduct,
-  apiAdminPurgeDeleted
+  apiAdminPurgeDeleted,
+  apiAdminListTeams,
+  apiAdminCreateTeam,
+  apiAdminUpdateTeam,
+  apiAdminDeleteTeam
 } from '../lib/api'
+import { personalTypeLabel } from '../lib/teamRoles'
 import { cardImageSrc } from '../lib/cardLinkStore'
 import { purgeLocalDeletedRecords } from '../lib/salesStore'
 import ActivityCharts from '../components/ActivityCharts.vue'
@@ -48,11 +53,31 @@ const analyticsData = ref(null)
 
 const panels = [
   { id: 'profiles', label: 'Profiles', icon: 'group' },
+  { id: 'teams', label: 'Teams', icon: 'groups' },
   { id: 'analytics', label: 'Analytics', icon: 'monitoring' },
   { id: 'log', label: 'Log', icon: 'history' },
   { id: 'errors', label: 'Errors', icon: 'bug_report' },
   { id: 'deleted', label: 'Deleted', icon: 'delete' }
 ]
+
+const teams = ref([])
+const teamsLoading = ref(false)
+const teamModalOpen = ref(false)
+const teamModalMode = ref('create') // 'create' | 'edit'
+const teamForm = ref({
+  id: '',
+  name: '',
+  ownerProfileId: '',
+  packageCeiling: 'business',
+  shareCatalog: false,
+  shareBio: false,
+  shareBanner: false,
+  shareContacts: false
+})
+const teamSaving = ref(false)
+const teamModalError = ref('')
+const candidateProfiles = ref([])
+const teamQuery = ref('')
 
 function panelFromRoute() {
   const p = String(route.query.panel || 'profiles').toLowerCase()
@@ -80,6 +105,23 @@ async function refresh() {
       } else {
         loadError.value = res.error || 'Could not load live data'
       }
+    } else if (panel.value === 'teams') {
+      teamsLoading.value = true
+      const [tRes, pRes] = await Promise.all([
+        apiAdminListTeams(),
+        apiAdminOverview()
+      ])
+      if (tRes.ok && tRes.data?.teams) {
+        teams.value = tRes.data.teams
+      } else {
+        loadError.value = tRes.error || 'Could not load teams'
+      }
+      if (pRes.ok && pRes.data?.profiles) {
+        candidateProfiles.value = (pRes.data.profiles || []).filter(
+          (p) => p.cardType === 'personal' && !p.disabled
+        )
+      }
+      teamsLoading.value = false
     } else if (panel.value === 'analytics') {
       analyticsLoading.value = true
       analyticsError.value = ''
@@ -334,6 +376,95 @@ function formatJson(value) {
   }
 }
 
+const filteredTeams = computed(() => {
+  const q = teamQuery.value.trim().toLowerCase()
+  if (!q) return teams.value
+  return teams.value.filter((t) => {
+    return (
+      (t.name && t.name.toLowerCase().includes(q)) ||
+      (t.ownerName && t.ownerName.toLowerCase().includes(q)) ||
+      (t.ownerEmail && t.ownerEmail.toLowerCase().includes(q)) ||
+      (t.id && t.id.toLowerCase().includes(q))
+    )
+  })
+})
+
+function openCreateTeamModal() {
+  teamModalMode.value = 'create'
+  teamModalError.value = ''
+  teamForm.value = {
+    id: '',
+    name: '',
+    ownerProfileId: candidateProfiles.value[0]?.id || '',
+    packageCeiling: 'business',
+    shareCatalog: false,
+    shareBio: false,
+    shareBanner: false,
+    shareContacts: false
+  }
+  teamModalOpen.value = true
+}
+
+function openEditTeamModal(t) {
+  teamModalMode.value = 'edit'
+  teamModalError.value = ''
+  teamForm.value = {
+    id: t.id,
+    name: t.name || '',
+    ownerProfileId: t.ownerProfileId || '',
+    packageCeiling: t.packageCeiling || 'business',
+    shareCatalog: !!t.shareCatalog,
+    shareBio: !!t.shareBio,
+    shareBanner: !!t.shareBanner,
+    shareContacts: !!t.shareContacts
+  }
+  teamModalOpen.value = true
+}
+
+async function saveTeam() {
+  const name = teamForm.value.name.trim()
+  if (!name) {
+    teamModalError.value = 'Team name is required'
+    return
+  }
+  if (!teamForm.value.ownerProfileId) {
+    teamModalError.value = 'Team leader / owner is required'
+    return
+  }
+  teamSaving.value = true
+  teamModalError.value = ''
+  try {
+    let res
+    if (teamModalMode.value === 'create') {
+      res = await apiAdminCreateTeam(teamForm.value)
+    } else {
+      res = await apiAdminUpdateTeam(teamForm.value.id, teamForm.value)
+    }
+    if (!res.ok) {
+      teamModalError.value = res.error || 'Could not save team'
+      return
+    }
+    teamModalOpen.value = false
+    await refresh()
+  } finally {
+    teamSaving.value = false
+  }
+}
+
+async function deleteTeam(t) {
+  if (!confirm(`Are you sure you want to delete team "${t.name}"?`)) return
+  try {
+    const res = await apiAdminDeleteTeam(t.id)
+    if (!res.ok) {
+      alert(res.error || 'Could not delete team')
+      return
+    }
+    await refresh()
+  } catch (err) {
+    alert(err?.message || 'Delete failed')
+  }
+}
+
 watch(
   () => route.query.panel,
   () => {
@@ -553,6 +684,130 @@ onMounted(() => {
           </article>
         </section>
       </template>
+
+      <!-- Teams panel -->
+      <section v-else-if="panel === 'teams'" class="mb-8 space-y-4">
+        <div class="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-400">Teams management</h2>
+            <p class="text-xs text-gray-500 mt-1">
+              Create teams, assign team leaders, configure tiers, and control asset sharing
+            </p>
+          </div>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-white text-black text-xs font-bold hover:bg-gray-100 transition-colors cursor-pointer"
+            @click="openCreateTeamModal"
+          >
+            <span class="material-symbols-outlined text-[16px]">add</span>
+            Create team
+          </button>
+        </div>
+
+        <div class="card-item-bg rounded-2xl p-3">
+          <input
+            v-model="teamQuery"
+            type="search"
+            class="field-input w-full"
+            placeholder="Search teams by name, leader name, or email…"
+          >
+        </div>
+
+        <div v-if="teamsLoading" class="card-item-bg rounded-2xl p-8 text-center text-sm text-gray-400">
+          Loading teams…
+        </div>
+        <div v-else-if="loadError" class="card-item-bg rounded-2xl p-6 text-sm text-amber-300">
+          {{ loadError }}
+        </div>
+        <div v-else-if="!filteredTeams.length" class="card-item-bg rounded-2xl p-8 text-center text-sm text-gray-500">
+          No teams found.
+        </div>
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <article
+            v-for="t in filteredTeams"
+            :key="t.id"
+            class="card-item-bg rounded-2xl p-5 flex flex-col justify-between border border-[var(--border)] space-y-4"
+          >
+            <div class="space-y-3">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <h3 class="text-base font-bold truncate text-white">{{ t.name }}</h3>
+                  <p class="text-xs text-gray-500">Created {{ formatDate(t.createdAt) }}</p>
+                </div>
+                <span class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300 shrink-0">
+                  {{ personalTypeLabel(t.packageCeiling) }}
+                </span>
+              </div>
+
+              <!-- Leader info -->
+              <div class="bg-zinc-900/60 rounded-xl p-3 border border-zinc-800 space-y-1">
+                <p class="text-[10px] uppercase tracking-wider text-gray-500 font-bold">Team Leader / Owner</p>
+                <p class="text-sm font-semibold truncate text-gray-200">{{ t.ownerName || '—' }}</p>
+                <p class="text-xs text-gray-400 truncate">{{ t.ownerEmail || '—' }}</p>
+                <p class="text-[10px] text-gray-600 font-mono truncate">ID: {{ t.ownerProfileId }}</p>
+              </div>
+
+              <!-- Stats & sharing indicators -->
+              <div class="space-y-2">
+                <div class="flex items-center justify-between text-xs text-gray-400">
+                  <span>Team Members:</span>
+                  <span class="font-bold text-white px-2 py-0.5 bg-zinc-800 rounded-full text-[11px]">{{ t.memberCount }}</span>
+                </div>
+
+                <div class="pt-1">
+                  <p class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">Sharing Enabled</p>
+                  <div class="flex flex-wrap gap-1.5">
+                    <span
+                      class="text-[10px] font-medium px-2 py-0.5 rounded-md border"
+                      :class="t.shareCatalog ? 'bg-sky-950/50 border-sky-700/60 text-sky-300' : 'bg-zinc-800/40 border-zinc-700/30 text-gray-500'"
+                    >
+                      Catalog
+                    </span>
+                    <span
+                      class="text-[10px] font-medium px-2 py-0.5 rounded-md border"
+                      :class="t.shareBio ? 'bg-sky-950/50 border-sky-700/60 text-sky-300' : 'bg-zinc-800/40 border-zinc-700/30 text-gray-500'"
+                    >
+                      Bio
+                    </span>
+                    <span
+                      class="text-[10px] font-medium px-2 py-0.5 rounded-md border"
+                      :class="t.shareBanner ? 'bg-sky-950/50 border-sky-700/60 text-sky-300' : 'bg-zinc-800/40 border-zinc-700/30 text-gray-500'"
+                    >
+                      Banner
+                    </span>
+                    <span
+                      class="text-[10px] font-medium px-2 py-0.5 rounded-md border"
+                      :class="t.shareContacts ? 'bg-emerald-950/50 border-emerald-700/60 text-emerald-300' : 'bg-zinc-800/40 border-zinc-700/30 text-gray-500'"
+                    >
+                      Contacts
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex items-center gap-2 pt-3 border-t border-[var(--border)]">
+              <button
+                type="button"
+                class="flex-1 py-2 px-3 rounded-xl border border-[var(--border)] text-xs font-semibold text-gray-300 hover:text-white hover:bg-zinc-800 flex items-center justify-center gap-1.5 transition-colors"
+                @click="openEditTeamModal(t)"
+              >
+                <span class="material-symbols-outlined text-[16px]">edit</span>
+                Edit / Reassign
+              </button>
+              <button
+                type="button"
+                class="py-2 px-3 rounded-xl border border-red-800/40 text-xs font-semibold text-red-400 hover:bg-red-950/40 flex items-center justify-center transition-colors"
+                title="Delete team"
+                @click="deleteTeam(t)"
+              >
+                <span class="material-symbols-outlined text-[16px]">delete</span>
+              </button>
+            </div>
+          </article>
+        </div>
+      </section>
 
       <!-- Analytics panel -->
       <section v-else-if="panel === 'analytics'" class="mb-8 space-y-4">
@@ -787,5 +1042,109 @@ onMounted(() => {
     </main>
 
     <AdminBottomNav />
+
+    <Teleport to="body">
+      <div
+        v-if="teamModalOpen"
+        class="app-dialog-overlay fixed inset-0 z-[210] flex items-end sm:items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+        @click.self="teamModalOpen = false"
+      >
+        <div class="w-full max-w-md rounded-2xl bg-zinc-900 border border-zinc-700 p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-bold tracking-tight text-white">
+              {{ teamModalMode === 'create' ? 'Create New Team' : 'Edit Team & Leader' }}
+            </h2>
+            <button type="button" class="text-gray-400 hover:text-white" @click="teamModalOpen = false">
+              <span class="material-symbols-outlined text-[20px]">close</span>
+            </button>
+          </div>
+
+          <p v-if="teamModalError" class="text-xs text-red-400 bg-red-950/40 border border-red-800/60 rounded-xl p-2.5">
+            {{ teamModalError }}
+          </p>
+
+          <div class="space-y-3">
+            <div>
+              <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Team Name</label>
+              <input
+                v-model="teamForm.name"
+                type="text"
+                class="field-input w-full"
+                placeholder="e.g. Acme Corp Sales"
+                maxlength="120"
+              >
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
+                Team Leader / Owner
+              </label>
+              <select
+                v-model="teamForm.ownerProfileId"
+                class="field-input w-full bg-zinc-900 text-sm"
+              >
+                <option value="" disabled>Select a profile</option>
+                <option
+                  v-for="p in candidateProfiles"
+                  :key="p.id"
+                  :value="p.id"
+                >
+                  {{ p.name || p.company || 'Unnamed' }} ({{ p.email || p.loginEmail || p.id }})
+                </option>
+              </select>
+              <p class="text-[11px] text-gray-500 mt-1">
+                The selected profile will be designated as the team owner.
+              </p>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Package Tier</label>
+              <select v-model="teamForm.packageCeiling" class="field-input w-full bg-zinc-900 text-sm">
+                <option value="business">Business</option>
+                <option value="executive_exclusive">Executive Exclusive</option>
+              </select>
+            </div>
+
+            <div class="pt-2 border-t border-zinc-800 space-y-2">
+              <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Sharing Defaults</p>
+              <label class="flex items-center gap-2.5 cursor-pointer text-sm">
+                <input v-model="teamForm.shareCatalog" type="checkbox" class="rounded border-zinc-700">
+                <span>Share Catalog with team members</span>
+              </label>
+              <label class="flex items-center gap-2.5 cursor-pointer text-sm">
+                <input v-model="teamForm.shareBio" type="checkbox" class="rounded border-zinc-700">
+                <span>Share Company Bio with team members</span>
+              </label>
+              <label class="flex items-center gap-2.5 cursor-pointer text-sm">
+                <input v-model="teamForm.shareBanner" type="checkbox" class="rounded border-zinc-700">
+                <span>Share Profile Banner with team members</span>
+              </label>
+              <label class="flex items-center gap-2.5 cursor-pointer text-sm">
+                <input v-model="teamForm.shareContacts" type="checkbox" class="rounded border-zinc-700">
+                <span>Share Contacts across team</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="flex gap-3 pt-3">
+            <button
+              type="button"
+              class="flex-1 py-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm font-semibold text-gray-300"
+              @click="teamModalOpen = false"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="flex-1 py-2.5 rounded-full bg-white hover:bg-gray-100 text-black text-sm font-bold disabled:opacity-50"
+              :disabled="teamSaving"
+              @click="saveTeam"
+            >
+              {{ teamSaving ? 'Saving…' : (teamModalMode === 'create' ? 'Create Team' : 'Save Changes') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>

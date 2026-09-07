@@ -253,13 +253,13 @@ onMounted(async () => {
         : ''
     if (remote.pendingTeamInvite) pendingTeamInvite.value = remote.pendingTeamInvite
 
+    if (remote.card?.status === 'disabled' || remote.profile?.disabled) {
+      mode.value = 'disabled'
+      setClaimChrome(true)
+      return
+    }
+
     if (remote.card.status === 'linked' && remote.profile) {
-      linkedType.value = remote.profile.cardType === 'personal' ? 'personal' : 'table'
-      if (remote.profile.disabled) {
-        mode.value = 'disabled'
-        setClaimChrome(true)
-        return
-      }
       const mine = loadProfile()
       const isMine =
         remote.profile.id && (mine.remoteProfileId === remote.profile.id || mine.id === remote.profile.id)
@@ -399,9 +399,9 @@ onUnmounted(() => setClaimChrome(false))
           </p>
         </div>
         <div v-else>
-          <h1 class="text-xl font-bold">Disabled by owner</h1>
+          <h1 class="text-xl font-bold">Card Deactivated</h1>
           <p class="text-sm text-gray-400 mt-2">
-            This profile has been disabled by its owner and isn’t available right now.
+            This card has been temporarily deactivated and is not available right now.
           </p>
         </div>
       </template>

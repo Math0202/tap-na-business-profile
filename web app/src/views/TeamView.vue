@@ -42,6 +42,9 @@ const pendingInvites = ref([])
 
 const teamName = ref('')
 const shareCatalog = ref(false)
+const shareBio = ref(false)
+const shareBanner = ref(false)
+const shareContacts = ref(false)
 const meetingTool = ref('')
 const usesCrm = ref(false)
 const crmProvider = ref('')
@@ -118,6 +121,9 @@ async function refresh() {
     pendingInvites.value = res.data.pendingInvites || []
     teamName.value = team.value?.name || ''
     shareCatalog.value = !!team.value?.shareCatalog
+    shareBio.value = !!team.value?.shareBio
+    shareBanner.value = !!team.value?.shareBanner
+    shareContacts.value = !!team.value?.shareContacts
     meetingTool.value = team.value?.meetingTool || ''
     usesCrm.value = !!team.value?.usesCrm
     crmProvider.value = team.value?.crmProvider || ''
@@ -187,19 +193,52 @@ async function saveIntegrations() {
   }
 }
 
-async function saveShareCatalog() {
+async function saveSharing(key) {
   if (!isOwner.value) return
   saving.value = true
   try {
-    const res = await apiUpdateMyTeam({ shareCatalog: shareCatalog.value })
+    const res = await apiUpdateMyTeam({
+      shareCatalog: shareCatalog.value,
+      shareBio: shareBio.value,
+      shareBanner: shareBanner.value,
+      shareContacts: shareContacts.value
+    })
     if (!res.ok) {
-      shareCatalog.value = !shareCatalog.value
-      flash(res.error || 'Could not update catalog sharing')
+      flash(res.error || 'Could not update sharing setting')
+      await refresh()
       return
     }
     team.value = res.data.team
     shareCatalog.value = !!res.data.team?.shareCatalog
-    flash(shareCatalog.value ? 'Catalog shared with your team' : 'Catalog sharing turned off')
+    shareBio.value = !!res.data.team?.shareBio
+    shareBanner.value = !!res.data.team?.shareBanner
+    shareContacts.value = !!res.data.team?.shareContacts
+    flash('Team sharing updated')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function toggleCardStatus(member) {
+  if (!isOwner.value) return
+  const willDisable = member.cardStatus !== 'disabled'
+  const confirmMsg = willDisable
+    ? `Deactivate card for ${member.memberName || member.slug || 'this member'}? Visitors tapping this card will see it as deactivated.`
+    : `Activate card for ${member.memberName || member.slug || 'this member'}?`
+  if (!confirm(confirmMsg)) return
+  saving.value = true
+  try {
+    const res = await apiUpdateTeamMember(member.id, {
+      action: 'toggle_card_status',
+      cardStatus: willDisable ? 'disabled' : 'linked'
+    })
+    if (!res.ok) {
+      flash(res.error || 'Could not update card status')
+      return
+    }
+    member.cardStatus = willDisable ? 'disabled' : 'linked'
+    flash(willDisable ? 'Card deactivated' : 'Card activated')
+    await refresh()
   } finally {
     saving.value = false
   }
@@ -404,31 +443,90 @@ onMounted(() => {
           >
             Save name
           </button>
-          <label
-            v-if="isOwner"
-            class="flex items-start gap-3 pt-1 cursor-pointer"
-          >
-            <input
-              v-model="shareCatalog"
-              type="checkbox"
-              class="mt-1 rounded border-zinc-600"
-              :disabled="saving"
-              @change="saveShareCatalog"
-            >
-            <span class="min-w-0">
-              <span class="block text-sm font-semibold">Share my catalog with the team</span>
-              <span class="block text-xs text-gray-500 mt-0.5 leading-relaxed">
-                When on, active members show your catalog on their cards. Quote requests go to the member whose card was scanned.
-              </span>
-            </span>
-          </label>
-          <p
-            v-else-if="shareCatalog"
-            class="text-xs text-sky-300/90 leading-relaxed"
-          >
-            Your team owner is sharing their catalog with members. It appears on your Catalog page.
-          </p>
-          <p class="text-xs text-gray-500">
+
+          <!-- Team Sharing Settings -->
+          <div class="pt-3 border-t border-zinc-800 space-y-3">
+            <h3 class="text-xs uppercase tracking-wider font-bold text-gray-400">Team Sharing &amp; Visibility</h3>
+
+            <div v-if="isOwner" class="space-y-3">
+              <label class="flex items-start gap-3 cursor-pointer">
+                <input
+                  v-model="shareCatalog"
+                  type="checkbox"
+                  class="mt-1 rounded border-zinc-600"
+                  :disabled="saving"
+                  @change="saveSharing('catalog')"
+                >
+                <span class="min-w-0">
+                  <span class="block text-sm font-semibold">Share catalog with team</span>
+                  <span class="block text-xs text-gray-400 mt-0.5 leading-relaxed">
+                    Active team members show your catalog items on their cards. Quotes go to the member whose card was scanned.
+                  </span>
+                </span>
+              </label>
+
+              <label class="flex items-start gap-3 cursor-pointer">
+                <input
+                  v-model="shareBio"
+                  type="checkbox"
+                  class="mt-1 rounded border-zinc-600"
+                  :disabled="saving"
+                  @change="saveSharing('bio')"
+                >
+                <span class="min-w-0">
+                  <span class="block text-sm font-semibold">Share company bio with team</span>
+                  <span class="block text-xs text-gray-400 mt-0.5 leading-relaxed">
+                    Team members show your company bio/introduction on their public cards.
+                  </span>
+                </span>
+              </label>
+
+              <label class="flex items-start gap-3 cursor-pointer">
+                <input
+                  v-model="shareBanner"
+                  type="checkbox"
+                  class="mt-1 rounded border-zinc-600"
+                  :disabled="saving"
+                  @change="saveSharing('banner')"
+                >
+                <span class="min-w-0">
+                  <span class="block text-sm font-semibold">Share profile banner with team</span>
+                  <span class="block text-xs text-gray-400 mt-0.5 leading-relaxed">
+                    Team members display your company header banner on their public cards.
+                  </span>
+                </span>
+              </label>
+
+              <label class="flex items-start gap-3 cursor-pointer">
+                <input
+                  v-model="shareContacts"
+                  type="checkbox"
+                  class="mt-1 rounded border-zinc-600"
+                  :disabled="saving"
+                  @change="saveSharing('contacts')"
+                >
+                <span class="min-w-0">
+                  <span class="block text-sm font-semibold">Share contacts across team</span>
+                  <span class="block text-xs text-gray-400 mt-0.5 leading-relaxed">
+                    When enabled, all team members can see connections collected by any team member. When disabled, members see only their own.
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            <div v-else class="space-y-1.5 text-xs text-sky-300/90 leading-relaxed bg-sky-950/30 border border-sky-900/40 rounded-xl p-3">
+              <p class="font-medium text-sky-200">Shared by team owner:</p>
+              <ul class="list-disc list-inside space-y-1 text-sky-300">
+                <li v-if="shareCatalog">Team catalog is displayed on your card</li>
+                <li v-if="shareBio">Company bio is displayed on your card</li>
+                <li v-if="shareBanner">Company banner is displayed on your card</li>
+                <li v-if="shareContacts">Team-wide contacts are visible in your Contacts tab</li>
+                <li v-if="!shareCatalog && !shareBio && !shareBanner && !shareContacts" class="list-none text-gray-400">No shared team assets currently enabled</li>
+              </ul>
+            </div>
+          </div>
+
+          <p class="text-xs text-gray-500 pt-1">
             Your role: <span class="text-gray-300">{{ personalTypeLabel(myRole) }}</span>
             <template v-if="isOwner"> · Owner</template>
             · Package: <span class="text-gray-300">{{ personalTypeLabel(packageCeiling) }}</span>
@@ -503,9 +601,17 @@ onMounted(() => {
                 <p class="text-xs text-gray-400 truncate">{{ m.memberEmail || m.inviteEmail || '—' }}</p>
                 <p v-if="m.slug" class="text-xs text-gray-500 mt-0.5">{{ CARD_ID_LABEL }} {{ m.slug }}</p>
               </div>
-              <span class="text-[10px] uppercase tracking-wide px-2 py-1 rounded-full bg-zinc-800 text-gray-300 shrink-0">
-                {{ m.deleted ? 'Removed' : memberStatusLabel(m.status) }}
-              </span>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <span
+                  v-if="m.cardStatus === 'disabled'"
+                  class="text-[10px] uppercase font-bold tracking-wide px-2 py-0.5 rounded-full bg-red-950 border border-red-700/60 text-red-300"
+                >
+                  Deactivated
+                </span>
+                <span class="text-[10px] uppercase tracking-wide px-2 py-1 rounded-full bg-zinc-800 text-gray-300">
+                  {{ m.deleted ? 'Removed' : memberStatusLabel(m.status) }}
+                </span>
+              </div>
             </div>
             <div class="mt-3 flex flex-col gap-2">
               <select
@@ -517,6 +623,20 @@ onMounted(() => {
                 <option v-for="r in roleOptions" :key="r.id" :value="r.id">{{ r.label }}</option>
                 <option v-if="!roleOptions.find((x) => x.id === m.role)" :value="m.role">{{ personalTypeLabel(m.role) }}</option>
               </select>
+
+              <!-- Card Activate/Deactivate Control (Team Owner) -->
+              <button
+                v-if="isOwner && m.profileId !== team?.ownerProfileId && !m.deleted"
+                type="button"
+                class="py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"
+                :class="m.cardStatus === 'disabled' ? 'bg-emerald-950/70 border border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/60' : 'bg-zinc-800/90 border border-zinc-700 text-amber-300 hover:bg-zinc-700'"
+                :disabled="saving"
+                @click="toggleCardStatus(m)"
+              >
+                <span class="material-symbols-outlined text-[16px]">{{ m.cardStatus === 'disabled' ? 'check_circle' : 'block' }}</span>
+                <span>{{ m.cardStatus === 'disabled' ? 'Activate Card' : 'Deactivate Card' }}</span>
+              </button>
+
               <button
                 v-if="canEditMember(m) && m.profileId === team?.ownerProfileId"
                 type="button"

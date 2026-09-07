@@ -461,6 +461,23 @@ export function apiAdminPurgeDeleted() {
   return request('/api/admin/deleted/purge', { method: 'POST', timeoutMs: 30000 })
 }
 
+/** Admin teams management */
+export function apiAdminListTeams() {
+  return request('/api/admin/teams')
+}
+
+export function apiAdminCreateTeam(payload) {
+  return request('/api/admin/teams', { method: 'POST', body: payload })
+}
+
+export function apiAdminUpdateTeam(id, payload) {
+  return request(`/api/admin/teams/${encodeURIComponent(id)}`, { method: 'PUT', body: payload })
+}
+
+export function apiAdminDeleteTeam(id) {
+  return request(`/api/admin/teams/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
 
 /** Upload an image/video to the Supabase "assets bucket" via the Worker */
 export async function apiUploadAsset(file, { kind = "avatar" } = {}) {

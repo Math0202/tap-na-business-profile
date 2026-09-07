@@ -1328,6 +1328,19 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
   const shareHit = linked.find((c) => c.kind === want) || linked[0]
   const personalHit = linked.find((c) => c.kind === 'personal') || mapped.find((c) => c.kind === 'personal')
   const personalType = row.card_type === 'table' ? '' : personalHit?.personalType || 'business'
+  let banner = row.banner || ''
+  let bio = row.bio || ''
+  try {
+    const sharedAssets = await resolveSharedTeamAssetsForProfile(env, row.id)
+    if (sharedAssets) {
+      if (sharedAssets.shareBanner && sharedAssets.banner) {
+        banner = sharedAssets.banner
+      }
+      if (sharedAssets.shareBio && sharedAssets.bio) {
+        bio = sharedAssets.bio
+      }
+    }
+  } catch {}
   return {
     id: row.id,
     cardType: row.card_type,
@@ -1363,8 +1376,8 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
     catalogItems: normalizeCatalogItems(row.catalog_items),
     avatar: row.avatar,
     logo: row.logo,
-    banner: row.banner || '',
-    bio: row.bio || '',
+    banner,
+    bio,
     video: row.video,
     disabled: !!row.disabled,
     shareSlug: shareHit?.slug || '',
@@ -1586,6 +1599,9 @@ function mapTeamRow(row) {
     packageCeiling: normalizePersonalType(row.package_ceiling || 'business'),
     shopQuoteRef: row.shop_quote_ref || '',
     shareCatalog: row.share_catalog === true,
+    shareBio: row.share_bio === true,
+    shareBanner: row.share_banner === true,
+    shareContacts: row.share_contacts === true,
     meetingTool: String(row.meeting_tool || '').trim().toLowerCase(),
     usesCrm: row.uses_crm === true,
     crmProvider: String(row.crm_provider || '').trim().toLowerCase(),
@@ -1604,6 +1620,7 @@ function mapTeamMemberRow(row) {
     slug: row.slug || '',
     role: normalizePersonalType(row.role),
     status: row.status || 'pending_claim',
+    cardStatus: row.card_status || 'linked',
     inviteEmail: row.invite_email || '',
     invitedByProfileId: row.invited_by_profile_id || '',
     joinedAt: row.joined_at || null,
@@ -1858,18 +1875,39 @@ async function getActorTeamMembership(env, profileId, teamId) {
 
 async function enrichTeamMembers(env, members) {
   const profileIds = [...new Set(members.map((m) => m.profile_id).filter(Boolean))]
+  const cardIds = [...new Set(members.map((m) => m.card_id).filter(Boolean))]
+  const slugs = [...new Set(members.map((m) => m.slug).filter(Boolean))]
   const profilesById = {}
   if (profileIds.length) {
     const rows = await sb(
       env,
-      `profiles?id=in.(${profileIds.map(encodeURIComponent).join(',')})&select=id,name,company,login_email,email`
+      `profiles?id=in.(${profileIds.map(encodeURIComponent).join(',')})&select=id,name,company,login_email,email,disabled`
     )
     for (const p of rows || []) profilesById[p.id] = p
   }
+  const cardsByIdOrSlug = {}
+  if (cardIds.length || slugs.length) {
+    let cardQuery = 'cards?deleted=eq.false&select=id,slug,status,kind,personal_type'
+    if (cardIds.length && slugs.length) {
+      cardQuery += `&or=(id.in.(${cardIds.map(encodeURIComponent).join(',')}),slug.in.(${slugs.map(encodeURIComponent).join(',')}))`
+    } else if (cardIds.length) {
+      cardQuery += `&id=in.(${cardIds.map(encodeURIComponent).join(',')})`
+    } else {
+      cardQuery += `&slug=in.(${slugs.map(encodeURIComponent).join(',')})`
+    }
+    const cardRows = await sb(env, cardQuery)
+    for (const c of cardRows || []) {
+      if (c.id) cardsByIdOrSlug[c.id] = c
+      if (c.slug) cardsByIdOrSlug[c.slug] = c
+    }
+  }
   return (members || []).map((m) => {
     const p = profilesById[m.profile_id]
+    const c = (m.card_id && cardsByIdOrSlug[m.card_id]) || (m.slug && cardsByIdOrSlug[m.slug]) || null
+    const cardStatus = c?.status || (p?.disabled ? 'disabled' : 'linked')
     return mapTeamMemberRow({
       ...m,
+      card_status: cardStatus,
       member_name: p ? String(p.name || p.company || '').trim() : '',
       member_email: p
         ? String(p.login_email || p.email || m.invite_email || '').trim()
@@ -1879,10 +1917,10 @@ async function enrichTeamMembers(env, members) {
 }
 
 /**
- * If profileId is an active member of a team with share_catalog, return the owner's catalog.
- * Owners always use their own catalog (not "shared").
+ * If profileId is an active member of a team, return the shared team assets (catalog, bio, banner, contacts)
+ * Owners always use their own assets.
  */
-async function resolveSharedCatalogForProfile(env, profileId) {
+async function resolveSharedTeamAssetsForProfile(env, profileId) {
   const id = String(profileId || '').trim()
   if (!id) return null
   const memberships = await sb(
@@ -1893,23 +1931,47 @@ async function resolveSharedCatalogForProfile(env, profileId) {
   if (!teamIds.length) return null
   const teams = await sb(
     env,
-    `teams?id=in.(${teamIds.map(encodeURIComponent).join(',')})&deleted=eq.false&share_catalog=eq.true&select=*`
+    `teams?id=in.(${teamIds.map(encodeURIComponent).join(',')})&deleted=eq.false&select=*`
   )
   const team = (teams || []).find((t) => t.owner_profile_id && t.owner_profile_id !== id) || null
   if (!team) return null
   const owners = await sb(
     env,
-    `profiles?id=eq.${encodeURIComponent(team.owner_profile_id)}&select=id,name,company,catalog_items,disabled`
+    `profiles?id=eq.${encodeURIComponent(team.owner_profile_id)}&select=id,name,company,catalog_items,bio,banner,disabled`
   )
   const owner = owners?.[0]
   if (!owner || owner.disabled) return null
-  const items = normalizeCatalogItems(owner.catalog_items).filter((x) => x.active !== false)
+  const items = team.share_catalog === true
+    ? normalizeCatalogItems(owner.catalog_items).filter((x) => x.active !== false)
+    : null
   return {
     teamId: team.id,
     teamName: team.name || 'Team',
-    catalogOwnerId: owner.id,
-    sharedFromName: String(owner.name || owner.company || 'Team owner').trim() || 'Team owner',
-    catalogItems: items
+    ownerId: owner.id,
+    ownerName: String(owner.name || owner.company || 'Team owner').trim() || 'Team owner',
+    shareCatalog: team.share_catalog === true,
+    shareBio: team.share_bio === true,
+    shareBanner: team.share_banner === true,
+    shareContacts: team.share_contacts === true,
+    catalogItems: items,
+    bio: team.share_bio === true ? (owner.bio || '') : null,
+    banner: team.share_banner === true ? (owner.banner || '') : null
+  }
+}
+
+/**
+ * If profileId is an active member of a team with share_catalog, return the owner's catalog.
+ * Owners always use their own catalog (not "shared").
+ */
+async function resolveSharedCatalogForProfile(env, profileId) {
+  const shared = await resolveSharedTeamAssetsForProfile(env, profileId)
+  if (!shared || !shared.shareCatalog) return null
+  return {
+    teamId: shared.teamId,
+    teamName: shared.teamName,
+    catalogOwnerId: shared.ownerId,
+    sharedFromName: shared.ownerName,
+    catalogItems: shared.catalogItems || []
   }
 }
 
@@ -3628,6 +3690,15 @@ async function handleApi(request, env, url) {
     if (body?.shareCatalog !== undefined || body?.share_catalog !== undefined) {
       patch.share_catalog = !!(body.shareCatalog ?? body.share_catalog)
     }
+    if (body?.shareBio !== undefined || body?.share_bio !== undefined) {
+      patch.share_bio = !!(body.shareBio ?? body.share_bio)
+    }
+    if (body?.shareBanner !== undefined || body?.share_banner !== undefined) {
+      patch.share_banner = !!(body.shareBanner ?? body.share_banner)
+    }
+    if (body?.shareContacts !== undefined || body?.share_contacts !== undefined) {
+      patch.share_contacts = !!(body.shareContacts ?? body.share_contacts)
+    }
     if (
       body?.meetingTool !== undefined ||
       body?.meeting_tool !== undefined ||
@@ -3900,6 +3971,51 @@ async function handleApi(request, env, url) {
         ownerProfileId: member.profile_id,
         previousOwnerProfileId: profile.id
       })
+    }
+
+    // Toggle card activation status (team owner only)
+    if (body?.action === 'toggle_card_status' || body?.action === 'set_card_status' || body?.cardStatus !== undefined) {
+      if (!isOwner) return bad('Only the team owner can activate or deactivate team cards', 403)
+      if (member.profile_id === team.owner_profile_id) {
+        return bad('Cannot deactivate the team owner card', 400)
+      }
+      const targetStatus =
+        body.cardStatus === 'disabled' || body.action === 'deactivate_card'
+          ? 'disabled'
+          : 'linked'
+      const now = new Date().toISOString()
+
+      if (member.card_id) {
+        await sb(env, `cards?id=eq.${encodeURIComponent(member.card_id)}`, {
+          method: 'PATCH',
+          body: { status: targetStatus },
+          prefer: 'return=minimal'
+        })
+      }
+      if (member.slug) {
+        await sb(env, `cards?slug=eq.${encodeURIComponent(member.slug)}`, {
+          method: 'PATCH',
+          body: { status: targetStatus },
+          prefer: 'return=minimal'
+        })
+      }
+      if (member.profile_id) {
+        await sb(
+          env,
+          `cards?profile_id=eq.${encodeURIComponent(member.profile_id)}&kind=eq.personal`,
+          {
+            method: 'PATCH',
+            body: { status: targetStatus },
+            prefer: 'return=minimal'
+          }
+        )
+      }
+      await sb(env, `team_members?id=eq.${encodeURIComponent(memberId)}`, {
+        method: 'PATCH',
+        body: { updated_at: now },
+        prefer: 'return=minimal'
+      })
+      return json({ ok: true, id: memberId, cardStatus: targetStatus })
     }
 
     // Members cannot leave after accepting
@@ -5343,6 +5459,198 @@ async function handleApi(request, env, url) {
     }
   }
 
+  // ---- Admin Teams Management ----
+  if (pathname === '/api/admin/teams' && method === 'GET') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
+    const teams = await sb(env, 'teams?deleted=eq.false&order=created_at.desc&limit=500')
+    const ownerIds = [...new Set((teams || []).map((t) => t.owner_profile_id).filter(Boolean))]
+    const teamIds = (teams || []).map((t) => t.id)
+    const ownersById = {}
+    if (ownerIds.length) {
+      const ownerRows = await sb(
+        env,
+        `profiles?id=in.(${ownerIds.map(encodeURIComponent).join(',')})&select=id,name,company,login_email,email,card_type`
+      )
+      for (const o of ownerRows || []) ownersById[o.id] = o
+    }
+    const memberCountsByTeam = {}
+    if (teamIds.length) {
+      const memberRows = await sb(
+        env,
+        `team_members?team_id=in.(${teamIds.map(encodeURIComponent).join(',')})&deleted=eq.false&select=team_id,id`
+      )
+      for (const m of memberRows || []) {
+        memberCountsByTeam[m.team_id] = (memberCountsByTeam[m.team_id] || 0) + 1
+      }
+    }
+    const list = (teams || []).map((t) => {
+      const owner = ownersById[t.owner_profile_id]
+      return {
+        ...mapTeamRow(t),
+        ownerName: owner ? String(owner.name || owner.company || '').trim() : '',
+        ownerEmail: owner ? String(owner.login_email || owner.email || t.owner_email || '').trim() : (t.owner_email || ''),
+        memberCount: memberCountsByTeam[t.id] || 0
+      }
+    })
+    return json({ ok: true, teams: list })
+  }
+
+  if (pathname === '/api/admin/teams' && method === 'POST') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
+    const body = await readJson(request)
+    const name = String(body?.name || '').trim().slice(0, 120)
+    if (!name) return bad('Team name is required')
+    const ownerProfileId = String(body?.ownerProfileId || body?.owner_profile_id || '').trim()
+    if (!ownerProfileId) return bad('Team leader/owner profile is required')
+    const ownerRows = await sb(
+      env,
+      `profiles?id=eq.${encodeURIComponent(ownerProfileId)}&deleted=eq.false&select=id,name,company,login_email,email,card_type`
+    )
+    const ownerProfile = ownerRows?.[0]
+    if (!ownerProfile) return bad('Selected profile not found', 404)
+    if (ownerProfile.card_type === 'table') {
+      return bad('Only personal card holders can be team owners', 400)
+    }
+
+    const ownerEmail = String(ownerProfile.login_email || ownerProfile.email || '').trim().toLowerCase()
+    const ceiling = normalizePersonalType(body?.packageCeiling || 'business')
+    const teamId = uid('team')
+    const now = new Date().toISOString()
+    await sb(env, 'teams', {
+      method: 'POST',
+      body: {
+        id: teamId,
+        name,
+        owner_profile_id: ownerProfile.id,
+        owner_email: ownerEmail,
+        package_ceiling: ceiling,
+        share_catalog: !!body?.shareCatalog,
+        share_bio: !!body?.shareBio,
+        share_banner: !!body?.shareBanner,
+        share_contacts: !!body?.shareContacts,
+        created_at: now,
+        updated_at: now
+      },
+      prefer: 'return=minimal'
+    })
+    // Insert owner as active team_member
+    await sb(env, 'team_members', {
+      method: 'POST',
+      body: {
+        id: uid('tmem'),
+        team_id: teamId,
+        profile_id: ownerProfile.id,
+        card_id: null,
+        slug: '',
+        role: ceiling,
+        status: 'active',
+        invite_email: ownerEmail,
+        invited_by_profile_id: ownerProfile.id,
+        invite_token: '',
+        joined_at: now,
+        created_at: now,
+        updated_at: now
+      },
+      prefer: 'return=minimal'
+    })
+    const created = await sb(env, `teams?id=eq.${encodeURIComponent(teamId)}&select=*`)
+    return json({ ok: true, team: mapTeamRow(created?.[0]) })
+  }
+
+  const adminTeamMatch = pathname.match(/^\/api\/admin\/teams\/([^/]+)$/)
+  if (adminTeamMatch && method === 'PUT') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
+    const teamId = decodeURIComponent(adminTeamMatch[1])
+    const body = await readJson(request)
+    const existingTeams = await sb(env, `teams?id=eq.${encodeURIComponent(teamId)}&deleted=eq.false&select=*`)
+    const team = existingTeams?.[0]
+    if (!team) return bad('Team not found', 404)
+
+    const patch = { updated_at: new Date().toISOString() }
+    if (body?.name !== undefined) {
+      const name = String(body.name || '').trim().slice(0, 120)
+      if (!name) return bad('Team name cannot be empty')
+      patch.name = name
+    }
+    if (body?.packageCeiling !== undefined) {
+      patch.package_ceiling = normalizePersonalType(body.packageCeiling)
+    }
+    if (body?.shareCatalog !== undefined) patch.share_catalog = !!body.shareCatalog
+    if (body?.shareBio !== undefined) patch.share_bio = !!body.shareBio
+    if (body?.shareBanner !== undefined) patch.share_banner = !!body.shareBanner
+    if (body?.shareContacts !== undefined) patch.share_contacts = !!body.shareContacts
+
+    if (body?.ownerProfileId !== undefined && body.ownerProfileId !== team.owner_profile_id) {
+      const newOwnerId = String(body.ownerProfileId || '').trim()
+      const ownerRows = await sb(
+        env,
+        `profiles?id=eq.${encodeURIComponent(newOwnerId)}&deleted=eq.false&select=id,name,company,login_email,email,card_type`
+      )
+      const newOwner = ownerRows?.[0]
+      if (!newOwner) return bad('New owner profile not found', 404)
+      if (newOwner.card_type === 'table') return bad('New owner must have a personal card', 400)
+      const newOwnerEmail = String(newOwner.login_email || newOwner.email || '').trim().toLowerCase()
+      patch.owner_profile_id = newOwner.id
+      patch.owner_email = newOwnerEmail
+
+      // Ensure new owner is active in team_members
+      const existingMem = await sb(
+        env,
+        `team_members?team_id=eq.${encodeURIComponent(team.id)}&profile_id=eq.${encodeURIComponent(newOwner.id)}&deleted=eq.false&select=id&limit=1`
+      )
+      if (existingMem?.[0]) {
+        await sb(env, `team_members?id=eq.${encodeURIComponent(existingMem[0].id)}`, {
+          method: 'PATCH',
+          body: { status: 'active', role: team.package_ceiling || 'business', updated_at: new Date().toISOString() },
+          prefer: 'return=minimal'
+        })
+      } else {
+        await sb(env, 'team_members', {
+          method: 'POST',
+          body: {
+            id: uid('tmem'),
+            team_id: team.id,
+            profile_id: newOwner.id,
+            card_id: null,
+            slug: '',
+            role: team.package_ceiling || 'business',
+            status: 'active',
+            invite_email: newOwnerEmail,
+            invited_by_profile_id: newOwner.id,
+            joined_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          },
+          prefer: 'return=minimal'
+        })
+      }
+    }
+
+    await sb(env, `teams?id=eq.${encodeURIComponent(team.id)}`, {
+      method: 'PATCH',
+      body: patch,
+      prefer: 'return=minimal'
+    })
+    const updated = await sb(env, `teams?id=eq.${encodeURIComponent(team.id)}&select=*`)
+    return json({ ok: true, team: mapTeamRow(updated?.[0]) })
+  }
+
+  if (adminTeamMatch && method === 'DELETE') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
+    const teamId = decodeURIComponent(adminTeamMatch[1])
+    await softDeleteRow(env, {
+      table: 'teams',
+      id: teamId,
+      actor: 'admin',
+      extra: { updated_at: new Date().toISOString() }
+    })
+    return json({ ok: true, id: teamId, deleted: true })
+  }
+
   if (pathname === '/api/upload' && method === 'POST') {
     const profile = await getSessionProfile(env, request)
     const staff = profile ? null : await getStaffFromRequest(env, request)
@@ -6105,6 +6413,118 @@ async function handleApi(request, env, url) {
   if (pathname === '/api/connections' && method === 'GET') {
     const profile = await getSessionProfile(env, request)
     if (!profile) return bad('Unauthorized', 401)
+
+    // Check if user is a team owner
+    const ownedTeams = await sb(
+      env,
+      `teams?owner_profile_id=eq.${encodeURIComponent(profile.id)}&deleted=eq.false&select=*&limit=1`
+    )
+    const ownedTeam = ownedTeams?.[0] || null
+
+    if (ownedTeam) {
+      // Team owner sees all contacts across all team members and themselves
+      const memRows = await sb(
+        env,
+        `team_members?team_id=eq.${encodeURIComponent(ownedTeam.id)}&deleted=eq.false&status=eq.active&select=profile_id`
+      )
+      const allProfileIds = [...new Set([profile.id, ...(memRows || []).map((m) => m.profile_id)].filter(Boolean))]
+
+      const memberProfiles = await sb(
+        env,
+        `profiles?id=in.(${allProfileIds.map(encodeURIComponent).join(',')})&select=id,name,company,email,login_email`
+      )
+      const profilesMap = Object.fromEntries((memberProfiles || []).map((p) => [p.id, p]))
+
+      const rows = await sb(
+        env,
+        `profile_connections?profile_id=in.(${allProfileIds.map(encodeURIComponent).join(',')})&deleted=eq.false&order=created_at.desc&limit=1000`
+      )
+      const connections = (rows || []).map((row) => {
+        const p = profilesMap[row.profile_id]
+        return {
+          id: row.id,
+          profileId: row.profile_id,
+          name: row.name || '',
+          phone: row.phone || '',
+          email: row.email || '',
+          company: row.company || '',
+          shareChannel: row.share_channel || '',
+          createdAt: row.created_at || '',
+          isMine: row.profile_id === profile.id,
+          collectedByName: p ? String(p.name || p.company || '').trim() : '',
+          collectedByEmail: p ? String(p.login_email || p.email || '').trim() : ''
+        }
+      })
+      return json({
+        ok: true,
+        connections,
+        isTeamOwner: true,
+        shareContacts: ownedTeam.share_contacts === true,
+        teamId: ownedTeam.id,
+        teamName: ownedTeam.name || 'Team'
+      })
+    }
+
+    // Check if user is an active team member of any team
+    const mems = await sb(
+      env,
+      `team_members?profile_id=eq.${encodeURIComponent(profile.id)}&deleted=eq.false&status=eq.active&select=team_id&limit=5`
+    )
+    const tIds = (mems || []).map((m) => m.team_id).filter(Boolean)
+    let memberTeam = null
+    if (tIds.length) {
+      const teams = await sb(
+        env,
+        `teams?id=in.(${tIds.map(encodeURIComponent).join(',')})&deleted=eq.false&select=*&limit=1`
+      )
+      memberTeam = teams?.[0] || null
+    }
+
+    if (memberTeam && memberTeam.share_contacts === true) {
+      // Team owner made contacts public to all team members
+      const memRows = await sb(
+        env,
+        `team_members?team_id=eq.${encodeURIComponent(memberTeam.id)}&deleted=eq.false&status=eq.active&select=profile_id`
+      )
+      const allProfileIds = [...new Set([memberTeam.owner_profile_id, ...(memRows || []).map((m) => m.profile_id)].filter(Boolean))]
+
+      const memberProfiles = await sb(
+        env,
+        `profiles?id=in.(${allProfileIds.map(encodeURIComponent).join(',')})&select=id,name,company,email,login_email`
+      )
+      const profilesMap = Object.fromEntries((memberProfiles || []).map((p) => [p.id, p]))
+
+      const rows = await sb(
+        env,
+        `profile_connections?profile_id=in.(${allProfileIds.map(encodeURIComponent).join(',')})&deleted=eq.false&order=created_at.desc&limit=1000`
+      )
+      const connections = (rows || []).map((row) => {
+        const p = profilesMap[row.profile_id]
+        return {
+          id: row.id,
+          profileId: row.profile_id,
+          name: row.name || '',
+          phone: row.phone || '',
+          email: row.email || '',
+          company: row.company || '',
+          shareChannel: row.share_channel || '',
+          createdAt: row.created_at || '',
+          isMine: row.profile_id === profile.id,
+          collectedByName: p ? String(p.name || p.company || '').trim() : '',
+          collectedByEmail: p ? String(p.login_email || p.email || '').trim() : ''
+        }
+      })
+      return json({
+        ok: true,
+        connections,
+        isTeamOwner: false,
+        shareContacts: true,
+        teamId: memberTeam.id,
+        teamName: memberTeam.name || 'Team'
+      })
+    }
+
+    // Default: member only sees their own contacts
     const rows = await sb(
       env,
       'profile_connections?profile_id=eq.' +
@@ -6119,9 +6539,17 @@ async function handleApi(request, env, url) {
       email: row.email || '',
       company: row.company || '',
       shareChannel: row.share_channel || '',
-      createdAt: row.created_at || ''
+      createdAt: row.created_at || '',
+      isMine: true
     }))
-    return json({ ok: true, connections })
+    return json({
+      ok: true,
+      connections,
+      isTeamOwner: false,
+      shareContacts: false,
+      teamId: memberTeam?.id || null,
+      teamName: memberTeam?.name || ''
+    })
   }
 
   const connectionDeleteMatch = pathname.match(/^\/api\/connections\/([^/]+)$/)
@@ -6131,13 +6559,33 @@ async function handleApi(request, env, url) {
     const connectionId = decodeURIComponent(connectionDeleteMatch[1])
     const rows = await sb(
       env,
-      `profile_connections?id=eq.${encodeURIComponent(connectionId)}&profile_id=eq.${encodeURIComponent(profile.id)}&deleted=eq.false&select=id&limit=1`
+      `profile_connections?id=eq.${encodeURIComponent(connectionId)}&deleted=eq.false&select=id,profile_id&limit=1`
     )
-    if (!rows?.[0]) return bad('Contact not found', 404)
+    const conn = rows?.[0]
+    if (!conn) return bad('Contact not found', 404)
+
+    let canDelete = conn.profile_id === profile.id
+    if (!canDelete) {
+      const teams = await sb(
+        env,
+        `teams?owner_profile_id=eq.${encodeURIComponent(profile.id)}&deleted=eq.false&select=id`
+      )
+      const ownedTeamIds = (teams || []).map((t) => t.id)
+      if (ownedTeamIds.length) {
+        const mems = await sb(
+          env,
+          `team_members?team_id=in.(${ownedTeamIds.map(encodeURIComponent).join(',')})&profile_id=eq.${encodeURIComponent(conn.profile_id)}&deleted=eq.false&select=id&limit=1`
+        )
+        if (mems?.length) canDelete = true
+      }
+    }
+    if (!canDelete) return bad('You do not have permission to delete this contact', 403)
+
     await softDeleteRow(env, {
       table: 'profile_connections',
       id: connectionId,
-      actor: profile.login_email || profile.email || profile.id
+      actor: profile.login_email || profile.email || profile.id,
+      extra: { deleted_at: new Date().toISOString() }
     })
     return json({ ok: true, id: connectionId, deleted: true })
   }
@@ -6247,8 +6695,46 @@ async function handleApi(request, env, url) {
       })
       const contactHtml = contactAddLinkHtml(vcfUrl)
       const contactText = contactAddLinkText(vcfUrl)
-      const hostEmails = ownerEmails.length ? ownerEmails : uniqueEmails('welcome@tapnam.com')
-      const guestReplyTo = ownerEmail || hostEmails[0]
+
+      let hostEmails = [...ownerEmails]
+      if (!hostEmails.length) {
+        const mems = await sb(
+          env,
+          `team_members?profile_id=eq.${encodeURIComponent(profileId)}&deleted=eq.false&select=invite_email&limit=1`
+        )
+        const invEmail = mems?.[0]?.invite_email
+        if (invEmail) hostEmails = uniqueEmails(invEmail)
+      }
+
+      // If booked profile is a team member, explicitly ensure team owner does NOT get notified
+      const teamMems = await sb(
+        env,
+        `team_members?profile_id=eq.${encodeURIComponent(profileId)}&deleted=eq.false&status=eq.active&select=team_id&limit=5`
+      )
+      const teamIds = (teamMems || []).map((m) => m.team_id).filter(Boolean)
+      if (teamIds.length) {
+        const teams = await sb(
+          env,
+          `teams?id=in.(${teamIds.map(encodeURIComponent).join(',')})&deleted=eq.false&select=owner_profile_id,owner_email`
+        )
+        const excludedOwnerEmails = new Set()
+        for (const t of teams || []) {
+          if (t.owner_profile_id && t.owner_profile_id !== profileId) {
+            if (t.owner_email) excludedOwnerEmails.add(t.owner_email.toLowerCase())
+            const teamOwners = await sb(
+              env,
+              `profiles?id=eq.${encodeURIComponent(t.owner_profile_id)}&select=email,login_email`
+            )
+            for (const to of teamOwners || []) {
+              if (to.email) excludedOwnerEmails.add(to.email.toLowerCase())
+              if (to.login_email) excludedOwnerEmails.add(to.login_email.toLowerCase())
+            }
+          }
+        }
+        hostEmails = hostEmails.filter((em) => !excludedOwnerEmails.has(em.toLowerCase()))
+      }
+
+      const guestReplyTo = hostEmails[0] || ownerEmail || 'welcome@tapnam.com'
       const sends = []
 
       // Guest confirmation + calendar invite
@@ -6280,8 +6766,9 @@ async function handleApi(request, env, url) {
         })
       )
 
-      // Host notification + calendar invite (profile email + login email)
-      sends.push(
+      // Host notification + calendar invite ONLY if host has an email address
+      if (hostEmails.length > 0) {
+        sends.push(
           sendCloudflareEmail(env, {
             to: hostEmails,
             replyTo: email,
@@ -6319,6 +6806,7 @@ async function handleApi(request, env, url) {
             attachments: [icsAttachment]
           })
         )
+      }
 
       await Promise.all(
         sends.map((p) => p.catch((err) => logAppError(env, {
