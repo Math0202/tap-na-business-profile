@@ -8,7 +8,10 @@ const props = defineProps({
   canReset: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['close', 'confirm', 'reset'])
+const emit = defineEmits(['close', 'confirm', 'reset', 'replace'])
+
+const activeSrc = ref(props.src || '')
+const replaceInput = ref(null)
 
 const fitMode = ref('width') // 'width' | 'height'
 const zoom = ref(1)
@@ -34,12 +37,38 @@ watch(
   () => [props.open, props.src],
   () => {
     if (!props.open) return
+    activeSrc.value = props.src || ''
     fitMode.value = 'width'
     zoom.value = 1
     offsetX.value = 0
     offsetY.value = 0
   }
 )
+
+function triggerReplace() {
+  replaceInput.value?.click()
+}
+
+function onFileSelect(e) {
+  const file = e.target.files && e.target.files[0]
+  if (!file) return
+  if (!file.type.startsWith('image/')) {
+    alert('Please choose an image file.')
+    e.target.value = ''
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = (ev) => {
+    activeSrc.value = ev.target.result
+    fitMode.value = 'width'
+    zoom.value = 1
+    offsetX.value = 0
+    offsetY.value = 0
+    emit('replace', ev.target.result)
+  }
+  reader.readAsDataURL(file)
+  e.target.value = ''
+}
 
 function setFitMode(mode) {
   if (fitMode.value === mode) return
@@ -156,14 +185,33 @@ async function confirmCrop() {
           @pointerdown="onPointerDown"
         >
           <img
-            v-if="src"
+            v-if="activeSrc"
             ref="imageEl"
-            :src="src"
+            :src="activeSrc"
             alt="Banner crop preview"
             class="absolute left-1/2 top-1/2 max-w-none pointer-events-none"
             :style="imageStyle()"
             draggable="false"
             @load="zoom = 1; offsetX = 0; offsetY = 0"
+          >
+        </div>
+
+        <!-- Replace Image Button -->
+        <div class="flex items-center justify-center -mt-1">
+          <button
+            type="button"
+            class="py-1.5 px-3.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-white flex items-center gap-1.5 border border-zinc-700 shadow-sm transition-all active:scale-95 cursor-pointer"
+            @click="triggerReplace"
+          >
+            <span class="material-symbols-outlined text-[16px]">photo_camera</span>
+            <span>Replace image</span>
+          </button>
+          <input
+            ref="replaceInput"
+            type="file"
+            accept="image/*"
+            class="hidden"
+            @change="onFileSelect"
           >
         </div>
 

@@ -1771,6 +1771,7 @@ onMounted(async () => {
       @close="showBannerCrop = false"
       @confirm="onBannerCropConfirm"
       @reset="onBannerCropReset"
+      @replace="(newSrc) => { bannerCropSource = newSrc }"
     />
     <div v-if="showPasswordModal" class="app-dialog-overlay fixed inset-0 z-[200] flex items-center justify-center p-6">
       <div class="absolute inset-0 bg-black/70" @click="showPasswordModal = false" />
