@@ -478,6 +478,37 @@ export function apiAdminDeleteTeam(id) {
   return request(`/api/admin/teams/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 
+export function apiAdminListTeamMembers(teamId, { includeDeleted = true } = {}) {
+  const q = includeDeleted ? '?includeDeleted=true' : ''
+  return request(`/api/admin/teams/${encodeURIComponent(teamId)}/members${q}`)
+}
+
+export function apiAdminAddTeamMember(teamId, payload) {
+  return request(`/api/admin/teams/${encodeURIComponent(teamId)}/members`, {
+    method: 'POST',
+    body: payload
+  })
+}
+
+export function apiAdminUpdateTeamMember(teamId, memberId, payload) {
+  return request(
+    `/api/admin/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(memberId)}`,
+    {
+      method: 'PATCH',
+      body: payload
+    }
+  )
+}
+
+export function apiAdminDeleteTeamMember(teamId, memberId) {
+  return request(
+    `/api/admin/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(memberId)}`,
+    {
+      method: 'DELETE'
+    }
+  )
+}
+
 
 /** Upload an image/video to the Supabase "assets bucket" via the Worker */
 export async function apiUploadAsset(file, { kind = "avatar" } = {}) {

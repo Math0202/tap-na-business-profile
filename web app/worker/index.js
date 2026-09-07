@@ -5813,6 +5813,310 @@ async function handleApi(request, env, url) {
     return json({ ok: true, id: teamId, deleted: true })
   }
 
+  // ---- Admin Group / Team Members Management ----
+  const adminTeamMembersMatch = pathname.match(/^\/api\/admin\/teams\/([^/]+)\/members$/)
+  if (adminTeamMembersMatch && method === 'GET') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
+    const teamId = decodeURIComponent(adminTeamMembersMatch[1])
+    const teams = await sb(env, `teams?id=eq.${encodeURIComponent(teamId)}&deleted=eq.false&select=*`)
+    const team = teams?.[0]
+    if (!team) return bad('Team/Group not found', 404)
+
+    const url = new URL(request.url)
+    const includeDeleted = url.searchParams.get('includeDeleted') === 'true'
+    const memberQ = includeDeleted
+      ? `team_members?team_id=eq.${encodeURIComponent(teamId)}&select=*&order=created_at.asc`
+      : `team_members?team_id=eq.${encodeURIComponent(teamId)}&deleted=eq.false&select=*&order=created_at.asc`
+    const memberRows = await sb(env, memberQ)
+    const members = await enrichTeamMembers(env, memberRows || [])
+    return json({ ok: true, team: mapTeamRow(team), members })
+  }
+
+  if (adminTeamMembersMatch && method === 'POST') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
+    const teamId = decodeURIComponent(adminTeamMembersMatch[1])
+    const teams = await sb(env, `teams?id=eq.${encodeURIComponent(teamId)}&deleted=eq.false&select=*`)
+    const team = teams?.[0]
+    if (!team) return bad('Team/Group not found', 404)
+
+    const body = await readJson(request)
+    let slug = String(body?.slug || '').trim()
+    let memberProfileId = String(body?.profileId || body?.profile_id || '').trim()
+    let inviteEmail = String(body?.email || body?.inviteEmail || '').trim().toLowerCase()
+    let card = null
+
+    if (slug) {
+      const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&deleted=eq.false&select=*`)
+      card = cards?.[0]
+      if (!card) return bad('Card not found', 404)
+      if (card.kind !== 'personal') return bad('Only personal cards can join a team/group', 400)
+      if (!memberProfileId && card.profile_id) {
+        memberProfileId = card.profile_id
+      }
+    } else if (memberProfileId) {
+      const personalCards = await sb(
+        env,
+        `cards?profile_id=eq.${encodeURIComponent(memberProfileId)}&kind=eq.personal&deleted=eq.false&order=linked_at.desc.nullslast&limit=1`
+      )
+      card = personalCards?.[0]
+      if (card?.slug) slug = card.slug
+    }
+
+    let memberProfile = null
+    if (memberProfileId) {
+      const profiles = await sb(
+        env,
+        `profiles?id=eq.${encodeURIComponent(memberProfileId)}&deleted=eq.false&select=id,name,company,login_email,email,card_type`
+      )
+      memberProfile = profiles?.[0]
+      if (!memberProfile || memberProfile.card_type === 'table') {
+        return bad('Selected profile is not a personal card account', 400)
+      }
+      inviteEmail = inviteEmail || String(memberProfile.login_email || memberProfile.email || '').trim().toLowerCase()
+    }
+
+    if (!slug && !memberProfileId) {
+      return bad('Either a Card ID (slug) or profile ID is required')
+    }
+
+    // Check if card or profile already exists in team
+    let existingQuery = `team_members?team_id=eq.${encodeURIComponent(teamId)}&deleted=eq.false`
+    if (slug && memberProfileId) {
+      existingQuery += `&or=(slug.eq.${encodeURIComponent(slug)},profile_id.eq.${encodeURIComponent(memberProfileId)})`
+    } else if (slug) {
+      existingQuery += `&slug=eq.${encodeURIComponent(slug)}`
+    } else {
+      existingQuery += `&profile_id=eq.${encodeURIComponent(memberProfileId)}`
+    }
+    const existing = await sb(env, existingQuery)
+    if (existing?.length) {
+      return bad('This member or card is already part of this team/group', 409)
+    }
+
+    const defaultRole = normalizePersonalType(body?.role || card?.personal_type || 'business')
+    const status = body?.status || (memberProfileId ? 'active' : 'pending_claim')
+    const memberId = uid('tmem')
+    const now = new Date().toISOString()
+
+    const newMemberRow = {
+      id: memberId,
+      team_id: team.id,
+      profile_id: memberProfileId || null,
+      card_id: card?.id || null,
+      slug: slug || '',
+      role: defaultRole,
+      status,
+      share_catalog: body?.shareCatalog !== undefined ? !!body.shareCatalog : (team.share_catalog === true),
+      share_bio: body?.shareBio !== undefined ? !!body.shareBio : (team.share_bio === true),
+      share_banner: body?.shareBanner !== undefined ? !!body.shareBanner : (team.share_banner === true),
+      share_website: body?.shareWebsite !== undefined ? !!body.shareWebsite : (team.share_website === true),
+      share_social_links: body?.shareSocialLinks !== undefined ? !!body.shareSocialLinks : (team.share_social_links === true),
+      share_contacts: body?.shareContacts !== undefined ? !!body.shareContacts : (team.share_contacts === true),
+      share_calendar_crm: body?.shareCalendarCrm !== undefined ? !!body.shareCalendarCrm : (team.share_calendar_crm === true),
+      invite_email: inviteEmail || '',
+      invited_by_profile_id: team.owner_profile_id || '',
+      invite_token: uid('tinv'),
+      joined_at: status === 'active' ? now : null,
+      created_at: now,
+      updated_at: now
+    }
+
+    await sb(env, 'team_members', {
+      method: 'POST',
+      body: newMemberRow,
+      prefer: 'return=minimal'
+    })
+
+    if (card?.id) {
+      await sb(env, `cards?id=eq.${encodeURIComponent(card.id)}`, {
+        method: 'PATCH',
+        body: { personal_type: defaultRole },
+        prefer: 'return=minimal'
+      })
+    }
+
+    const enriched = await enrichTeamMembers(env, [newMemberRow])
+    return json({ ok: true, member: enriched[0] || mapTeamMemberRow(newMemberRow) })
+  }
+
+  const adminTeamMemberDetailMatch = pathname.match(/^\/api\/admin\/teams\/([^/]+)\/members\/([^/]+)$/)
+  if (adminTeamMemberDetailMatch && (method === 'PATCH' || method === 'PUT')) {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
+    const teamId = decodeURIComponent(adminTeamMemberDetailMatch[1])
+    const memberId = decodeURIComponent(adminTeamMemberDetailMatch[2])
+
+    const teams = await sb(env, `teams?id=eq.${encodeURIComponent(teamId)}&deleted=eq.false&select=*`)
+    const team = teams?.[0]
+    if (!team) return bad('Team/Group not found', 404)
+
+    const members = await sb(env, `team_members?id=eq.${encodeURIComponent(memberId)}&team_id=eq.${encodeURIComponent(teamId)}&select=*`)
+    const member = members?.[0]
+    if (!member) return bad('Member not found on this team/group', 404)
+
+    const body = await readJson(request)
+    const now = new Date().toISOString()
+
+    // Restore member
+    if (body?.action === 'restore' || body?.deleted === false) {
+      await sb(env, `team_members?id=eq.${encodeURIComponent(memberId)}`, {
+        method: 'PATCH',
+        body: { deleted: false, deleted_at: null, deleted_by: null, updated_at: now },
+        prefer: 'return=minimal'
+      })
+      const res = await sb(env, `team_members?id=eq.${encodeURIComponent(memberId)}&select=*`)
+      const enriched = await enrichTeamMembers(env, res || [])
+      return json({ ok: true, member: enriched[0] })
+    }
+
+    // Transfer team leadership
+    if (body?.action === 'transfer_ownership') {
+      if (!member.profile_id) return bad('Member must have a linked profile to become leader', 400)
+      const newOwnerEmail = String(member.invite_email || '').trim().toLowerCase()
+      await sb(env, `teams?id=eq.${encodeURIComponent(team.id)}`, {
+        method: 'PATCH',
+        body: {
+          owner_profile_id: member.profile_id,
+          owner_email: newOwnerEmail || team.owner_email || '',
+          updated_at: now
+        },
+        prefer: 'return=minimal'
+      })
+      await sb(env, `team_members?id=eq.${encodeURIComponent(memberId)}`, {
+        method: 'PATCH',
+        body: { status: 'active', updated_at: now },
+        prefer: 'return=minimal'
+      })
+      return json({ ok: true, teamId: team.id, ownerProfileId: member.profile_id })
+    }
+
+    // Toggle card status (linked vs disabled)
+    if (body?.action === 'toggle_card_status' || body?.cardStatus !== undefined) {
+      const targetStatus = body.cardStatus === 'disabled' || body.action === 'deactivate_card' ? 'disabled' : 'linked'
+      if (member.card_id) {
+        await sb(env, `cards?id=eq.${encodeURIComponent(member.card_id)}`, {
+          method: 'PATCH',
+          body: { status: targetStatus },
+          prefer: 'return=minimal'
+        })
+      }
+      if (member.slug) {
+        await sb(env, `cards?slug=eq.${encodeURIComponent(member.slug)}`, {
+          method: 'PATCH',
+          body: { status: targetStatus },
+          prefer: 'return=minimal'
+        })
+      }
+      if (member.profile_id) {
+        await sb(env, `cards?profile_id=eq.${encodeURIComponent(member.profile_id)}&kind=eq.personal`, {
+          method: 'PATCH',
+          body: { status: targetStatus },
+          prefer: 'return=minimal'
+        })
+      }
+      await sb(env, `team_members?id=eq.${encodeURIComponent(memberId)}`, {
+        method: 'PATCH',
+        body: { updated_at: now },
+        prefer: 'return=minimal'
+      })
+      const res = await sb(env, `team_members?id=eq.${encodeURIComponent(memberId)}&select=*`)
+      const enriched = await enrichTeamMembers(env, res || [])
+      return json({ ok: true, member: enriched[0] })
+    }
+
+    // Apply member sharing to all other active members in the team
+    if (body?.action === 'apply_to_all') {
+      const patch = {
+        share_catalog: member.share_catalog === true,
+        share_bio: member.share_bio === true,
+        share_banner: member.share_banner === true,
+        share_website: member.share_website === true,
+        share_social_links: member.share_social_links === true,
+        share_contacts: member.share_contacts === true,
+        share_calendar_crm: member.share_calendar_crm === true,
+        updated_at: now
+      }
+      if (body?.shareCatalog !== undefined) patch.share_catalog = !!body.shareCatalog
+      if (body?.shareBio !== undefined) patch.share_bio = !!body.shareBio
+      if (body?.shareBanner !== undefined) patch.share_banner = !!body.shareBanner
+      if (body?.shareWebsite !== undefined) patch.share_website = !!body.shareWebsite
+      if (body?.shareSocialLinks !== undefined) patch.share_social_links = !!body.shareSocialLinks
+      if (body?.shareContacts !== undefined) patch.share_contacts = !!body.shareContacts
+      if (body?.shareCalendarCrm !== undefined) patch.share_calendar_crm = !!body.shareCalendarCrm
+
+      await sb(
+        env,
+        `team_members?team_id=eq.${encodeURIComponent(team.id)}&profile_id=neq.${encodeURIComponent(team.owner_profile_id)}&deleted=eq.false`,
+        {
+          method: 'PATCH',
+          body: patch,
+          prefer: 'return=minimal'
+        }
+      )
+      return json({ ok: true, applied: true })
+    }
+
+    // Update role, status, and/or sharing flags
+    const patch = { updated_at: now }
+    if (body?.role !== undefined) patch.role = normalizePersonalType(body.role)
+    if (body?.status !== undefined) patch.status = String(body.status)
+    if (body?.shareCatalog !== undefined) patch.share_catalog = !!body.shareCatalog
+    if (body?.shareBio !== undefined) patch.share_bio = !!body.shareBio
+    if (body?.shareBanner !== undefined) patch.share_banner = !!body.shareBanner
+    if (body?.shareWebsite !== undefined) patch.share_website = !!body.shareWebsite
+    if (body?.shareSocialLinks !== undefined) patch.share_social_links = !!body.shareSocialLinks
+    if (body?.shareContacts !== undefined) patch.share_contacts = !!body.shareContacts
+    if (body?.shareCalendarCrm !== undefined) patch.share_calendar_crm = !!body.shareCalendarCrm
+
+    await sb(env, `team_members?id=eq.${encodeURIComponent(memberId)}`, {
+      method: 'PATCH',
+      body: patch,
+      prefer: 'return=minimal'
+    })
+
+    if (body?.role !== undefined && (member.card_id || member.slug)) {
+      const cardKey = member.card_id ? `id=eq.${encodeURIComponent(member.card_id)}` : `slug=eq.${encodeURIComponent(member.slug)}`
+      await sb(env, `cards?${cardKey}`, {
+        method: 'PATCH',
+        body: { personal_type: patch.role },
+        prefer: 'return=minimal'
+      })
+    }
+
+    const res = await sb(env, `team_members?id=eq.${encodeURIComponent(memberId)}&select=*`)
+    const enriched = await enrichTeamMembers(env, res || [])
+    return json({ ok: true, member: enriched[0] })
+  }
+
+  if (adminTeamMemberDetailMatch && method === 'DELETE') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
+    const teamId = decodeURIComponent(adminTeamMemberDetailMatch[1])
+    const memberId = decodeURIComponent(adminTeamMemberDetailMatch[2])
+
+    const teams = await sb(env, `teams?id=eq.${encodeURIComponent(teamId)}&deleted=eq.false&select=*`)
+    const team = teams?.[0]
+    if (!team) return bad('Team/Group not found', 404)
+
+    const members = await sb(env, `team_members?id=eq.${encodeURIComponent(memberId)}&team_id=eq.${encodeURIComponent(teamId)}&select=*`)
+    const member = members?.[0]
+    if (!member) return bad('Member not found on this team/group', 404)
+
+    if (member.profile_id && member.profile_id === team.owner_profile_id) {
+      return bad('Cannot remove the team leader / owner. Transfer leadership first.', 400)
+    }
+
+    await softDeleteRow(env, {
+      table: 'team_members',
+      id: memberId,
+      actor: 'admin',
+      extra: { updated_at: new Date().toISOString() }
+    })
+    return json({ ok: true, id: memberId, deleted: true })
+  }
+
   if (pathname === '/api/upload' && method === 'POST') {
     const profile = await getSessionProfile(env, request)
     const staff = profile ? null : await getStaffFromRequest(env, request)

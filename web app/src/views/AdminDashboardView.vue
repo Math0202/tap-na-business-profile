@@ -20,9 +20,14 @@ import {
   apiAdminListTeams,
   apiAdminCreateTeam,
   apiAdminUpdateTeam,
-  apiAdminDeleteTeam
+  apiAdminDeleteTeam,
+  apiAdminListTeamMembers,
+  apiAdminAddTeamMember,
+  apiAdminUpdateTeamMember,
+  apiAdminDeleteTeamMember
 } from '../lib/api'
-import { personalTypeLabel } from '../lib/teamRoles'
+import { personalTypeLabel, memberStatusLabel, PERSONAL_TYPES } from '../lib/teamRoles'
+import { CARD_ID_LABEL, CARD_ID_HINT } from '../lib/cardLabels'
 import { cardImageSrc } from '../lib/cardLinkStore'
 import { purgeLocalDeletedRecords } from '../lib/salesStore'
 import ActivityCharts from '../components/ActivityCharts.vue'
@@ -53,7 +58,7 @@ const analyticsData = ref(null)
 
 const panels = [
   { id: 'profiles', label: 'Profiles', icon: 'group' },
-  { id: 'teams', label: 'Teams', icon: 'groups' },
+  { id: 'teams', label: 'Groups', icon: 'groups' },
   { id: 'analytics', label: 'Analytics', icon: 'monitoring' },
   { id: 'log', label: 'Log', icon: 'history' },
   { id: 'errors', label: 'Errors', icon: 'bug_report' },
@@ -81,6 +86,31 @@ const teamSaving = ref(false)
 const teamModalError = ref('')
 const candidateProfiles = ref([])
 const teamQuery = ref('')
+
+// Group Members Management State
+const membersModalOpen = ref(false)
+const activeTeam = ref(null)
+const teamMembers = ref([])
+const membersLoading = ref(false)
+const memberActionSaving = ref(false)
+const memberModalError = ref('')
+const memberModalToast = ref('')
+const showRemovedMembers = ref(false)
+
+const newMemberMode = ref('profile') // 'profile' | 'slug'
+const newMemberProfileId = ref('')
+const newMemberSlug = ref('')
+const newMemberRole = ref('business')
+const newMemberMyChoice = ref(false)
+const newMemberSharing = ref({
+  shareCatalog: true,
+  shareBio: true,
+  shareBanner: true,
+  shareWebsite: true,
+  shareSocialLinks: true,
+  shareContacts: true,
+  shareCalendarCrm: true
+})
 
 function panelFromRoute() {
   const p = String(route.query.panel || 'profiles').toLowerCase()
@@ -474,6 +504,300 @@ async function deleteTeam(t) {
   }
 }
 
+function flashMemberToast(msg) {
+  memberModalToast.value = msg
+  setTimeout(() => { memberModalToast.value = '' }, 2500)
+}
+
+function openMembersModal(t) {
+  activeTeam.value = t
+  memberModalError.value = ''
+  memberModalToast.value = ''
+  newMemberMode.value = 'profile'
+  newMemberProfileId.value = availableCandidateProfiles.value[0]?.id || ''
+  newMemberSlug.value = ''
+  newMemberRole.value = 'business'
+  newMemberMyChoice.value = false
+  newMemberSharing.value = {
+    shareCatalog: !!t.shareCatalog,
+    shareBio: !!t.shareBio,
+    shareBanner: !!t.shareBanner,
+    shareWebsite: !!t.shareWebsite,
+    shareSocialLinks: !!t.shareSocialLinks,
+    shareContacts: !!t.shareContacts,
+    shareCalendarCrm: !!t.shareCalendarCrm
+  }
+  membersModalOpen.value = true
+  loadTeamMembers(t.id)
+}
+
+async function loadTeamMembers(teamId) {
+  membersLoading.value = true
+  try {
+    const res = await apiAdminListTeamMembers(teamId, { includeDeleted: true })
+    if (res.ok && res.data?.members) {
+      teamMembers.value = res.data.members
+      const activeCount = res.data.members.filter((m) => !m.deleted).length
+      if (activeTeam.value) activeTeam.value.memberCount = activeCount
+      const found = teams.value.find((t) => t.id === teamId)
+      if (found) found.memberCount = activeCount
+    } else {
+      memberModalError.value = res.error || 'Could not load group members'
+    }
+  } catch (err) {
+    memberModalError.value = err?.message || 'Error loading group members'
+  } finally {
+    membersLoading.value = false
+  }
+}
+
+const visibleTeamMembers = computed(() => {
+  if (showRemovedMembers.value) return teamMembers.value
+  return teamMembers.value.filter((m) => !m.deleted)
+})
+
+const availableCandidateProfiles = computed(() => {
+  const existingProfileIds = new Set(
+    teamMembers.value.filter((m) => !m.deleted).map((m) => m.profileId).filter(Boolean)
+  )
+  return candidateProfiles.value.filter((p) => !existingProfileIds.has(p.id))
+})
+
+async function addTeamMember() {
+  if (!activeTeam.value) return
+  memberModalError.value = ''
+  let payload = {
+    role: newMemberRole.value
+  }
+  if (newMemberMode.value === 'profile') {
+    if (!newMemberProfileId.value) {
+      memberModalError.value = 'Please select a profile to add'
+      return
+    }
+    payload.profileId = newMemberProfileId.value
+  } else {
+    const slug = newMemberSlug.value.trim()
+    if (!slug) {
+      memberModalError.value = `Please enter a ${CARD_ID_LABEL}`
+      return
+    }
+    payload.slug = slug
+  }
+
+  if (newMemberMyChoice.value) {
+    Object.assign(payload, newMemberSharing.value)
+  } else {
+    payload.shareCatalog = !!activeTeam.value.shareCatalog
+    payload.shareBio = !!activeTeam.value.shareBio
+    payload.shareBanner = !!activeTeam.value.shareBanner
+    payload.shareWebsite = !!activeTeam.value.shareWebsite
+    payload.shareSocialLinks = !!activeTeam.value.shareSocialLinks
+    payload.shareContacts = !!activeTeam.value.shareContacts
+    payload.shareCalendarCrm = !!activeTeam.value.shareCalendarCrm
+  }
+
+  memberActionSaving.value = true
+  try {
+    const res = await apiAdminAddTeamMember(activeTeam.value.id, payload)
+    if (!res.ok) {
+      memberModalError.value = res.error || 'Could not add member to group'
+      return
+    }
+    flashMemberToast('Member added to group')
+    newMemberSlug.value = ''
+    newMemberMyChoice.value = false
+    await loadTeamMembers(activeTeam.value.id)
+  } catch (err) {
+    memberModalError.value = err?.message || 'Failed to add member'
+  } finally {
+    memberActionSaving.value = false
+  }
+}
+
+async function updateMemberSharing(member) {
+  if (!activeTeam.value) return
+  memberActionSaving.value = true
+  try {
+    const res = await apiAdminUpdateTeamMember(activeTeam.value.id, member.id, {
+      shareCatalog: !!member.shareCatalog,
+      shareBio: !!member.shareBio,
+      shareBanner: !!member.shareBanner,
+      shareWebsite: !!member.shareWebsite,
+      shareSocialLinks: !!member.shareSocialLinks,
+      shareContacts: !!member.shareContacts,
+      shareCalendarCrm: !!member.shareCalendarCrm
+    })
+    if (!res.ok) {
+      flashMemberToast(res.error || 'Failed to update member sharing')
+      await loadTeamMembers(activeTeam.value.id)
+      return
+    }
+    flashMemberToast(`Updated sharing for ${member.memberName || member.slug || 'member'}`)
+  } catch (err) {
+    flashMemberToast('Failed to update member sharing')
+  } finally {
+    memberActionSaving.value = false
+  }
+}
+
+function isMemberAllShared(m) {
+  return (
+    !!m.shareCatalog &&
+    !!m.shareBio &&
+    !!m.shareBanner &&
+    !!m.shareWebsite &&
+    !!m.shareSocialLinks &&
+    !!m.shareContacts &&
+    !!m.shareCalendarCrm
+  )
+}
+
+function toggleMemberMyChoice(m) {
+  const nextVal = !isMemberAllShared(m)
+  m.shareCatalog = nextVal
+  m.shareBio = nextVal
+  m.shareBanner = nextVal
+  m.shareWebsite = nextVal
+  m.shareSocialLinks = nextVal
+  m.shareContacts = nextVal
+  m.shareCalendarCrm = nextVal
+  updateMemberSharing(m)
+}
+
+async function applyMemberSharingToAll(member) {
+  if (!activeTeam.value) return
+  const label = member.memberName || member.slug || 'this member'
+  if (!confirm(`Apply ${label}'s sharing settings to all active group members?`)) return
+  memberActionSaving.value = true
+  try {
+    const res = await apiAdminUpdateTeamMember(activeTeam.value.id, member.id, {
+      action: 'apply_to_all',
+      shareCatalog: !!member.shareCatalog,
+      shareBio: !!member.shareBio,
+      shareBanner: !!member.shareBanner,
+      shareWebsite: !!member.shareWebsite,
+      shareSocialLinks: !!member.shareSocialLinks,
+      shareContacts: !!member.shareContacts,
+      shareCalendarCrm: !!member.shareCalendarCrm
+    })
+    if (!res.ok) {
+      flashMemberToast(res.error || 'Failed to apply sharing to all')
+      return
+    }
+    flashMemberToast('Applied sharing to all members')
+    await loadTeamMembers(activeTeam.value.id)
+  } catch (err) {
+    flashMemberToast('Error applying sharing to all')
+  } finally {
+    memberActionSaving.value = false
+  }
+}
+
+async function changeMemberRole(member, role) {
+  if (!activeTeam.value) return
+  memberActionSaving.value = true
+  try {
+    const res = await apiAdminUpdateTeamMember(activeTeam.value.id, member.id, { role })
+    if (!res.ok) {
+      flashMemberToast(res.error || 'Could not update role')
+      return
+    }
+    member.role = role
+    flashMemberToast('Role updated')
+  } catch (err) {
+    flashMemberToast('Error updating role')
+  } finally {
+    memberActionSaving.value = false
+  }
+}
+
+async function toggleMemberCardStatus(member) {
+  if (!activeTeam.value) return
+  const willDisable = member.cardStatus !== 'disabled'
+  const actionText = willDisable ? 'Deactivate' : 'Activate'
+  if (!confirm(`${actionText} card for ${member.memberName || member.slug || 'this member'}?`)) return
+  memberActionSaving.value = true
+  try {
+    const res = await apiAdminUpdateTeamMember(activeTeam.value.id, member.id, {
+      action: 'toggle_card_status',
+      cardStatus: willDisable ? 'disabled' : 'linked'
+    })
+    if (!res.ok) {
+      flashMemberToast(res.error || 'Could not update card status')
+      return
+    }
+    member.cardStatus = willDisable ? 'disabled' : 'linked'
+    flashMemberToast(`Card ${willDisable ? 'deactivated' : 'activated'}`)
+  } catch (err) {
+    flashMemberToast('Error updating card status')
+  } finally {
+    memberActionSaving.value = false
+  }
+}
+
+async function transferGroupLeadership(member) {
+  if (!activeTeam.value || !member.profileId) return
+  const label = member.memberName || member.slug || 'this member'
+  if (!confirm(`Make ${label} the new leader / owner of group "${activeTeam.value.name}"?`)) return
+  memberActionSaving.value = true
+  try {
+    const res = await apiAdminUpdateTeamMember(activeTeam.value.id, member.id, {
+      action: 'transfer_ownership'
+    })
+    if (!res.ok) {
+      flashMemberToast(res.error || 'Could not transfer leadership')
+      return
+    }
+    flashMemberToast(`Leadership transferred to ${label}`)
+    activeTeam.value.ownerProfileId = member.profileId
+    activeTeam.value.ownerName = member.memberName || ''
+    activeTeam.value.ownerEmail = member.memberEmail || ''
+    await Promise.all([loadTeamMembers(activeTeam.value.id), refresh()])
+  } catch (err) {
+    flashMemberToast('Error transferring leadership')
+  } finally {
+    memberActionSaving.value = false
+  }
+}
+
+async function removeTeamMember(member) {
+  if (!activeTeam.value) return
+  const label = member.memberName || member.slug || 'this member'
+  if (!confirm(`Remove ${label} from group "${activeTeam.value.name}"?`)) return
+  memberActionSaving.value = true
+  try {
+    const res = await apiAdminDeleteTeamMember(activeTeam.value.id, member.id)
+    if (!res.ok) {
+      flashMemberToast(res.error || 'Could not remove member')
+      return
+    }
+    flashMemberToast('Member removed from group')
+    await Promise.all([loadTeamMembers(activeTeam.value.id), refresh()])
+  } catch (err) {
+    flashMemberToast('Error removing member')
+  } finally {
+    memberActionSaving.value = false
+  }
+}
+
+async function restoreTeamMember(member) {
+  if (!activeTeam.value) return
+  memberActionSaving.value = true
+  try {
+    const res = await apiAdminUpdateTeamMember(activeTeam.value.id, member.id, { action: 'restore' })
+    if (!res.ok) {
+      flashMemberToast(res.error || 'Could not restore member')
+      return
+    }
+    flashMemberToast('Member restored to group')
+    await Promise.all([loadTeamMembers(activeTeam.value.id), refresh()])
+  } catch (err) {
+    flashMemberToast('Error restoring member')
+  } finally {
+    memberActionSaving.value = false
+  }
+}
+
 watch(
   () => route.query.panel,
   () => {
@@ -694,13 +1018,13 @@ onMounted(() => {
         </section>
       </template>
 
-      <!-- Teams panel -->
+      <!-- Groups / Teams panel -->
       <section v-else-if="panel === 'teams'" class="mb-8 space-y-4">
         <div class="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-400">Teams management</h2>
+            <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-400">Groups &amp; Teams Management</h2>
             <p class="text-xs text-gray-500 mt-1">
-              Create teams, assign team leaders, configure tiers, and control asset sharing
+              Create groups, assign group leaders, configure tiers, control asset sharing, and manage group members
             </p>
           </div>
           <button
@@ -709,7 +1033,7 @@ onMounted(() => {
             @click="openCreateTeamModal"
           >
             <span class="material-symbols-outlined text-[16px]">add</span>
-            Create team
+            Create group
           </button>
         </div>
 
@@ -718,18 +1042,18 @@ onMounted(() => {
             v-model="teamQuery"
             type="search"
             class="field-input w-full"
-            placeholder="Search teams by name, leader name, or email…"
+            placeholder="Search groups by name, leader name, or email…"
           >
         </div>
 
         <div v-if="teamsLoading" class="card-item-bg rounded-2xl p-8 text-center text-sm text-gray-400">
-          Loading teams…
+          Loading groups…
         </div>
         <div v-else-if="loadError" class="card-item-bg rounded-2xl p-6 text-sm text-amber-300">
           {{ loadError }}
         </div>
         <div v-else-if="!filteredTeams.length" class="card-item-bg rounded-2xl p-8 text-center text-sm text-gray-500">
-          No teams found.
+          No groups found.
         </div>
         <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <article
@@ -817,16 +1141,25 @@ onMounted(() => {
             <div class="flex items-center gap-2 pt-3 border-t border-[var(--border)]">
               <button
                 type="button"
-                class="flex-1 py-2 px-3 rounded-xl border border-[var(--border)] text-xs font-semibold text-gray-300 hover:text-white hover:bg-zinc-800 flex items-center justify-center gap-1.5 transition-colors"
-                @click="openEditTeamModal(t)"
+                class="flex-1 py-2 px-3 rounded-xl bg-sky-950/70 border border-sky-700/60 text-xs font-semibold text-sky-300 hover:bg-sky-900/60 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                @click="openMembersModal(t)"
               >
-                <span class="material-symbols-outlined text-[16px]">edit</span>
-                Edit / Reassign
+                <span class="material-symbols-outlined text-[16px]">group</span>
+                <span>Members ({{ t.memberCount }})</span>
               </button>
               <button
                 type="button"
-                class="py-2 px-3 rounded-xl border border-red-800/40 text-xs font-semibold text-red-400 hover:bg-red-950/40 flex items-center justify-center transition-colors"
-                title="Delete team"
+                class="py-2 px-3 rounded-xl border border-[var(--border)] text-xs font-semibold text-gray-300 hover:text-white hover:bg-zinc-800 flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                title="Edit group & leader"
+                @click="openEditTeamModal(t)"
+              >
+                <span class="material-symbols-outlined text-[16px]">edit</span>
+                <span>Edit</span>
+              </button>
+              <button
+                type="button"
+                class="py-2 px-3 rounded-xl border border-red-800/40 text-xs font-semibold text-red-400 hover:bg-red-950/40 flex items-center justify-center transition-colors cursor-pointer"
+                title="Delete group"
                 @click="deleteTeam(t)"
               >
                 <span class="material-symbols-outlined text-[16px]">delete</span>
@@ -1079,7 +1412,7 @@ onMounted(() => {
         <div class="w-full max-w-md rounded-2xl bg-zinc-900 border border-zinc-700 p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
           <div class="flex items-center justify-between">
             <h2 class="text-lg font-bold tracking-tight text-white">
-              {{ teamModalMode === 'create' ? 'Create New Team' : 'Edit Team & Leader' }}
+              {{ teamModalMode === 'create' ? 'Create New Group' : 'Edit Group & Leader' }}
             </h2>
             <button type="button" class="text-gray-400 hover:text-white" @click="teamModalOpen = false">
               <span class="material-symbols-outlined text-[20px]">close</span>
@@ -1092,7 +1425,7 @@ onMounted(() => {
 
           <div class="space-y-3">
             <div>
-              <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Team Name</label>
+              <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Group Name</label>
               <input
                 v-model="teamForm.name"
                 type="text"
@@ -1104,7 +1437,7 @@ onMounted(() => {
 
             <div>
               <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
-                Team Leader / Owner
+                Group Leader / Owner
               </label>
               <select
                 v-model="teamForm.ownerProfileId"
@@ -1120,7 +1453,7 @@ onMounted(() => {
                 </option>
               </select>
               <p class="text-[11px] text-gray-500 mt-1">
-                The selected profile will be designated as the team owner.
+                The selected profile will be designated as the group owner.
               </p>
             </div>
 
@@ -1136,31 +1469,31 @@ onMounted(() => {
               <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Sharing Defaults</p>
               <label class="flex items-center gap-2.5 cursor-pointer text-sm">
                 <input v-model="teamForm.shareCatalog" type="checkbox" class="rounded border-zinc-700">
-                <span>Share Catalog with team members</span>
+                <span>Share Catalog with group members</span>
               </label>
               <label class="flex items-center gap-2.5 cursor-pointer text-sm">
                 <input v-model="teamForm.shareBio" type="checkbox" class="rounded border-zinc-700">
-                <span>Share Company Bio with team members</span>
+                <span>Share Company Bio with group members</span>
               </label>
               <label class="flex items-center gap-2.5 cursor-pointer text-sm">
                 <input v-model="teamForm.shareBanner" type="checkbox" class="rounded border-zinc-700">
-                <span>Share Profile Banner with team members</span>
+                <span>Share Profile Banner with group members</span>
               </label>
               <label class="flex items-center gap-2.5 cursor-pointer text-sm">
                 <input v-model="teamForm.shareWebsite" type="checkbox" class="rounded border-zinc-700">
-                <span>Share Website with team members</span>
+                <span>Share Website with group members</span>
               </label>
               <label class="flex items-center gap-2.5 cursor-pointer text-sm">
                 <input v-model="teamForm.shareSocialLinks" type="checkbox" class="rounded border-zinc-700">
-                <span>Share Social Links with team members</span>
+                <span>Share Social Links with group members</span>
               </label>
               <label class="flex items-center gap-2.5 cursor-pointer text-sm">
                 <input v-model="teamForm.shareContacts" type="checkbox" class="rounded border-zinc-700">
-                <span>Share Contacts across team</span>
+                <span>Share Contacts across group</span>
               </label>
               <label class="flex items-center gap-2.5 cursor-pointer text-sm">
                 <input v-model="teamForm.shareCalendarCrm" type="checkbox" class="rounded border-zinc-700">
-                <span>Share Calendar &amp; CRM with team members</span>
+                <span>Share Calendar &amp; CRM with group members</span>
               </label>
             </div>
           </div>
@@ -1179,7 +1512,445 @@ onMounted(() => {
               :disabled="teamSaving"
               @click="saveTeam"
             >
-              {{ teamSaving ? 'Saving…' : (teamModalMode === 'create' ? 'Create Team' : 'Save Changes') }}
+              {{ teamSaving ? 'Saving…' : (teamModalMode === 'create' ? 'Create Group' : 'Save Changes') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Group Members Management Modal -->
+    <Teleport to="body">
+      <div
+        v-if="membersModalOpen"
+        class="app-dialog-overlay fixed inset-0 z-[210] flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-sm"
+        @click.self="membersModalOpen = false"
+      >
+        <div class="w-full max-w-2xl rounded-2xl bg-zinc-900 border border-zinc-700 p-5 sm:p-6 shadow-2xl flex flex-col max-h-[92vh] space-y-4">
+          <!-- Header -->
+          <div class="flex items-start justify-between gap-3 border-b border-zinc-800 pb-3.5">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <h2 class="text-lg font-bold tracking-tight text-white truncate">
+                  {{ activeTeam?.name || 'Group' }} — Members
+                </h2>
+                <span class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300">
+                  {{ personalTypeLabel(activeTeam?.packageCeiling) }}
+                </span>
+              </div>
+              <p class="text-xs text-gray-400 mt-1 flex items-center gap-1.5 flex-wrap">
+                <span class="font-semibold text-gray-300">Leader:</span>
+                <span>{{ activeTeam?.ownerName || '—' }}</span>
+                <span v-if="activeTeam?.ownerEmail" class="text-gray-500">({{ activeTeam.ownerEmail }})</span>
+              </p>
+            </div>
+            <button
+              type="button"
+              class="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition-colors"
+              @click="membersModalOpen = false"
+            >
+              <span class="material-symbols-outlined text-[20px]">close</span>
+            </button>
+          </div>
+
+          <!-- Toast & Error Banners -->
+          <p
+            v-if="memberModalToast"
+            class="text-xs text-emerald-300 bg-emerald-950/60 border border-emerald-700/60 rounded-xl p-2.5 transition-all"
+          >
+            {{ memberModalToast }}
+          </p>
+          <p
+            v-if="memberModalError"
+            class="text-xs text-red-400 bg-red-950/60 border border-red-700/60 rounded-xl p-2.5"
+          >
+            {{ memberModalError }}
+          </p>
+
+          <!-- Modal Scrollable Content -->
+          <div class="flex-1 overflow-y-auto space-y-5 pr-1">
+            <!-- Add Member Section -->
+            <div class="bg-zinc-950/60 border border-zinc-800 rounded-2xl p-4 space-y-3">
+              <div class="flex items-center justify-between gap-2 flex-wrap">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-gray-300 flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[16px] text-sky-400">person_add</span>
+                  <span>Add Member to Group</span>
+                </h3>
+                <!-- Mode Switcher -->
+                <div class="flex rounded-lg bg-zinc-900 p-0.5 border border-zinc-800 text-[11px]">
+                  <button
+                    type="button"
+                    class="px-2.5 py-1 rounded-md font-medium transition cursor-pointer"
+                    :class="newMemberMode === 'profile' ? 'bg-zinc-800 text-white font-semibold' : 'text-gray-400 hover:text-gray-200'"
+                    @click="newMemberMode = 'profile'"
+                  >
+                    Select Profile
+                  </button>
+                  <button
+                    type="button"
+                    class="px-2.5 py-1 rounded-md font-medium transition cursor-pointer"
+                    :class="newMemberMode === 'slug' ? 'bg-zinc-800 text-white font-semibold' : 'text-gray-400 hover:text-gray-200'"
+                    @click="newMemberMode = 'slug'"
+                  >
+                    Enter {{ CARD_ID_LABEL }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- Profile Picker Mode -->
+              <div v-if="newMemberMode === 'profile'" class="space-y-1">
+                <label class="block text-[11px] font-semibold text-gray-400">Select Existing Profile</label>
+                <select
+                  v-model="newMemberProfileId"
+                  class="field-input w-full bg-zinc-900 text-xs"
+                >
+                  <option value="" disabled>Choose a profile to add</option>
+                  <option
+                    v-for="p in availableCandidateProfiles"
+                    :key="p.id"
+                    :value="p.id"
+                  >
+                    {{ p.name || p.company || 'Unnamed' }} — {{ p.email || p.loginEmail || p.id }}
+                  </option>
+                </select>
+                <p v-if="!availableCandidateProfiles.length" class="text-[11px] text-amber-300/90 pt-0.5">
+                  All active personal profiles are already in this group.
+                </p>
+              </div>
+
+              <!-- Card ID Slug Mode -->
+              <div v-else class="space-y-1">
+                <label class="block text-[11px] font-semibold text-gray-400">{{ CARD_ID_LABEL }}</label>
+                <input
+                  v-model="newMemberSlug"
+                  type="text"
+                  class="field-input w-full text-xs"
+                  :placeholder="CARD_ID_LABEL"
+                >
+                <p class="text-[10px] text-gray-500">{{ CARD_ID_HINT }}</p>
+              </div>
+
+              <!-- Role Selector -->
+              <div class="space-y-1">
+                <label class="block text-[11px] font-semibold text-gray-400">Assigned Role</label>
+                <select v-model="newMemberRole" class="field-input w-full bg-zinc-900 text-xs">
+                  <option value="professional">Professional</option>
+                  <option value="business">Business</option>
+                  <option value="executive_exclusive">Executive Exclusive</option>
+                </select>
+              </div>
+
+              <!-- Member My Choice Toggle -->
+              <div class="pt-1">
+                <button
+                  type="button"
+                  class="w-full py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-between border transition cursor-pointer"
+                  :class="newMemberMyChoice ? 'bg-zinc-800 text-sky-300 border-zinc-700' : 'bg-zinc-900/60 text-gray-400 border-zinc-800 hover:text-gray-200'"
+                  @click="newMemberMyChoice = !newMemberMyChoice"
+                >
+                  <span class="flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-[15px]">tune</span>
+                    <span>Member sharing: {{ newMemberMyChoice ? 'My choice (custom)' : 'Group defaults' }}</span>
+                  </span>
+                  <span class="material-symbols-outlined text-[15px]">{{ newMemberMyChoice ? 'expand_less' : 'expand_more' }}</span>
+                </button>
+                <div v-if="newMemberMyChoice" class="mt-2 p-3 rounded-xl bg-zinc-900/90 border border-zinc-800 space-y-2">
+                  <p class="text-[11px] text-gray-400">Choose what to share with this member:</p>
+                  <div class="grid grid-cols-2 gap-1.5 text-xs">
+                    <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-zinc-800/60 border border-zinc-700/60">
+                      <input v-model="newMemberSharing.shareCatalog" type="checkbox" class="rounded border-zinc-600 text-sky-500">
+                      <span class="text-gray-200">Catalog</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-zinc-800/60 border border-zinc-700/60">
+                      <input v-model="newMemberSharing.shareBio" type="checkbox" class="rounded border-zinc-600 text-sky-500">
+                      <span class="text-gray-200">Company Bio</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-zinc-800/60 border border-zinc-700/60">
+                      <input v-model="newMemberSharing.shareBanner" type="checkbox" class="rounded border-zinc-600 text-sky-500">
+                      <span class="text-gray-200">Profile Banner</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-zinc-800/60 border border-zinc-700/60">
+                      <input v-model="newMemberSharing.shareWebsite" type="checkbox" class="rounded border-zinc-600 text-sky-500">
+                      <span class="text-gray-200">Website</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-zinc-800/60 border border-zinc-700/60">
+                      <input v-model="newMemberSharing.shareSocialLinks" type="checkbox" class="rounded border-zinc-600 text-sky-500">
+                      <span class="text-gray-200">Social Links</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-zinc-800/60 border border-zinc-700/60">
+                      <input v-model="newMemberSharing.shareContacts" type="checkbox" class="rounded border-zinc-600 text-sky-500">
+                      <span class="text-gray-200">Team Contacts</span>
+                    </label>
+                    <label class="col-span-2 flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-zinc-800/60 border border-zinc-700/60">
+                      <input v-model="newMemberSharing.shareCalendarCrm" type="checkbox" class="rounded border-zinc-600 text-sky-500">
+                      <span class="text-gray-200">Calendar &amp; CRM</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                class="w-full py-2.5 rounded-full bg-white hover:bg-gray-100 text-black text-xs font-bold transition disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
+                :disabled="memberActionSaving"
+                @click="addTeamMember"
+              >
+                <span class="material-symbols-outlined text-[16px]">add</span>
+                <span>{{ memberActionSaving ? 'Adding…' : 'Add to Group' }}</span>
+              </button>
+            </div>
+
+            <!-- Members List Header -->
+            <div class="flex items-center justify-between gap-2 pt-2">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-gray-400">
+                Current Members ({{ visibleTeamMembers.length }})
+              </h3>
+              <label class="inline-flex items-center gap-2 text-[11px] text-gray-400 cursor-pointer">
+                <input v-model="showRemovedMembers" type="checkbox" class="rounded border-zinc-700">
+                <span>Show removed</span>
+              </label>
+            </div>
+
+            <!-- Loading indicator -->
+            <div v-if="membersLoading" class="text-center py-8 text-sm text-gray-400">
+              Loading members…
+            </div>
+
+            <!-- Empty state -->
+            <div v-else-if="!visibleTeamMembers.length" class="text-center py-6 text-xs text-gray-500 border border-dashed border-zinc-800 rounded-2xl">
+              No members found for this group.
+            </div>
+
+            <!-- Members Cards -->
+            <div v-else class="space-y-3">
+              <div
+                v-for="m in visibleTeamMembers"
+                :key="m.id"
+                class="bg-zinc-950/70 border border-zinc-800 rounded-2xl p-4 space-y-3"
+                :class="m.deleted ? 'opacity-60' : ''"
+              >
+                <!-- Member Summary Row -->
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <p class="text-sm font-bold text-white truncate">{{ m.memberName || m.slug || 'Member' }}</p>
+                      <span
+                        v-if="m.profileId === activeTeam?.ownerProfileId"
+                        class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-700/40"
+                      >
+                        Group Leader
+                      </span>
+                    </div>
+                    <p class="text-xs text-gray-400 truncate mt-0.5">{{ m.memberEmail || m.inviteEmail || '—' }}</p>
+                    <p v-if="m.slug" class="text-[11px] text-gray-500 mt-0.5">{{ CARD_ID_LABEL }}: <span class="font-mono text-sky-400">{{ m.slug }}</span></p>
+                  </div>
+
+                  <!-- Status badges -->
+                  <div class="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                    <span
+                      v-if="m.cardStatus === 'disabled'"
+                      class="text-[10px] uppercase font-bold tracking-wide px-2 py-0.5 rounded-full bg-red-950 border border-red-700/60 text-red-300"
+                    >
+                      Card Deactivated
+                    </span>
+                    <span
+                      v-else-if="!m.deleted"
+                      class="text-[10px] uppercase font-semibold tracking-wide px-2 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-700/40 text-emerald-300"
+                    >
+                      Card Live
+                    </span>
+                    <span class="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-zinc-800 text-gray-300">
+                      {{ m.deleted ? 'Removed' : memberStatusLabel(m.status) }}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Controls for active members -->
+                <div v-if="!m.deleted" class="space-y-3 pt-2 border-t border-zinc-800/80">
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <!-- Role dropdown -->
+                    <div>
+                      <label class="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Role</label>
+                      <select
+                        class="field-input w-full bg-zinc-900 text-xs py-1.5"
+                        :value="m.role"
+                        :disabled="memberActionSaving"
+                        @change="changeMemberRole(m, $event.target.value)"
+                      >
+                        <option value="professional">Professional</option>
+                        <option value="business">Business</option>
+                        <option value="executive_exclusive">Executive Exclusive</option>
+                      </select>
+                    </div>
+
+                    <!-- Activate / Deactivate card -->
+                    <div class="flex flex-col justify-end">
+                      <button
+                        type="button"
+                        class="py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                        :class="m.cardStatus === 'disabled' ? 'bg-emerald-950/70 border border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/60' : 'bg-zinc-800/90 border border-zinc-700 text-amber-300 hover:bg-zinc-700'"
+                        :disabled="memberActionSaving"
+                        @click="toggleMemberCardStatus(m)"
+                      >
+                        <span class="material-symbols-outlined text-[16px]">{{ m.cardStatus === 'disabled' ? 'check_circle' : 'block' }}</span>
+                        <span>{{ m.cardStatus === 'disabled' ? 'Activate Card' : 'Deactivate Card' }}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Independent Sharing Checkboxes -->
+                  <div class="pt-2 border-t border-zinc-800/60 space-y-2">
+                    <div class="flex items-center justify-between">
+                      <span class="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                        Shared with this member
+                      </span>
+                      <button
+                        type="button"
+                        class="text-[11px] font-semibold px-2 py-0.5 rounded-full border transition flex items-center gap-1 cursor-pointer"
+                        :class="isMemberAllShared(m) ? 'bg-sky-950 text-sky-300 border-sky-700/60' : 'bg-zinc-800 text-gray-300 border-zinc-700'"
+                        :disabled="memberActionSaving"
+                        @click="toggleMemberMyChoice(m)"
+                      >
+                        <span class="material-symbols-outlined text-[13px]">{{ isMemberAllShared(m) ? 'select_all' : 'tune' }}</span>
+                        <span>{{ isMemberAllShared(m) ? 'All Shared' : 'My Choice' }}</span>
+                      </button>
+                    </div>
+
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs">
+                      <label class="flex items-center gap-2 cursor-pointer bg-zinc-900/80 hover:bg-zinc-800/80 p-2 rounded-xl border border-zinc-800/80 transition-colors">
+                        <input
+                          v-model="m.shareCatalog"
+                          type="checkbox"
+                          class="rounded border-zinc-600 text-sky-500"
+                          :disabled="memberActionSaving"
+                          @change="updateMemberSharing(m)"
+                        >
+                        <span class="text-gray-200 text-[11px]">Catalog</span>
+                      </label>
+                      <label class="flex items-center gap-2 cursor-pointer bg-zinc-900/80 hover:bg-zinc-800/80 p-2 rounded-xl border border-zinc-800/80 transition-colors">
+                        <input
+                          v-model="m.shareBio"
+                          type="checkbox"
+                          class="rounded border-zinc-600 text-sky-500"
+                          :disabled="memberActionSaving"
+                          @change="updateMemberSharing(m)"
+                        >
+                        <span class="text-gray-200 text-[11px]">Bio</span>
+                      </label>
+                      <label class="flex items-center gap-2 cursor-pointer bg-zinc-900/80 hover:bg-zinc-800/80 p-2 rounded-xl border border-zinc-800/80 transition-colors">
+                        <input
+                          v-model="m.shareBanner"
+                          type="checkbox"
+                          class="rounded border-zinc-600 text-sky-500"
+                          :disabled="memberActionSaving"
+                          @change="updateMemberSharing(m)"
+                        >
+                        <span class="text-gray-200 text-[11px]">Banner</span>
+                      </label>
+                      <label class="flex items-center gap-2 cursor-pointer bg-zinc-900/80 hover:bg-zinc-800/80 p-2 rounded-xl border border-zinc-800/80 transition-colors">
+                        <input
+                          v-model="m.shareWebsite"
+                          type="checkbox"
+                          class="rounded border-zinc-600 text-sky-500"
+                          :disabled="memberActionSaving"
+                          @change="updateMemberSharing(m)"
+                        >
+                        <span class="text-gray-200 text-[11px]">Website</span>
+                      </label>
+                      <label class="flex items-center gap-2 cursor-pointer bg-zinc-900/80 hover:bg-zinc-800/80 p-2 rounded-xl border border-zinc-800/80 transition-colors">
+                        <input
+                          v-model="m.shareSocialLinks"
+                          type="checkbox"
+                          class="rounded border-zinc-600 text-sky-500"
+                          :disabled="memberActionSaving"
+                          @change="updateMemberSharing(m)"
+                        >
+                        <span class="text-gray-200 text-[11px]">Social</span>
+                      </label>
+                      <label class="flex items-center gap-2 cursor-pointer bg-zinc-900/80 hover:bg-zinc-800/80 p-2 rounded-xl border border-zinc-800/80 transition-colors">
+                        <input
+                          v-model="m.shareContacts"
+                          type="checkbox"
+                          class="rounded border-zinc-600 text-sky-500"
+                          :disabled="memberActionSaving"
+                          @change="updateMemberSharing(m)"
+                        >
+                        <span class="text-gray-200 text-[11px]">Contacts</span>
+                      </label>
+                      <label class="col-span-2 flex items-center gap-2 cursor-pointer bg-zinc-900/80 hover:bg-zinc-800/80 p-2 rounded-xl border border-zinc-800/80 transition-colors">
+                        <input
+                          v-model="m.shareCalendarCrm"
+                          type="checkbox"
+                          class="rounded border-zinc-600 text-sky-500"
+                          :disabled="memberActionSaving"
+                          @change="updateMemberSharing(m)"
+                        >
+                        <span class="text-gray-200 text-[11px]">Calendar &amp; CRM</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <!-- Bottom Actions for Member -->
+                  <div class="flex items-center gap-2 pt-2 border-t border-zinc-800/60 flex-wrap">
+                    <button
+                      type="button"
+                      class="py-1.5 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-[11px] font-semibold text-sky-300 border border-zinc-700 flex items-center gap-1 transition cursor-pointer"
+                      :disabled="memberActionSaving"
+                      @click="applyMemberSharingToAll(m)"
+                    >
+                      <span class="material-symbols-outlined text-[14px]">sync</span>
+                      <span>Apply to all members</span>
+                    </button>
+
+                    <button
+                      v-if="m.profileId && m.profileId !== activeTeam?.ownerProfileId"
+                      type="button"
+                      class="py-1.5 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-[11px] font-semibold text-amber-300 border border-zinc-700 flex items-center gap-1 transition cursor-pointer"
+                      :disabled="memberActionSaving"
+                      @click="transferGroupLeadership(m)"
+                    >
+                      <span class="material-symbols-outlined text-[14px]">star</span>
+                      <span>Make Leader</span>
+                    </button>
+
+                    <button
+                      v-if="m.profileId !== activeTeam?.ownerProfileId"
+                      type="button"
+                      class="py-1.5 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-[11px] font-semibold text-red-400 border border-zinc-700 flex items-center gap-1 transition cursor-pointer ml-auto"
+                      :disabled="memberActionSaving"
+                      @click="removeTeamMember(m)"
+                    >
+                      <span class="material-symbols-outlined text-[14px]">person_remove</span>
+                      <span>Remove</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Restore control for removed members -->
+                <div v-else class="pt-2 border-t border-zinc-800/80 flex items-center justify-between">
+                  <span class="text-xs text-gray-500">Member was removed from this group.</span>
+                  <button
+                    type="button"
+                    class="py-1.5 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-emerald-300 border border-zinc-700 flex items-center gap-1 transition cursor-pointer"
+                    :disabled="memberActionSaving"
+                    @click="restoreTeamMember(m)"
+                  >
+                    <span class="material-symbols-outlined text-[15px]">restore</span>
+                    <span>Restore Member</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Modal Footer -->
+          <div class="pt-3 border-t border-zinc-800 flex justify-end">
+            <button
+              type="button"
+              class="py-2.5 px-6 rounded-full bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-white transition cursor-pointer"
+              @click="membersModalOpen = false"
+            >
+              Done
             </button>
           </div>
         </div>
