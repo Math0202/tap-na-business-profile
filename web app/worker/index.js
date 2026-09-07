@@ -1364,7 +1364,7 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
   } catch {}
   return {
     id: row.id,
-    cardType: row.card_type,
+    cardType: row.card_type === 'table' ? 'table' : 'personal',
     personalType,
     name: row.name,
     title: row.title,

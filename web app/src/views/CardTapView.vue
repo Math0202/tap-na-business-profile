@@ -36,9 +36,9 @@ const router = useRouter()
 
 // mode: '' (loading) | 'linked' | 'unlinked' | 'disabled' | 'missing'
 const mode = ref('')
-const cardKind = ref('table')
+const cardKind = ref('personal')
 const personalType = ref(DEFAULT_PERSONAL_TYPE)
-const linkedType = ref('table')
+const linkedType = ref('personal')
 const pendingTeamInvite = ref(null)
 const joinTeamOpen = ref(false)
 
@@ -246,10 +246,15 @@ onMounted(async () => {
   const remote = await apiResolveCard(serial.value)
   if (remote?.ok && remote.card) {
     apiLogCardOpen(serial.value, via).catch?.(() => {})
-    cardKind.value = remote.card.kind === 'personal' ? 'personal' : 'table'
+    const isPersonal =
+      remote.profile?.cardType === 'personal' ||
+      remote.card?.kind === 'personal' ||
+      !!remote.card?.personalType ||
+      !!remote.profile?.personalType
+    cardKind.value = isPersonal ? 'personal' : 'table'
     personalType.value =
-      remote.card.kind === 'personal'
-        ? normalizePersonalType(remote.card.personalType || remote.card.personal_type || DEFAULT_PERSONAL_TYPE)
+      isPersonal
+        ? normalizePersonalType(remote.card.personalType || remote.card.personal_type || remote.profile?.personalType || DEFAULT_PERSONAL_TYPE)
         : ''
     if (remote.pendingTeamInvite) pendingTeamInvite.value = remote.pendingTeamInvite
 
@@ -260,6 +265,7 @@ onMounted(async () => {
     }
 
     if (remote.card.status === 'linked' && remote.profile) {
+      linkedType.value = isPersonal ? 'personal' : 'table'
       const mine = loadProfile()
       const isMine =
         remote.profile.id && (mine.remoteProfileId === remote.profile.id || mine.id === remote.profile.id)
@@ -267,11 +273,16 @@ onMounted(async () => {
         ? {
             ...remote.profile,
             ...mine,
+            cardType: linkedType.value,
             banner: mine.banner || remote.profile.banner,
             bio: mine.bio || remote.profile.bio,
             shareSlug: remote.card.slug || serial.value
           }
-        : { ...remote.profile, shareSlug: remote.card.slug || serial.value }
+        : {
+            ...remote.profile,
+            cardType: linkedType.value,
+            shareSlug: remote.card.slug || serial.value
+          }
       setViewedProfile(profileToView)
       try {
         if (remote.profile.id && (mine.remoteProfileId === remote.profile.id || !mine.remoteProfileId)) {
@@ -279,6 +290,9 @@ onMounted(async () => {
           if (!mine.shareSlug) patch.shareSlug = remote.card.slug || serial.value
           if (remote.profile.personalType || personalType.value) {
             patch.personalType = remote.profile.personalType || personalType.value
+          }
+          if (remote.profile.cardType && mine.cardType !== remote.profile.cardType) {
+            patch.cardType = remote.profile.cardType === 'table' ? 'table' : 'personal'
           }
           if (Object.keys(patch).length) saveProfile(patch)
         }
@@ -303,15 +317,19 @@ onMounted(async () => {
   }
 
   const action = getCardTapAction(serial.value)
-  cardKind.value = action.card?.kind === 'personal' ? 'personal' : 'table'
+  const isPersonalOffline =
+    action.card?.kind === 'personal' ||
+    loadProfile().cardType === 'personal' ||
+    !!action.card?.personalType
+  cardKind.value = isPersonalOffline ? 'personal' : 'table'
   personalType.value =
-    action.card?.kind === 'personal'
+    isPersonalOffline
       ? normalizePersonalType(action.card?.personalType || action.card?.personal_type || DEFAULT_PERSONAL_TYPE)
       : ''
   if (action.ok && action.status === 'linked') {
     const mine = loadProfile()
-    linkedType.value = mine.cardType === 'personal' ? 'personal' : 'table'
-    setViewedProfile({ ...mine, shareSlug: serial.value })
+    linkedType.value = isPersonalOffline ? 'personal' : 'table'
+    setViewedProfile({ ...mine, cardType: linkedType.value, shareSlug: serial.value })
     if (redirectIfSingleBusinessDestination({ ...mine, cardType: linkedType.value })) {
       mode.value = 'redirect'
       setClaimChrome(false)
