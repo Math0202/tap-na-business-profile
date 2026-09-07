@@ -1602,6 +1602,7 @@ function mapTeamRow(row) {
     shareBio: row.share_bio === true,
     shareBanner: row.share_banner === true,
     shareContacts: row.share_contacts === true,
+    shareCalendarCrm: row.share_calendar_crm === true,
     meetingTool: String(row.meeting_tool || '').trim().toLowerCase(),
     usesCrm: row.uses_crm === true,
     crmProvider: String(row.crm_provider || '').trim().toLowerCase(),
@@ -1953,6 +1954,7 @@ async function resolveSharedTeamAssetsForProfile(env, profileId) {
     shareBio: team.share_bio === true,
     shareBanner: team.share_banner === true,
     shareContacts: team.share_contacts === true,
+    shareCalendarCrm: team.share_calendar_crm === true,
     catalogItems: items,
     bio: team.share_bio === true ? (owner.bio || '') : null,
     banner: team.share_banner === true ? (owner.banner || '') : null
@@ -2404,8 +2406,15 @@ async function teamIntegrationsForProfile(env, profileId) {
     env,
     `teams?id=in.(${teamIds.map(encodeURIComponent).join(',')})&deleted=eq.false&select=*`
   )
-  const row = (teams || []).find((t) => t.owner_profile_id === id) || teams?.[0]
-  return row ? mapTeamRow(row) : null
+  const ownedTeam = (teams || []).find((t) => t.owner_profile_id === id)
+  if (ownedTeam) return mapTeamRow(ownedTeam)
+
+  const memberTeam = teams?.[0]
+  if (!memberTeam) return null
+  if (memberTeam.share_calendar_crm !== true) {
+    return null
+  }
+  return mapTeamRow(memberTeam)
 }
 
 function calendarButtonRow(href, logoSrc, label) {
@@ -3698,6 +3707,9 @@ async function handleApi(request, env, url) {
     }
     if (body?.shareContacts !== undefined || body?.share_contacts !== undefined) {
       patch.share_contacts = !!(body.shareContacts ?? body.share_contacts)
+    }
+    if (body?.shareCalendarCrm !== undefined || body?.share_calendar_crm !== undefined) {
+      patch.share_calendar_crm = !!(body.shareCalendarCrm ?? body.share_calendar_crm)
     }
     if (
       body?.meetingTool !== undefined ||
@@ -5530,6 +5542,7 @@ async function handleApi(request, env, url) {
         share_bio: !!body?.shareBio,
         share_banner: !!body?.shareBanner,
         share_contacts: !!body?.shareContacts,
+        share_calendar_crm: !!(body?.shareCalendarCrm ?? body?.share_calendar_crm),
         created_at: now,
         updated_at: now
       },
@@ -5582,6 +5595,7 @@ async function handleApi(request, env, url) {
     if (body?.shareBio !== undefined) patch.share_bio = !!body.shareBio
     if (body?.shareBanner !== undefined) patch.share_banner = !!body.shareBanner
     if (body?.shareContacts !== undefined) patch.share_contacts = !!body.shareContacts
+    if (body?.shareCalendarCrm !== undefined) patch.share_calendar_crm = !!body.shareCalendarCrm
 
     if (body?.ownerProfileId !== undefined && body.ownerProfileId !== team.owner_profile_id) {
       const newOwnerId = String(body.ownerProfileId || '').trim()

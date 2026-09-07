@@ -45,6 +45,7 @@ const shareCatalog = ref(false)
 const shareBio = ref(false)
 const shareBanner = ref(false)
 const shareContacts = ref(false)
+const shareCalendarCrm = ref(false)
 const meetingTool = ref('')
 const usesCrm = ref(false)
 const crmProvider = ref('')
@@ -124,6 +125,7 @@ async function refresh() {
     shareBio.value = !!team.value?.shareBio
     shareBanner.value = !!team.value?.shareBanner
     shareContacts.value = !!team.value?.shareContacts
+    shareCalendarCrm.value = !!team.value?.shareCalendarCrm
     meetingTool.value = team.value?.meetingTool || ''
     usesCrm.value = !!team.value?.usesCrm
     crmProvider.value = team.value?.crmProvider || ''
@@ -201,7 +203,8 @@ async function saveSharing(key) {
       shareCatalog: shareCatalog.value,
       shareBio: shareBio.value,
       shareBanner: shareBanner.value,
-      shareContacts: shareContacts.value
+      shareContacts: shareContacts.value,
+      shareCalendarCrm: shareCalendarCrm.value
     })
     if (!res.ok) {
       flash(res.error || 'Could not update sharing setting')
@@ -213,6 +216,7 @@ async function saveSharing(key) {
     shareBio.value = !!res.data.team?.shareBio
     shareBanner.value = !!res.data.team?.shareBanner
     shareContacts.value = !!res.data.team?.shareContacts
+    shareCalendarCrm.value = !!res.data.team?.shareCalendarCrm
     flash('Team sharing updated')
   } finally {
     saving.value = false
@@ -512,6 +516,22 @@ onMounted(() => {
                   </span>
                 </span>
               </label>
+
+              <label class="flex items-start gap-3 cursor-pointer">
+                <input
+                  v-model="shareCalendarCrm"
+                  type="checkbox"
+                  class="mt-1 rounded border-zinc-600"
+                  :disabled="saving"
+                  @change="saveSharing('calendarCrm')"
+                >
+                <span class="min-w-0">
+                  <span class="block text-sm font-semibold">Share calendar &amp; CRM settings with team</span>
+                  <span class="block text-xs text-gray-400 mt-0.5 leading-relaxed">
+                    When enabled, team members inherit your meeting calendar and CRM integration for client bookings and contact additions.
+                  </span>
+                </span>
+              </label>
             </div>
 
             <div v-else class="space-y-1.5 text-xs text-sky-300/90 leading-relaxed bg-sky-950/30 border border-sky-900/40 rounded-xl p-3">
@@ -521,26 +541,55 @@ onMounted(() => {
                 <li v-if="shareBio">Company bio is displayed on your card</li>
                 <li v-if="shareBanner">Company banner is displayed on your card</li>
                 <li v-if="shareContacts">Team-wide contacts are visible in your Contacts tab</li>
-                <li v-if="!shareCatalog && !shareBio && !shareBanner && !shareContacts" class="list-none text-gray-400">No shared team assets currently enabled</li>
+                <li v-if="shareCalendarCrm">Calendar &amp; CRM settings are shared with your card</li>
+                <li v-if="!shareCatalog && !shareBio && !shareBanner && !shareContacts && !shareCalendarCrm" class="list-none text-gray-400">No shared team assets currently enabled</li>
               </ul>
             </div>
           </div>
 
-          <p class="text-xs text-gray-500 pt-1">
+          <p v-if="isOwner" class="text-xs text-gray-300 font-medium pt-1">
+            You are the team leader.
+          </p>
+          <p v-else class="text-xs text-gray-500 pt-1">
             Your role: <span class="text-gray-300">{{ personalTypeLabel(myRole) }}</span>
-            <template v-if="isOwner"> · Owner</template>
             · Package: <span class="text-gray-300">{{ personalTypeLabel(packageCeiling) }}</span>
           </p>
         </div>
 
         <div class="card-item-bg rounded-2xl p-4 mb-4 space-y-3">
-          <h2 class="text-sm font-semibold">Meeting calendar &amp; CRM</h2>
-          <p v-if="isOwner && !meetingTool" class="text-xs text-amber-300/90 leading-relaxed">
-            Choose a meeting calendar so booking emails include your calendar button.
-          </p>
-          <p v-else-if="!isOwner" class="text-xs text-gray-500 leading-relaxed">
-            Inherited from the team owner. Members are not asked to set this again.
-          </p>
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <h2 class="text-sm font-semibold">Meeting calendar &amp; CRM</h2>
+            <label v-if="isOwner" class="inline-flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+              <input
+                v-model="shareCalendarCrm"
+                type="checkbox"
+                class="rounded border-zinc-600"
+                :disabled="saving"
+                @change="saveSharing('calendarCrm')"
+              >
+              <span>Share with team</span>
+            </label>
+          </div>
+
+          <template v-if="isOwner">
+            <p v-if="!meetingTool" class="text-xs text-amber-300/90 leading-relaxed">
+              Choose a meeting calendar so booking emails include your calendar button.
+            </p>
+            <p v-else-if="shareCalendarCrm" class="text-xs text-emerald-400 leading-relaxed">
+              Active team members will inherit these settings on their public cards and emails.
+            </p>
+            <p v-else class="text-xs text-gray-400 leading-relaxed">
+              Sharing is off. These settings apply only to your own card.
+            </p>
+          </template>
+          <template v-else>
+            <p v-if="shareCalendarCrm" class="text-xs text-emerald-400 leading-relaxed">
+              Inherited from the team leader. Members are not asked to set this again.
+            </p>
+            <p v-else class="text-xs text-gray-400 leading-relaxed">
+              Calendar &amp; CRM sharing is currently disabled by the team leader.
+            </p>
+          </template>
           <TeamIntegrationsFields
             :meeting-tool="meetingTool"
             :uses-crm="usesCrm"
@@ -693,9 +742,12 @@ onMounted(() => {
           <div class="w-full max-w-sm rounded-2xl bg-zinc-900 border border-zinc-700 p-5 shadow-xl">
             <h2 class="text-lg font-bold tracking-tight">{{ tierGateTitle }}</h2>
             <p class="text-sm text-gray-400 mt-2 leading-relaxed">{{ tierGateMessage }}</p>
-            <p class="text-xs text-gray-500 mt-3">
+            <p v-if="isOwner" class="text-xs text-gray-400 mt-3 font-medium">
+              You are the team leader · Package: {{ personalTypeLabel(packageCeiling) }}
+            </p>
+            <p v-else class="text-xs text-gray-500 mt-3">
               Your role: {{ personalTypeLabel(myRole) }}
-              · Package ceiling: {{ personalTypeLabel(packageCeiling) }}
+              · Package: {{ personalTypeLabel(packageCeiling) }}
             </p>
             <button
               type="button"

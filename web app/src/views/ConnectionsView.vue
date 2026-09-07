@@ -67,9 +67,18 @@ async function loadTeamCrm() {
   try {
     const res = await apiGetMyTeam()
     if (res?.ok && res.data?.team) {
-      usesCrm.value = !!res.data.team.usesCrm
-      crmProvider.value = res.data.team.crmProvider || ''
-      crmOther.value = res.data.team.crmOther || ''
+      const t = res.data.team
+      const isOwner = !!res.data.isOwner
+      const allowed = isOwner || t.shareCalendarCrm === true
+      if (allowed) {
+        usesCrm.value = !!t.usesCrm
+        crmProvider.value = t.crmProvider || ''
+        crmOther.value = t.crmOther || ''
+      } else {
+        usesCrm.value = false
+        crmProvider.value = ''
+        crmOther.value = ''
+      }
     }
   } catch {
     usesCrm.value = false

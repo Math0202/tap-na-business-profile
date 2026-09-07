@@ -72,7 +72,8 @@ const teamForm = ref({
   shareCatalog: false,
   shareBio: false,
   shareBanner: false,
-  shareContacts: false
+  shareContacts: false,
+  shareCalendarCrm: false
 })
 const teamSaving = ref(false)
 const teamModalError = ref('')
@@ -400,7 +401,8 @@ function openCreateTeamModal() {
     shareCatalog: false,
     shareBio: false,
     shareBanner: false,
-    shareContacts: false
+    shareContacts: false,
+    shareCalendarCrm: false
   }
   teamModalOpen.value = true
 }
@@ -416,7 +418,8 @@ function openEditTeamModal(t) {
     shareCatalog: !!t.shareCatalog,
     shareBio: !!t.shareBio,
     shareBanner: !!t.shareBanner,
-    shareContacts: !!t.shareContacts
+    shareContacts: !!t.shareContacts,
+    shareCalendarCrm: !!t.shareCalendarCrm
   }
   teamModalOpen.value = true
 }
@@ -781,6 +784,12 @@ onMounted(() => {
                     >
                       Contacts
                     </span>
+                    <span
+                      class="text-[10px] font-medium px-2 py-0.5 rounded-md border"
+                      :class="t.shareCalendarCrm ? 'bg-purple-950/50 border-purple-700/60 text-purple-300' : 'bg-zinc-800/40 border-zinc-700/30 text-gray-500'"
+                    >
+                      Calendar &amp; CRM
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1122,6 +1131,10 @@ onMounted(() => {
               <label class="flex items-center gap-2.5 cursor-pointer text-sm">
                 <input v-model="teamForm.shareContacts" type="checkbox" class="rounded border-zinc-700">
                 <span>Share Contacts across team</span>
+              </label>
+              <label class="flex items-center gap-2.5 cursor-pointer text-sm">
+                <input v-model="teamForm.shareCalendarCrm" type="checkbox" class="rounded border-zinc-700">
+                <span>Share Calendar &amp; CRM with team members</span>
               </label>
             </div>
           </div>
