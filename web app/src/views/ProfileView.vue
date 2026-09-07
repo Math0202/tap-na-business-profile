@@ -489,6 +489,12 @@ function resetBanner() {
   apiUpdateMe({ banner: '' }).catch(() => {})
 }
 
+function onBannerCropReset() {
+  showBannerCrop.value = false
+  bannerCropSource.value = ''
+  resetBanner()
+}
+
 function onVideoUrlChange() {
   const url = videoUrlInput.value.trim()
   if (!url) {
@@ -958,59 +964,37 @@ onMounted(async () => {
       >
         <div class="banner-overlay absolute inset-0" />
 
-        <!-- Top Navigation & Banner Controls -->
-        <div class="absolute top-4 left-4 right-4 flex items-center justify-between z-20">
-          <RouterLink
-            :to="publicCardPath"
-            class="h-8 px-3 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur text-white text-xs font-semibold flex items-center gap-1.5 border border-white/10 transition-colors"
+        <!-- Bottom-Left Banner Controls: Camera Icon & Edit Icon -->
+        <div class="absolute bottom-3 left-4 flex items-center gap-2 z-20">
+          <label
+            for="banner-input"
+            class="w-9 h-9 rounded-full bg-black/70 hover:bg-black/90 text-white flex items-center justify-center cursor-pointer shadow-lg border border-white/20 transition-all active:scale-95"
+            :class="{ 'opacity-50 pointer-events-none': bannerUploading }"
+            title="Change banner photo"
+            aria-label="Change banner photo"
           >
-            <span class="material-symbols-outlined text-[16px]">arrow_back</span>
-            <span>View card</span>
-          </RouterLink>
+            <span class="material-symbols-outlined text-[19px]">photo_camera</span>
+          </label>
+          <input
+            id="banner-input"
+            ref="bannerInput"
+            type="file"
+            accept="image/*"
+            class="hidden"
+            :disabled="bannerUploading"
+            @change="onBannerChange"
+          />
 
-          <!-- Banner Controls -->
-          <div class="flex items-center gap-1.5">
-            <button
-              v-if="bannerData"
-              type="button"
-              class="h-8 px-2.5 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur text-gray-300 hover:text-white text-xs font-medium flex items-center gap-1 border border-white/10 transition-colors"
-              title="Reset to default banner"
-              @click="resetBanner"
-            >
-              <span class="material-symbols-outlined text-[15px]">refresh</span>
-              <span class="hidden sm:inline">Reset</span>
-            </button>
-
-            <button
-              v-if="bannerPreviewSrc && !bannerUploading"
-              type="button"
-              class="h-8 px-2.5 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur text-emerald-400 hover:text-emerald-300 text-xs font-medium flex items-center gap-1 border border-white/10 transition-colors"
-              title="Adjust banner crop & position"
-              @click="openBannerAdjust"
-            >
-              <span class="material-symbols-outlined text-[15px]">crop</span>
-              <span class="hidden sm:inline">Adjust banner</span>
-            </button>
-
-            <label
-              for="banner-input"
-              class="h-8 px-3 rounded-full bg-white text-black hover:bg-gray-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-lg transition-colors"
-              :class="{ 'opacity-50 pointer-events-none': bannerUploading }"
-              title="Change banner image"
-            >
-              <span class="material-symbols-outlined text-[16px]">photo_camera</span>
-              <span>{{ bannerData ? 'Change banner' : 'Add banner' }}</span>
-            </label>
-            <input
-              id="banner-input"
-              ref="bannerInput"
-              type="file"
-              accept="image/*"
-              class="hidden"
-              :disabled="bannerUploading"
-              @change="onBannerChange"
-            />
-          </div>
+          <button
+            type="button"
+            class="w-9 h-9 rounded-full bg-black/70 hover:bg-black/90 text-white flex items-center justify-center shadow-lg border border-white/20 transition-all active:scale-95"
+            :class="{ 'opacity-50 pointer-events-none': bannerUploading }"
+            title="Adjust banner"
+            aria-label="Adjust banner"
+            @click="openBannerAdjust"
+          >
+            <span class="material-symbols-outlined text-[19px]">edit</span>
+          </button>
         </div>
 
         <!-- Banner Uploading Indicator -->
@@ -1024,7 +1008,7 @@ onMounted(async () => {
       </div>
 
       <!-- Avatar Overlapping the Banner (exact same visual framing as public card) -->
-      <div class="px-6 -mt-14 relative z-10 flex flex-col items-center sm:items-start sm:flex-row sm:gap-4 text-center sm:text-left">
+      <div class="px-6 -mt-14 relative z-10 flex flex-col items-center text-center">
         <div class="relative shrink-0">
           <div
             class="relative w-28 h-28 overflow-hidden border-[3px] border-[var(--avatar-border)] shadow-2xl bg-zinc-800"
@@ -1059,14 +1043,14 @@ onMounted(async () => {
           />
         </div>
 
-        <div class="pt-2 sm:pt-4 min-w-0 flex-1">
+        <div class="pt-3 min-w-0 flex-1">
           <h1 class="text-xl font-bold tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">
             {{ isTable ? (company || 'Business Name') : (name || 'Your Name') }}
           </h1>
           <p class="text-xs text-gray-400 mt-0.5 truncate">
             {{ isTable ? 'Edit business profile' : (title || 'Edit digital business card') }}
           </p>
-          <div class="mt-2 flex items-center justify-center sm:justify-start gap-2">
+          <div class="mt-2 flex items-center justify-center gap-2">
             <button
               v-if="previewSrc && !avatarUploading"
               type="button"
@@ -1781,8 +1765,10 @@ onMounted(async () => {
       :open="showBannerCrop"
       :src="bannerCropSource"
       title="Adjust banner"
+      :can-reset="!!bannerData"
       @close="showBannerCrop = false"
       @confirm="onBannerCropConfirm"
+      @reset="onBannerCropReset"
     />
     <div v-if="showPasswordModal" class="app-dialog-overlay fixed inset-0 z-[200] flex items-center justify-center p-6">
       <div class="absolute inset-0 bg-black/70" @click="showPasswordModal = false" />

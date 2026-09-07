@@ -4,11 +4,13 @@ import { computed, ref, watch } from 'vue'
 const props = defineProps({
   open: { type: Boolean, default: false },
   src: { type: String, default: '' },
-  title: { type: String, default: 'Adjust banner' }
+  title: { type: String, default: 'Adjust banner' },
+  canReset: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['close', 'confirm'])
+const emit = defineEmits(['close', 'confirm', 'reset'])
 
+const fitMode = ref('width') // 'width' | 'height'
 const zoom = ref(1)
 const offsetX = ref(0)
 const offsetY = ref(0)
@@ -32,11 +34,20 @@ watch(
   () => [props.open, props.src],
   () => {
     if (!props.open) return
+    fitMode.value = 'width'
     zoom.value = 1
     offsetX.value = 0
     offsetY.value = 0
   }
 )
+
+function setFitMode(mode) {
+  if (fitMode.value === mode) return
+  fitMode.value = mode
+  zoom.value = 1
+  offsetX.value = 0
+  offsetY.value = 0
+}
 
 function onPointerDown(e) {
   dragging.value = true
@@ -61,8 +72,11 @@ function onPointerUp() {
 function imageStyle() {
   const el = imageEl.value
   if (!el || !el.naturalWidth) return {}
-  const base = Math.max(viewportWidth / el.naturalWidth, viewportHeight / el.naturalHeight)
-  const scale = base * zoom.value
+  const baseScale =
+    fitMode.value === 'height'
+      ? viewportHeight / el.naturalHeight
+      : viewportWidth / el.naturalWidth
+  const scale = baseScale * zoom.value
   const w = el.naturalWidth * scale
   const h = el.naturalHeight * scale
   return {
@@ -81,18 +95,27 @@ async function confirmCrop() {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
 
-  const base = Math.max(viewportWidth / img.naturalWidth, viewportHeight / img.naturalHeight)
-  const scale = base * zoom.value
+  // Fill canvas with dark background in case image does not cover the full canvas
+  ctx.fillStyle = '#18181b'
+  ctx.fillRect(0, 0, outputWidth, outputHeight)
+
+  const baseScale =
+    fitMode.value === 'height'
+      ? viewportHeight / img.naturalHeight
+      : viewportWidth / img.naturalWidth
+  const scale = baseScale * zoom.value
   const imgW = img.naturalWidth * scale
   const imgH = img.naturalHeight * scale
   const imgLeft = viewportWidth / 2 + offsetX.value - imgW / 2
   const imgTop = viewportHeight / 2 + offsetY.value - imgH / 2
-  const sx = (0 - imgLeft) / scale
-  const sy = (0 - imgTop) / scale
-  const sw = viewportWidth / scale
-  const sh = viewportHeight / scale
 
-  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outputWidth, outputHeight)
+  const factor = outputWidth / viewportWidth
+  const destX = imgLeft * factor
+  const destY = imgTop * factor
+  const destW = imgW * factor
+  const destH = imgH * factor
+
+  ctx.drawImage(img, destX, destY, destW, destH)
 
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92))
   if (blob) emit('confirm', blob)
@@ -123,11 +146,12 @@ async function confirmCrop() {
         </div>
 
         <p class="text-xs text-gray-400 leading-relaxed">
-          Drag to reposition your banner. Use the slider to zoom. This header banner displays on top of your public profile.
+          Choose whether to fit by width or height. Drag to reposition and use the slider to zoom.
         </p>
 
+        <!-- Preview Viewport Frame (2:1 aspect ratio) -->
         <div
-          class="relative mx-auto bg-zinc-900 border border-zinc-700 rounded-2xl overflow-hidden touch-none select-none"
+          class="relative mx-auto bg-zinc-900 border border-zinc-700 rounded-2xl overflow-hidden touch-none select-none shadow-inner"
           :style="{ width: `${viewportWidth}px`, height: `${viewportHeight}px` }"
           @pointerdown="onPointerDown"
         >
@@ -143,19 +167,59 @@ async function confirmCrop() {
           >
         </div>
 
+        <!-- Fit Mode Selector: Fit Width vs Fit Height -->
+        <div class="space-y-1.5">
+          <span class="block text-xs font-semibold uppercase tracking-wide text-gray-400">Fitting</span>
+          <div class="grid grid-cols-2 gap-2 p-1 bg-zinc-800 rounded-xl">
+            <button
+              type="button"
+              class="py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5"
+              :class="fitMode === 'width' ? 'bg-white text-black shadow' : 'text-gray-400 hover:text-white'"
+              @click="setFitMode('width')"
+            >
+              <span class="material-symbols-outlined text-[16px]">swap_horiz</span>
+              Fit Width
+            </button>
+            <button
+              type="button"
+              class="py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5"
+              :class="fitMode === 'height' ? 'bg-white text-black shadow' : 'text-gray-400 hover:text-white'"
+              @click="setFitMode('height')"
+            >
+              <span class="material-symbols-outlined text-[16px]">swap_vert</span>
+              Fit Height
+            </button>
+          </div>
+        </div>
+
+        <!-- Zoom Slider -->
         <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400">
-          Zoom
+          <div class="flex items-center justify-between mb-1">
+            <span>Zoom</span>
+            <span class="text-[11px] text-gray-400 font-mono">{{ zoomPercent }}%</span>
+          </div>
           <input
             v-model.number="zoomPercent"
             type="range"
             min="100"
             max="300"
             step="1"
-            class="w-full mt-2 accent-white"
+            class="w-full accent-white"
           >
         </label>
 
-        <div class="flex gap-3 pt-1">
+        <!-- Actions -->
+        <div class="flex gap-2 pt-1">
+          <button
+            v-if="canReset"
+            type="button"
+            class="py-3 px-3 rounded-full bg-zinc-800 hover:bg-zinc-700 text-red-400 hover:text-red-300 font-semibold text-xs flex items-center justify-center gap-1 shrink-0"
+            title="Reset to default banner"
+            @click="emit('reset')"
+          >
+            <span class="material-symbols-outlined text-[16px]">refresh</span>
+            Reset
+          </button>
           <button
             type="button"
             class="flex-1 py-3 rounded-full bg-zinc-700 hover:bg-zinc-600 font-semibold text-sm"
