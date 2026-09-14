@@ -1,0 +1,25 @@
+-- Named generate batches (folders) of NFC/QR slugs
+CREATE TABLE IF NOT EXISTS public.card_batches (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'table',
+  personal_type TEXT NOT NULL DEFAULT '',
+  created_by TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_card_batches_created ON public.card_batches(created_at DESC);
+
+COMMENT ON TABLE public.card_batches IS
+  'Named generate batches (folders) of NFC/QR slugs in admin.';
+
+ALTER TABLE public.cards
+  ADD COLUMN IF NOT EXISTS batch_id TEXT REFERENCES public.card_batches(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_cards_batch ON public.cards(batch_id);
+
+COMMENT ON COLUMN public.cards.batch_id IS
+  'Optional named generate batch. Null = ungrouped (legacy / sales).';
+
+ALTER TABLE public.card_batches ENABLE ROW LEVEL SECURITY;
+GRANT ALL ON TABLE public.card_batches TO service_role;
