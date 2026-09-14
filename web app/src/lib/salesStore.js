@@ -11,6 +11,9 @@ const QUOTES_KEY = 'tapna_sales_quotes'
 const INVOICES_KEY = 'tapna_sales_invoices'
 const PRODUCTS_KEY = 'tapna_sales_products'
 const CASH_KEY = 'tapna_sales_cashflow'
+const CLIENTS_KEY = 'tapna_sales_clients'
+const CLIENT_MEETINGS_KEY = 'tapna_sales_client_meetings'
+const CLIENT_NOTES_KEY = 'tapna_sales_client_notes'
 
 /** No seeded catalog — products live in Supabase `sales_products`. */
 export const DEFAULT_PRODUCTS = []
@@ -24,6 +27,9 @@ export const SALE_STATUSES = ['pending', 'paid', 'fulfilled', 'cancelled']
 export const QUOTE_STATUSES = ['draft', 'sent', 'accepted', 'declined', 'converted', 'expired']
 export const INVOICE_STATUSES = ['draft', 'sent', 'partially_settled', 'paid', 'void']
 export const PAYMENT_METHODS = ['cash', 'eft', 'card', 'mobile', 'other']
+export const SAMPLE_CARD_STATUSES = ['none', 'accepted', 'printed']
+export const PIPELINE_STATUSES = ['pending', 'closed_sold', 'not_interested']
+export const SALE_STAGES = ['no_sale', 'quote', 'invoice']
 export const CASH_CATEGORIES = [
   'sale',
   'investment',
@@ -51,6 +57,33 @@ export function cashCategoryLabel(category) {
     other: 'Other'
   }
   return labels[String(category || '').trim()] || String(category || 'Other')
+}
+
+export function sampleCardStatusLabel(status) {
+  const map = {
+    none: 'No sample card',
+    accepted: 'Accepted',
+    printed: 'Printed'
+  }
+  return map[String(status || '').trim()] || 'No sample card'
+}
+
+export function pipelineStatusLabel(status) {
+  const map = {
+    pending: 'Pending',
+    closed_sold: 'Closed (sold)',
+    not_interested: 'Not interested'
+  }
+  return map[String(status || '').trim()] || 'Pending'
+}
+
+export function saleStageLabel(stage) {
+  const map = {
+    no_sale: 'No sale',
+    quote: 'Quote',
+    invoice: 'Invoice'
+  }
+  return map[String(stage || '').trim()] || 'No sale'
 }
 
 export const COMPANY = {
@@ -364,6 +397,7 @@ function normalizeSale(s) {
   return {
     id: s.id || uid('sale'),
     agentId: s.agentId || '',
+    clientId: s.clientId || '',
     customerName: s.customerName || '',
     customerPhone: s.customerPhone || '',
     customerEmail: s.customerEmail || '',
@@ -406,6 +440,7 @@ function normalizeQuote(q) {
     id: q.id || uid('quote'),
     quoteNumber: q.quoteNumber || '',
     agentId: q.agentId || '',
+    clientId: q.clientId || '',
     customerName: q.customerName || '',
     customerPhone: q.customerPhone || '',
     customerEmail: q.customerEmail || '',
@@ -445,6 +480,7 @@ function normalizeInvoice(inv) {
     saleId: inv.saleId || '',
     quoteId: inv.quoteId || '',
     agentId: inv.agentId || '',
+    clientId: inv.clientId || '',
     customerName: inv.customerName || '',
     customerPhone: inv.customerPhone || '',
     customerEmail: inv.customerEmail || '',
@@ -825,7 +861,10 @@ export async function refreshFinanceFromApi() {
       orders: listSales({ includeDeleted: true }),
       quotes: listQuotes({ includeDeleted: true }),
       invoices: listInvoices({ includeDeleted: true }),
-      cashflow: listCashFlow({ includeDeleted: true })
+      cashflow: listCashFlow({ includeDeleted: true }),
+      clients: listClients({ includeDeleted: true }),
+      clientMeetings: listClientMeetings({ includeDeleted: true }),
+      clientNotes: listClientNotes({ includeDeleted: true })
     }
 
     const remoteEmpty = !(
@@ -885,6 +924,17 @@ export async function refreshFinanceFromApi() {
     writeJson(QUOTES_KEY, mergedQuotes)
     writeJson(INVOICES_KEY, mergedInvoices)
     writeJson(CASH_KEY, finalCash)
+
+    const mergedClients = mergeById(localBefore.clients, data.clients || [], normalizeClient)
+    const mergedMeetings = mergeById(
+      localBefore.clientMeetings,
+      data.clientMeetings || [],
+      normalizeClientMeeting
+    )
+    const mergedNotes = mergeById(localBefore.clientNotes, data.clientNotes || [], normalizeClientNote)
+    writeJson(CLIENTS_KEY, mergedClients)
+    writeJson(CLIENT_MEETINGS_KEY, mergedMeetings)
+    writeJson(CLIENT_NOTES_KEY, mergedNotes)
 
     // Upload anything that still only exists on this device
     await pushMissingFinance({
@@ -2411,12 +2461,287 @@ export function formatMoney(amount) {
   return 'N$ ' + n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })
 }
 
+function normalizeClient(c) {
+  return {
+    id: c.id || uid('scli'),
+    name: c.name || '',
+    company: c.company || '',
+    email: c.email || '',
+    phone: c.phone || '',
+    location: c.location || '',
+    sampleCardStatus: SAMPLE_CARD_STATUSES.includes(c.sampleCardStatus) ? c.sampleCardStatus : 'none',
+    pipelineStatus: PIPELINE_STATUSES.includes(c.pipelineStatus) ? c.pipelineStatus : 'pending',
+    saleStage: SALE_STAGES.includes(c.saleStage) ? c.saleStage : 'no_sale',
+    ownerAgentId: c.ownerAgentId || '',
+    createdByAgentId: c.createdByAgentId || '',
+    createdByUserId: c.createdByUserId || '',
+    createdByName: c.createdByName || '',
+    createdByEmail: c.createdByEmail || '',
+    isReferral: c.isReferral === true,
+    referredByClientId: c.referredByClientId || '',
+    deleted: c.deleted === true,
+    deletedAt: c.deletedAt || '',
+    deletedBy: c.deletedBy || '',
+    createdAt: c.createdAt || new Date().toISOString(),
+    updatedAt: c.updatedAt || c.createdAt || new Date().toISOString()
+  }
+}
+
+function normalizeClientMeeting(m) {
+  return {
+    id: m.id || uid('scmt'),
+    clientId: m.clientId || '',
+    meetingAt: m.meetingAt || new Date().toISOString(),
+    title: m.title || '',
+    summary: m.summary || '',
+    createdByAgentId: m.createdByAgentId || '',
+    createdByUserId: m.createdByUserId || '',
+    createdByName: m.createdByName || '',
+    createdByEmail: m.createdByEmail || '',
+    deleted: m.deleted === true,
+    deletedAt: m.deletedAt || '',
+    deletedBy: m.deletedBy || '',
+    createdAt: m.createdAt || new Date().toISOString(),
+    updatedAt: m.updatedAt || ''
+  }
+}
+
+function normalizeClientNote(n) {
+  return {
+    id: n.id || uid('scnt'),
+    clientId: n.clientId || '',
+    meetingId: n.meetingId || '',
+    body: n.body || '',
+    createdByAgentId: n.createdByAgentId || '',
+    createdByUserId: n.createdByUserId || '',
+    createdByName: n.createdByName || '',
+    createdByEmail: n.createdByEmail || '',
+    deleted: n.deleted === true,
+    deletedAt: n.deletedAt || '',
+    deletedBy: n.deletedBy || '',
+    createdAt: n.createdAt || new Date().toISOString(),
+    updatedAt: n.updatedAt || ''
+  }
+}
+
+export function listClients({ includeDeleted = false } = {}) {
+  ensureSeeded()
+  let list = readJson(CLIENTS_KEY, []).map(normalizeClient)
+  if (!includeDeleted) list = list.filter((c) => !c.deleted)
+  return list.sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt)))
+}
+
+export function getClient(id) {
+  return listClients({ includeDeleted: true }).find((c) => c.id === id) || null
+}
+
+export function saveClient(payload) {
+  const list = listClients({ includeDeleted: true })
+  const next = normalizeClient({
+    ...payload,
+    id: payload.id || uid('scli'),
+    updatedAt: new Date().toISOString()
+  })
+  const idx = list.findIndex((c) => c.id === next.id)
+  if (idx >= 0) {
+    list[idx] = {
+      ...list[idx],
+      ...next,
+      id: list[idx].id,
+      createdAt: list[idx].createdAt,
+      createdByAgentId: list[idx].createdByAgentId || next.createdByAgentId,
+      createdByUserId: list[idx].createdByUserId || next.createdByUserId,
+      createdByName: list[idx].createdByName || next.createdByName,
+      createdByEmail: list[idx].createdByEmail || next.createdByEmail
+    }
+  } else {
+    list.unshift(next)
+  }
+  writeJson(CLIENTS_KEY, list)
+  syncFinanceQuiet(async () => {
+    const { apiUpsertSalesClient } = await import('./api.js')
+    await apiUpsertSalesClient(idx >= 0 ? list[idx] : next)
+  })
+  return idx >= 0 ? list[idx] : next
+}
+
+export function deleteClient(id) {
+  markLocalDeleted(CLIENTS_KEY, id, normalizeClient)
+  syncFinanceQuiet(async () => {
+    const { apiDeleteSalesClient } = await import('./api.js')
+    await apiDeleteSalesClient(id)
+  })
+}
+
+export function listClientMeetings({ clientId = '', includeDeleted = false } = {}) {
+  ensureSeeded()
+  let list = readJson(CLIENT_MEETINGS_KEY, []).map(normalizeClientMeeting)
+  if (!includeDeleted) list = list.filter((m) => !m.deleted)
+  if (clientId) list = list.filter((m) => m.clientId === clientId)
+  return list.sort((a, b) => String(b.meetingAt).localeCompare(String(a.meetingAt)))
+}
+
+export function saveClientMeeting(payload) {
+  const list = listClientMeetings({ includeDeleted: true })
+  const next = normalizeClientMeeting({
+    ...payload,
+    id: payload.id || uid('scmt')
+  })
+  const idx = list.findIndex((m) => m.id === next.id)
+  if (idx >= 0) list[idx] = { ...list[idx], ...next, id: list[idx].id, createdAt: list[idx].createdAt }
+  else list.unshift(next)
+  writeJson(CLIENT_MEETINGS_KEY, list)
+  syncFinanceQuiet(async () => {
+    const { apiUpsertSalesClientMeeting } = await import('./api.js')
+    await apiUpsertSalesClientMeeting(next)
+  })
+  return next
+}
+
+export function deleteClientMeeting(id) {
+  markLocalDeleted(CLIENT_MEETINGS_KEY, id, normalizeClientMeeting)
+  syncFinanceQuiet(async () => {
+    const { apiDeleteSalesClientMeeting } = await import('./api.js')
+    await apiDeleteSalesClientMeeting(id)
+  })
+}
+
+export function listClientNotes({ clientId = '', includeDeleted = false } = {}) {
+  ensureSeeded()
+  let list = readJson(CLIENT_NOTES_KEY, []).map(normalizeClientNote)
+  if (!includeDeleted) list = list.filter((n) => !n.deleted)
+  if (clientId) list = list.filter((n) => n.clientId === clientId)
+  return list.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+}
+
+export function saveClientNote(payload) {
+  const list = listClientNotes({ includeDeleted: true })
+  const next = normalizeClientNote({
+    ...payload,
+    id: payload.id || uid('scnt')
+  })
+  const idx = list.findIndex((n) => n.id === next.id)
+  if (idx >= 0) list[idx] = { ...list[idx], ...next, id: list[idx].id, createdAt: list[idx].createdAt }
+  else list.unshift(next)
+  writeJson(CLIENT_NOTES_KEY, list)
+  syncFinanceQuiet(async () => {
+    const { apiUpsertSalesClientNote } = await import('./api.js')
+    await apiUpsertSalesClientNote(next)
+  })
+  return next
+}
+
+export function deleteClientNote(id) {
+  markLocalDeleted(CLIENT_NOTES_KEY, id, normalizeClientNote)
+  syncFinanceQuiet(async () => {
+    const { apiDeleteSalesClientNote } = await import('./api.js')
+    await apiDeleteSalesClientNote(id)
+  })
+}
+
+/** Derive sale stage + meeting summary for a CRM client row. */
+export function clientCrmSummary(client) {
+  const meetings = listClientMeetings({ clientId: client.id })
+  const quotes = listQuotes().filter(
+    (q) =>
+      q.clientId === client.id ||
+      (client.email && String(q.customerEmail || '').toLowerCase() === String(client.email).toLowerCase())
+  )
+  const invoices = listInvoices().filter(
+    (inv) =>
+      inv.clientId === client.id ||
+      (client.email && String(inv.customerEmail || '').toLowerCase() === String(client.email).toLowerCase())
+  )
+  let saleStage = client.saleStage || 'no_sale'
+  if (invoices.length) saleStage = 'invoice'
+  else if (quotes.length) saleStage = 'quote'
+  else if (!client.saleStage || client.saleStage === 'no_sale') saleStage = 'no_sale'
+
+  const latestMeeting = meetings[0] || null
+  return {
+    meetings,
+    quotes,
+    invoices,
+    meetingLabel: latestMeeting
+      ? new Date(latestMeeting.meetingAt).toLocaleDateString()
+      : 'No meeting',
+    meetingCount: meetings.length,
+    saleStage,
+    saleStageLabel: saleStageLabel(saleStage)
+  }
+}
+
+/** Build a chronological activity timeline for a client. */
+export function clientActivityLog(clientId) {
+  const client = getClient(clientId)
+  if (!client) return []
+  const events = []
+  for (const m of listClientMeetings({ clientId })) {
+    events.push({
+      id: 'mtg:' + m.id,
+      type: 'meeting',
+      at: m.meetingAt,
+      title: m.title || 'Meeting',
+      detail: m.summary || '',
+      by: m.createdByName || m.createdByEmail || '',
+      raw: m
+    })
+  }
+  for (const n of listClientNotes({ clientId })) {
+    events.push({
+      id: 'note:' + n.id,
+      type: 'note',
+      at: n.createdAt,
+      title: 'Note',
+      detail: n.body,
+      by: n.createdByName || n.createdByEmail || '',
+      raw: n
+    })
+  }
+  const summary = clientCrmSummary(client)
+  for (const q of summary.quotes) {
+    events.push({
+      id: 'quote:' + q.id,
+      type: 'quote',
+      at: q.createdAt,
+      title: `Quote ${q.quoteNumber || q.id}`,
+      detail: `${q.status} · ${formatMoney(q.amount)}`,
+      by: '',
+      raw: q
+    })
+  }
+  for (const inv of summary.invoices) {
+    events.push({
+      id: 'inv:' + inv.id,
+      type: 'invoice',
+      at: inv.issuedAt || inv.createdAt,
+      title: `Invoice ${inv.invoiceNumber || inv.id}`,
+      detail: `${inv.status} · ${formatMoney(inv.amount)}`,
+      by: '',
+      raw: inv
+    })
+  }
+  events.push({
+    id: 'created:' + client.id,
+    type: 'created',
+    at: client.createdAt,
+    title: client.isReferral ? 'Referral added' : 'Client added',
+    detail: client.createdByName || client.createdByEmail || 'Unknown',
+    by: client.createdByName || client.createdByEmail || '',
+    raw: client
+  })
+  return events.sort((a, b) => String(b.at).localeCompare(String(a.at)))
+}
+
 export function clearSalesData() {
   writeJson(AGENTS_KEY, [])
   writeJson(SALES_KEY, [])
   writeJson(QUOTES_KEY, [])
   writeJson(INVOICES_KEY, [])
   writeJson(CASH_KEY, [])
+  writeJson(CLIENTS_KEY, [])
+  writeJson(CLIENT_MEETINGS_KEY, [])
+  writeJson(CLIENT_NOTES_KEY, [])
   // Keep products — they live in Supabase; only clear local sales ops data
   localStorage.setItem(DATA_VERSION_KEY, DATA_VERSION)
 }

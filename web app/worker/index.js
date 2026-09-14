@@ -711,6 +711,7 @@ function mapSalesOrderRow(row) {
     {
       id: row.id,
       agentId: row.agent_id || '',
+      clientId: row.client_id || '',
       customerName: row.customer_name || '',
       customerPhone: row.customer_phone || '',
       customerEmail: row.customer_email || '',
@@ -740,9 +741,11 @@ function salesOrderToDb(body, { isNew = false } = {}) {
   const id = String(body?.id || '').trim() || (isNew ? uid('sale') : '')
   const agentId = String(body?.agentId || '').trim() || null
   const productId = String(body?.productId || '').trim() || null
+  const clientId = String(body?.clientId || '').trim() || null
   return {
     id,
     agent_id: agentId,
+    client_id: clientId,
     customer_name: String(body?.customerName || '').trim(),
     customer_phone: String(body?.customerPhone || '').trim(),
     customer_email: String(body?.customerEmail || '').trim(),
@@ -772,6 +775,7 @@ function mapSalesQuoteRow(row) {
       id: row.id,
       quoteNumber: row.quote_number || '',
       agentId: row.agent_id || '',
+      clientId: row.client_id || '',
       customerName: row.customer_name || '',
       customerPhone: row.customer_phone || '',
       customerEmail: row.customer_email || '',
@@ -799,10 +803,12 @@ function salesQuoteToDb(body, { isNew = false } = {}) {
   const id = String(body?.id || '').trim() || (isNew ? uid('quote') : '')
   const agentId = String(body?.agentId || '').trim() || null
   const productId = String(body?.productId || '').trim() || null
+  const clientId = String(body?.clientId || '').trim() || null
   return {
     id,
     quote_number: String(body?.quoteNumber || id).trim(),
     agent_id: agentId,
+    client_id: clientId,
     customer_name: String(body?.customerName || '').trim(),
     customer_phone: String(body?.customerPhone || '').trim(),
     customer_email: String(body?.customerEmail || '').trim(),
@@ -832,6 +838,7 @@ function mapSalesInvoiceRow(row) {
       saleId: row.sale_id || '',
       quoteId: row.quote_id || '',
       agentId: row.agent_id || '',
+      clientId: row.client_id || '',
       customerName: row.customer_name || '',
       customerPhone: row.customer_phone || '',
       customerEmail: row.customer_email || '',
@@ -862,6 +869,7 @@ function salesInvoiceToDb(body, { isNew = false } = {}) {
   const agentId = String(body?.agentId || '').trim() || null
   const saleId = String(body?.saleId || '').trim() || null
   const productId = String(body?.productId || '').trim() || null
+  const clientId = String(body?.clientId || '').trim() || null
   const amount = Math.max(0, Number(body?.amount) || 0)
   const status = String(body?.status || 'draft')
   let paidAmount = Math.max(0, Number(body?.paidAmount) || 0)
@@ -873,6 +881,7 @@ function salesInvoiceToDb(body, { isNew = false } = {}) {
     sale_id: saleId,
     quote_id: String(body?.quoteId || '').trim(),
     agent_id: agentId,
+    client_id: clientId,
     customer_name: String(body?.customerName || '').trim(),
     customer_phone: String(body?.customerPhone || '').trim(),
     customer_email: String(body?.customerEmail || '').trim(),
@@ -891,6 +900,177 @@ function salesInvoiceToDb(body, { isNew = false } = {}) {
     email_id: String(body?.emailId || '').trim(),
     notes: String(body?.notes || '').trim(),
     lines: Array.isArray(body?.lines) ? body.lines : [],
+    updated_at: new Date().toISOString(),
+    ...(isNew ? { created_at: body?.createdAt || new Date().toISOString() } : {})
+  }
+}
+
+function normalizeSampleCardStatus(raw) {
+  const v = String(raw || '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+  if (v === 'accepted') return 'accepted'
+  if (v === 'printed') return 'printed'
+  return 'none'
+}
+
+function normalizePipelineStatus(raw) {
+  const v = String(raw || '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+  if (v === 'closed_sold' || v === 'closed' || v === 'sold') return 'closed_sold'
+  if (v === 'not_interested' || v === 'notinterested') return 'not_interested'
+  return 'pending'
+}
+
+function normalizeSaleStage(raw) {
+  const v = String(raw || '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+  if (v === 'quote') return 'quote'
+  if (v === 'invoice') return 'invoice'
+  return 'no_sale'
+}
+
+function mapSalesClientRow(row) {
+  return withDeletedFields(
+    {
+      id: row.id,
+      name: row.name || '',
+      company: row.company || '',
+      email: row.email || '',
+      phone: row.phone || '',
+      location: row.location || '',
+      sampleCardStatus: normalizeSampleCardStatus(row.sample_card_status),
+      pipelineStatus: normalizePipelineStatus(row.pipeline_status),
+      saleStage: normalizeSaleStage(row.sale_stage),
+      ownerAgentId: row.owner_agent_id || '',
+      createdByAgentId: row.created_by_agent_id || '',
+      createdByUserId: row.created_by_user_id || '',
+      createdByName: row.created_by_name || '',
+      createdByEmail: row.created_by_email || '',
+      isReferral: row.is_referral === true,
+      referredByClientId: row.referred_by_client_id || '',
+      createdAt: row.created_at || '',
+      updatedAt: row.updated_at || ''
+    },
+    row
+  )
+}
+
+function salesClientToDb(body, { isNew = false, staff = null } = {}) {
+  const id = String(body?.id || '').trim() || (isNew ? uid('scli') : '')
+  const ownerAgentId = String(body?.ownerAgentId || '').trim() || null
+  const createdByAgentId =
+    String(body?.createdByAgentId || '').trim() ||
+    (isNew ? String(staff?.agentId || '').trim() || null : null)
+  const referredBy = String(body?.referredByClientId || '').trim() || null
+  return {
+    id,
+    name: String(body?.name || '').trim().slice(0, 160),
+    company: String(body?.company || '').trim().slice(0, 160),
+    email: String(body?.email || '').trim().toLowerCase().slice(0, 160),
+    phone: String(body?.phone || '').trim().slice(0, 40),
+    location: String(body?.location || '').trim().slice(0, 200),
+    sample_card_status: normalizeSampleCardStatus(body?.sampleCardStatus),
+    pipeline_status: normalizePipelineStatus(body?.pipelineStatus),
+    sale_stage: normalizeSaleStage(body?.saleStage),
+    owner_agent_id: ownerAgentId,
+    created_by_agent_id: createdByAgentId,
+    created_by_user_id: isNew
+      ? String(staff?.id || body?.createdByUserId || '').trim()
+      : String(body?.createdByUserId || '').trim(),
+    created_by_name: isNew
+      ? String(staff?.name || body?.createdByName || '').trim()
+      : String(body?.createdByName || '').trim(),
+    created_by_email: isNew
+      ? String(staff?.email || body?.createdByEmail || '').trim().toLowerCase()
+      : String(body?.createdByEmail || '').trim().toLowerCase(),
+    is_referral: body?.isReferral === true || !!referredBy,
+    referred_by_client_id: referredBy,
+    updated_at: new Date().toISOString(),
+    ...(isNew ? { created_at: body?.createdAt || new Date().toISOString() } : {})
+  }
+}
+
+function mapSalesClientMeetingRow(row) {
+  return withDeletedFields(
+    {
+      id: row.id,
+      clientId: row.client_id || '',
+      meetingAt: row.meeting_at || '',
+      title: row.title || '',
+      summary: row.summary || '',
+      createdByAgentId: row.created_by_agent_id || '',
+      createdByUserId: row.created_by_user_id || '',
+      createdByName: row.created_by_name || '',
+      createdByEmail: row.created_by_email || '',
+      createdAt: row.created_at || '',
+      updatedAt: row.updated_at || ''
+    },
+    row
+  )
+}
+
+function salesClientMeetingToDb(body, { isNew = false, staff = null } = {}) {
+  const id = String(body?.id || '').trim() || (isNew ? uid('scmt') : '')
+  const clientId = String(body?.clientId || '').trim()
+  return {
+    id,
+    client_id: clientId,
+    meeting_at: body?.meetingAt || new Date().toISOString(),
+    title: String(body?.title || '').trim().slice(0, 160),
+    summary: String(body?.summary || '').trim().slice(0, 4000),
+    created_by_agent_id:
+      String(body?.createdByAgentId || '').trim() ||
+      (isNew ? String(staff?.agentId || '').trim() || null : null),
+    created_by_user_id: isNew
+      ? String(staff?.id || body?.createdByUserId || '').trim()
+      : String(body?.createdByUserId || '').trim(),
+    created_by_name: isNew
+      ? String(staff?.name || body?.createdByName || '').trim()
+      : String(body?.createdByName || '').trim(),
+    created_by_email: isNew
+      ? String(staff?.email || body?.createdByEmail || '').trim().toLowerCase()
+      : String(body?.createdByEmail || '').trim().toLowerCase(),
+    updated_at: new Date().toISOString(),
+    ...(isNew ? { created_at: body?.createdAt || new Date().toISOString() } : {})
+  }
+}
+
+function mapSalesClientNoteRow(row) {
+  return withDeletedFields(
+    {
+      id: row.id,
+      clientId: row.client_id || '',
+      meetingId: row.meeting_id || '',
+      body: row.body || '',
+      createdByAgentId: row.created_by_agent_id || '',
+      createdByUserId: row.created_by_user_id || '',
+      createdByName: row.created_by_name || '',
+      createdByEmail: row.created_by_email || '',
+      createdAt: row.created_at || '',
+      updatedAt: row.updated_at || ''
+    },
+    row
+  )
+}
+
+function salesClientNoteToDb(body, { isNew = false, staff = null } = {}) {
+  const id = String(body?.id || '').trim() || (isNew ? uid('scnt') : '')
+  const clientId = String(body?.clientId || '').trim()
+  const meetingId = String(body?.meetingId || '').trim() || null
+  return {
+    id,
+    client_id: clientId,
+    meeting_id: meetingId,
+    body: String(body?.body || '').trim().slice(0, 8000),
+    created_by_agent_id:
+      String(body?.createdByAgentId || '').trim() ||
+      (isNew ? String(staff?.agentId || '').trim() || null : null),
+    created_by_user_id: isNew
+      ? String(staff?.id || body?.createdByUserId || '').trim()
+      : String(body?.createdByUserId || '').trim(),
+    created_by_name: isNew
+      ? String(staff?.name || body?.createdByName || '').trim()
+      : String(body?.createdByName || '').trim(),
+    created_by_email: isNew
+      ? String(staff?.email || body?.createdByEmail || '').trim().toLowerCase()
+      : String(body?.createdByEmail || '').trim().toLowerCase(),
     updated_at: new Date().toISOString(),
     ...(isNew ? { created_at: body?.createdAt || new Date().toISOString() } : {})
   }
@@ -4636,12 +4816,16 @@ async function handleApi(request, env, url) {
   const scope = isElevated
     ? ''
     : 'deleted=eq.false&agent_id=eq.' + encodeURIComponent(agentId) + '&'
-  const [agents, orders, quotes, invoices, cash] = await Promise.all([
+  // CRM is shared: all staff see all clients (admin + sales agents)
+  const [agents, orders, quotes, invoices, cash, clients, meetings, notes] = await Promise.all([
     sb(env, agentQ),
     sb(env, 'sales_orders?' + scope + 'select=*&order=sold_at.desc&limit=2000'),
     sb(env, 'sales_quotes?' + scope + 'select=*&order=created_at.desc&limit=2000'),
     sb(env, 'sales_invoices?' + scope + 'select=*&order=issued_at.desc&limit=2000'),
-    sb(env, 'sales_cashflow?' + scope + 'select=*&order=occurred_at.desc&limit=2000')
+    sb(env, 'sales_cashflow?' + scope + 'select=*&order=occurred_at.desc&limit=2000'),
+    sb(env, 'sales_clients?select=*&order=updated_at.desc&limit=3000'),
+    sb(env, 'sales_client_meetings?deleted=eq.false&select=*&order=meeting_at.desc&limit=5000'),
+    sb(env, 'sales_client_notes?deleted=eq.false&select=*&order=created_at.desc&limit=8000')
   ])
   let cashflow = (cash || []).map(mapSalesCashRow)
   if (!isElevated) {
@@ -4655,7 +4839,10 @@ async function handleApi(request, env, url) {
     orders: (orders || []).map(mapSalesOrderRow),
     quotes: (quotes || []).map(mapSalesQuoteRow),
     invoices: (invoices || []).map(mapSalesInvoiceRow),
-    cashflow
+    cashflow,
+    clients: (clients || []).map(mapSalesClientRow),
+    clientMeetings: (meetings || []).map(mapSalesClientMeetingRow),
+    clientNotes: (notes || []).map(mapSalesClientNoteRow)
   })
   }
 
@@ -5137,6 +5324,268 @@ async function handleApi(request, env, url) {
     label: beforeRow.description || id,
     beforeRow
   })
+  }
+
+  // ---- Sales CRM (shared clients for admin + sales agents) ----
+  if (pathname === '/api/sales/clients' && method === 'GET') {
+    const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
+    if (gate.error) return gate.error
+    const includeDeleted = url.searchParams.get('includeDeleted') === '1'
+    const q = includeDeleted
+      ? 'sales_clients?select=*&order=updated_at.desc&limit=3000'
+      : 'sales_clients?deleted=eq.false&select=*&order=updated_at.desc&limit=3000'
+    const [clients, meetings, notes] = await Promise.all([
+      sb(env, q),
+      sb(env, 'sales_client_meetings?deleted=eq.false&select=*&order=meeting_at.desc&limit=5000'),
+      sb(env, 'sales_client_notes?deleted=eq.false&select=*&order=created_at.desc&limit=8000')
+    ])
+    return json({
+      ok: true,
+      clients: (clients || []).map(mapSalesClientRow),
+      meetings: (meetings || []).map(mapSalesClientMeetingRow),
+      notes: (notes || []).map(mapSalesClientNoteRow)
+    })
+  }
+
+  if (pathname === '/api/sales/clients' && method === 'PUT') {
+    const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
+    if (gate.error) return gate.error
+    const body = await readJson(request)
+    const existingId = String(body?.id || '').trim()
+    const existing = existingId
+      ? await sb(env, 'sales_clients?id=eq.' + encodeURIComponent(existingId) + '&select=*')
+      : []
+    const beforeRow = existing?.[0] || null
+    if (beforeRow && beforeRow.deleted === true && !isSalesElevated(gate.staff)) {
+      return bad('Cannot update a deleted client', 403)
+    }
+    const row = salesClientToDb(body, { isNew: !beforeRow, staff: gate.staff })
+    if (!row.id) return bad('Client id required')
+    if (!row.name) return bad('Prospect name is required')
+    // Preserve creator fields on update
+    const payload = {
+      ...row,
+      created_at: beforeRow?.created_at || row.created_at || new Date().toISOString(),
+      created_by_agent_id: beforeRow?.created_by_agent_id || row.created_by_agent_id,
+      created_by_user_id: beforeRow?.created_by_user_id || row.created_by_user_id,
+      created_by_name: beforeRow?.created_by_name || row.created_by_name,
+      created_by_email: beforeRow?.created_by_email || row.created_by_email
+    }
+    if (!payload.owner_agent_id && gate.staff.agentId) {
+      payload.owner_agent_id = gate.staff.agentId
+    }
+    await upsertSalesRow(env, 'sales_clients', payload)
+    const saved = await sb(env, 'sales_clients?id=eq.' + encodeURIComponent(row.id) + '&select=*')
+    const savedRow = saved?.[0] || payload
+    await writeSalesChangeLog(env, {
+      staff: gate.staff,
+      action: beforeRow ? 'update' : 'create',
+      entityType: 'client',
+      entityId: row.id,
+      entityLabel: savedRow.name || row.id,
+      summary: `${beforeRow ? 'Updated' : 'Created'} CRM client: ${savedRow.name || row.id}`,
+      before: beforeRow,
+      after: savedRow
+    })
+    return json({ ok: true, client: mapSalesClientRow(savedRow) })
+  }
+
+  const salesClientMatch = pathname.match(/^\/api\/sales\/clients\/([^/]+)$/)
+  if (salesClientMatch && method === 'GET') {
+    const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
+    if (gate.error) return gate.error
+    const id = decodeURIComponent(salesClientMatch[1])
+    const clients = await sb(env, 'sales_clients?id=eq.' + encodeURIComponent(id) + '&select=*')
+    const client = clients?.[0]
+    if (!client || client.deleted === true) return bad('Client not found', 404)
+    const email = String(client.email || '').trim().toLowerCase()
+    const phone = String(client.phone || '').trim()
+    const [meetings, notes, quotesById, invoicesById, ordersById] = await Promise.all([
+      sb(env, `sales_client_meetings?client_id=eq.${encodeURIComponent(id)}&deleted=eq.false&select=*&order=meeting_at.desc&limit=500`),
+      sb(env, `sales_client_notes?client_id=eq.${encodeURIComponent(id)}&deleted=eq.false&select=*&order=created_at.desc&limit=800`),
+      sb(env, `sales_quotes?client_id=eq.${encodeURIComponent(id)}&deleted=eq.false&select=*&order=created_at.desc&limit=200`),
+      sb(env, `sales_invoices?client_id=eq.${encodeURIComponent(id)}&deleted=eq.false&select=*&order=issued_at.desc&limit=200`),
+      sb(env, `sales_orders?client_id=eq.${encodeURIComponent(id)}&deleted=eq.false&select=*&order=sold_at.desc&limit=200`)
+    ])
+    let quotes = quotesById || []
+    let invoices = invoicesById || []
+    let orders = ordersById || []
+    // Also match by email/phone for docs not yet linked
+    if (email) {
+      const [q2, i2, o2] = await Promise.all([
+        sb(env, `sales_quotes?customer_email=eq.${encodeURIComponent(email)}&deleted=eq.false&select=*&order=created_at.desc&limit=200`),
+        sb(env, `sales_invoices?customer_email=eq.${encodeURIComponent(email)}&deleted=eq.false&select=*&order=issued_at.desc&limit=200`),
+        sb(env, `sales_orders?customer_email=eq.${encodeURIComponent(email)}&deleted=eq.false&select=*&order=sold_at.desc&limit=200`)
+      ])
+      const mergeUnique = (a, b) => {
+        const map = new Map()
+        for (const r of [...(a || []), ...(b || [])]) if (r?.id) map.set(r.id, r)
+        return [...map.values()]
+      }
+      quotes = mergeUnique(quotes, q2)
+      invoices = mergeUnique(invoices, i2)
+      orders = mergeUnique(orders, o2)
+    } else if (phone) {
+      const [q2, i2, o2] = await Promise.all([
+        sb(env, `sales_quotes?customer_phone=eq.${encodeURIComponent(phone)}&deleted=eq.false&select=*&order=created_at.desc&limit=200`),
+        sb(env, `sales_invoices?customer_phone=eq.${encodeURIComponent(phone)}&deleted=eq.false&select=*&order=issued_at.desc&limit=200`),
+        sb(env, `sales_orders?customer_phone=eq.${encodeURIComponent(phone)}&deleted=eq.false&select=*&order=sold_at.desc&limit=200`)
+      ])
+      const mergeUnique = (a, b) => {
+        const map = new Map()
+        for (const r of [...(a || []), ...(b || [])]) if (r?.id) map.set(r.id, r)
+        return [...map.values()]
+      }
+      quotes = mergeUnique(quotes, q2)
+      invoices = mergeUnique(invoices, i2)
+      orders = mergeUnique(orders, o2)
+    }
+    return json({
+      ok: true,
+      client: mapSalesClientRow(client),
+      meetings: (meetings || []).map(mapSalesClientMeetingRow),
+      notes: (notes || []).map(mapSalesClientNoteRow),
+      quotes: quotes.map(mapSalesQuoteRow),
+      invoices: invoices.map(mapSalesInvoiceRow),
+      orders: orders.map(mapSalesOrderRow)
+    })
+  }
+
+  if (salesClientMatch && method === 'DELETE') {
+    const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
+    if (gate.error) return gate.error
+    const id = decodeURIComponent(salesClientMatch[1])
+    const existing = await sb(env, 'sales_clients?id=eq.' + encodeURIComponent(id) + '&select=*')
+    const beforeRow = existing?.[0]
+    if (!beforeRow) return bad('Client not found', 404)
+    await softDeleteRow(env, {
+      table: 'sales_clients',
+      id,
+      actor: gate.staff.email || gate.staff.id || 'staff',
+      extra: { updated_at: new Date().toISOString() }
+    })
+    await writeSalesChangeLog(env, {
+      staff: gate.staff,
+      action: 'delete',
+      entityType: 'client',
+      entityId: id,
+      entityLabel: beforeRow.name || id,
+      summary: `Deleted CRM client: ${beforeRow.name || id}`,
+      before: beforeRow,
+      after: { ...beforeRow, deleted: true }
+    })
+    return json({ ok: true, id, deleted: true })
+  }
+
+  const salesClientRestoreMatch = pathname.match(/^\/api\/sales\/clients\/([^/]+)\/restore$/)
+  if (salesClientRestoreMatch && method === 'POST') {
+    const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
+    if (gate.error) return gate.error
+    const id = decodeURIComponent(salesClientRestoreMatch[1])
+    const existing = await sb(env, 'sales_clients?id=eq.' + encodeURIComponent(id) + '&select=*')
+    const beforeRow = existing?.[0]
+    if (!beforeRow) return bad('Client not found', 404)
+    return await restoreSalesEntity(env, {
+      table: 'sales_clients',
+      id,
+      staff: gate.staff,
+      entityType: 'client',
+      label: beforeRow.name || id,
+      beforeRow
+    })
+  }
+
+  if (pathname === '/api/sales/client-meetings' && method === 'PUT') {
+    const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
+    if (gate.error) return gate.error
+    const body = await readJson(request)
+    const existingId = String(body?.id || '').trim()
+    const existing = existingId
+      ? await sb(env, 'sales_client_meetings?id=eq.' + encodeURIComponent(existingId) + '&select=*')
+      : []
+    const beforeRow = existing?.[0] || null
+    const row = salesClientMeetingToDb(body, { isNew: !beforeRow, staff: gate.staff })
+    if (!row.id) return bad('Meeting id required')
+    if (!row.client_id) return bad('Client is required')
+    const payload = {
+      ...row,
+      created_at: beforeRow?.created_at || row.created_at || new Date().toISOString(),
+      created_by_agent_id: beforeRow?.created_by_agent_id || row.created_by_agent_id,
+      created_by_user_id: beforeRow?.created_by_user_id || row.created_by_user_id,
+      created_by_name: beforeRow?.created_by_name || row.created_by_name,
+      created_by_email: beforeRow?.created_by_email || row.created_by_email
+    }
+    await upsertSalesRow(env, 'sales_client_meetings', payload)
+    const saved = await sb(env, 'sales_client_meetings?id=eq.' + encodeURIComponent(row.id) + '&select=*')
+    await sb(env, `sales_clients?id=eq.${encodeURIComponent(row.client_id)}`, {
+      method: 'PATCH',
+      body: { updated_at: new Date().toISOString() },
+      prefer: 'return=minimal'
+    })
+    return json({ ok: true, meeting: mapSalesClientMeetingRow(saved?.[0] || payload) })
+  }
+
+  const salesMeetingMatch = pathname.match(/^\/api\/sales\/client-meetings\/([^/]+)$/)
+  if (salesMeetingMatch && method === 'DELETE') {
+    const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
+    if (gate.error) return gate.error
+    const id = decodeURIComponent(salesMeetingMatch[1])
+    const existing = await sb(env, 'sales_client_meetings?id=eq.' + encodeURIComponent(id) + '&select=*')
+    if (!existing?.[0]) return bad('Meeting not found', 404)
+    await softDeleteRow(env, {
+      table: 'sales_client_meetings',
+      id,
+      actor: gate.staff.email || gate.staff.id || 'staff',
+      extra: { updated_at: new Date().toISOString() }
+    })
+    return json({ ok: true, id, deleted: true })
+  }
+
+  if (pathname === '/api/sales/client-notes' && method === 'PUT') {
+    const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
+    if (gate.error) return gate.error
+    const body = await readJson(request)
+    const existingId = String(body?.id || '').trim()
+    const existing = existingId
+      ? await sb(env, 'sales_client_notes?id=eq.' + encodeURIComponent(existingId) + '&select=*')
+      : []
+    const beforeRow = existing?.[0] || null
+    const row = salesClientNoteToDb(body, { isNew: !beforeRow, staff: gate.staff })
+    if (!row.id) return bad('Note id required')
+    if (!row.client_id) return bad('Client is required')
+    if (!row.body) return bad('Note text is required')
+    const payload = {
+      ...row,
+      created_at: beforeRow?.created_at || row.created_at || new Date().toISOString(),
+      created_by_agent_id: beforeRow?.created_by_agent_id || row.created_by_agent_id,
+      created_by_user_id: beforeRow?.created_by_user_id || row.created_by_user_id,
+      created_by_name: beforeRow?.created_by_name || row.created_by_name,
+      created_by_email: beforeRow?.created_by_email || row.created_by_email
+    }
+    await upsertSalesRow(env, 'sales_client_notes', payload)
+    const saved = await sb(env, 'sales_client_notes?id=eq.' + encodeURIComponent(row.id) + '&select=*')
+    await sb(env, `sales_clients?id=eq.${encodeURIComponent(row.client_id)}`, {
+      method: 'PATCH',
+      body: { updated_at: new Date().toISOString() },
+      prefer: 'return=minimal'
+    })
+    return json({ ok: true, note: mapSalesClientNoteRow(saved?.[0] || payload) })
+  }
+
+  const salesNoteMatch = pathname.match(/^\/api\/sales\/client-notes\/([^/]+)$/)
+  if (salesNoteMatch && method === 'DELETE') {
+    const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
+    if (gate.error) return gate.error
+    const id = decodeURIComponent(salesNoteMatch[1])
+    const existing = await sb(env, 'sales_client_notes?id=eq.' + encodeURIComponent(id) + '&select=*')
+    if (!existing?.[0]) return bad('Note not found', 404)
+    await softDeleteRow(env, {
+      table: 'sales_client_notes',
+      id,
+      actor: gate.staff.email || gate.staff.id || 'staff',
+      extra: { updated_at: new Date().toISOString() }
+    })
+    return json({ ok: true, id, deleted: true })
   }
 
   const batchRenameMatch = pathname.match(/^\/api\/admin\/card-batches\/([^/]+)$/)

@@ -406,6 +406,50 @@ export function apiRestoreSalesCash(id) {
   return request(`/api/sales/cashflow/${encodeURIComponent(id)}/restore`, { method: 'POST', timeoutMs: 12000 })
 }
 
+/** Sales CRM — shared clients for admin and sales agents */
+export function apiSalesClients({ includeDeleted = false } = {}) {
+  const q = includeDeleted ? '?includeDeleted=1' : ''
+  return request(`/api/sales/clients${q}`, { timeoutMs: 20000 })
+}
+
+export function apiSalesClientDetail(id) {
+  return request(`/api/sales/clients/${encodeURIComponent(id)}`, { timeoutMs: 20000 })
+}
+
+export function apiUpsertSalesClient(client) {
+  return request('/api/sales/clients', { method: 'PUT', body: client, timeoutMs: 15000 })
+}
+
+export function apiDeleteSalesClient(id) {
+  return request(`/api/sales/clients/${encodeURIComponent(id)}`, { method: 'DELETE', timeoutMs: 12000 })
+}
+
+export function apiRestoreSalesClient(id) {
+  return request(`/api/sales/clients/${encodeURIComponent(id)}/restore`, { method: 'POST', timeoutMs: 12000 })
+}
+
+export function apiUpsertSalesClientMeeting(meeting) {
+  return request('/api/sales/client-meetings', { method: 'PUT', body: meeting, timeoutMs: 12000 })
+}
+
+export function apiDeleteSalesClientMeeting(id) {
+  return request(`/api/sales/client-meetings/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    timeoutMs: 12000
+  })
+}
+
+export function apiUpsertSalesClientNote(note) {
+  return request('/api/sales/client-notes', { method: 'PUT', body: note, timeoutMs: 12000 })
+}
+
+export function apiDeleteSalesClientNote(id) {
+  return request(`/api/sales/client-notes/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    timeoutMs: 12000
+  })
+}
+
 // ---- Admin ----
 
 /** All profiles + all cards (slugs) straight from the backend */

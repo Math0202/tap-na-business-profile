@@ -62,7 +62,21 @@ import {
   invoiceRemaining,
   recordInvoicePayment,
   formatSalesStatus,
-  cashCategoryLabel
+  cashCategoryLabel,
+  listClients,
+  saveClient,
+  deleteClient,
+  listClientMeetings,
+  saveClientMeeting,
+  deleteClientMeeting,
+  listClientNotes,
+  saveClientNote,
+  deleteClientNote,
+  clientCrmSummary,
+  clientActivityLog,
+  sampleCardStatusLabel,
+  pipelineStatusLabel,
+  saleStageLabel
 } from '../lib/salesStore'
 import {
   provisionCardsForSale,
@@ -77,7 +91,7 @@ import {
   kindFromProductId,
   cardImageSrc
 } from '../lib/cardLinkStore'
-import { apiProvisionCards } from '../lib/api'
+import { apiProvisionCards, apiSalesClientDetail } from '../lib/api'
 import { LOCAL_ID } from '../lib/adminStore'
 import { loadProfile } from '../lib/profileStore'
 import { downloadInvoicePdf, downloadQuotePdf } from '../lib/salesDocuments'
@@ -95,7 +109,7 @@ import { buddyPaymentUrl } from '../lib/buddyPayment'
 
 const route = useRoute()
 const router = useRouter()
-const tab = ref('overview') // overview | sales | invoices | products | cash | agents
+const tab = ref('overview') // overview | sales | invoices | crm | products | cash | agents
 const salesListMode = ref('orders') // orders | quotes
 const agents = ref([])
 const sales = ref([])
@@ -103,6 +117,7 @@ const quotes = ref([])
 const products = ref([])
 const invoices = ref([])
 const cash = ref([])
+const clients = ref([])
 const showDeleted = ref(false)
 const stats = ref(getSalesStats())
 const query = ref('')
@@ -126,7 +141,8 @@ const salesTabs = computed(() => {
   const tabs = [
     { id: 'overview', label: 'Overview', icon: 'dashboard' },
     { id: 'sales', label: 'Sales', icon: 'receipt_long' },
-    { id: 'invoices', label: 'Invoices', icon: 'request_quote' }
+    { id: 'invoices', label: 'Invoices', icon: 'request_quote' },
+    { id: 'crm', label: 'CRM', icon: 'contacts' }
   ]
   if (canManageProducts.value) {
     tabs.push({ id: 'products', label: 'Products', icon: 'inventory_2' })
@@ -193,6 +209,39 @@ const quoteForm = ref(emptyQuote())
 const productForm = ref(emptyProduct())
 const cashForm = ref(emptyCash())
 const agentForm = ref(emptyAgent())
+
+const showClientForm = ref(false)
+const showClientDetail = ref(false)
+const clientSaving = ref(false)
+const editingClientId = ref('')
+const activeClient = ref(null)
+const clientDetailLoading = ref(false)
+const clientActivity = ref([])
+const clientQuotes = ref([])
+const clientInvoices = ref([])
+const crmPipelineFilter = ref('all')
+const crmQuery = ref('')
+const clientForm = ref(emptyClient())
+const noteDraft = ref('')
+const meetingForm = ref({ meetingAt: '', title: '', summary: '' })
+const showMeetingForm = ref(false)
+
+function emptyClient() {
+  return {
+    id: '',
+    name: '',
+    company: '',
+    email: '',
+    phone: '',
+    location: '',
+    sampleCardStatus: 'none',
+    pipelineStatus: 'pending',
+    saleStage: 'no_sale',
+    ownerAgentId: '',
+    isReferral: false,
+    referredByClientId: ''
+  }
+}
 
 function emptySale() {
   return {
@@ -372,6 +421,9 @@ async function refresh() {
     products.value = visible(products.value)
     stats.value = getSalesStats()
   }
+
+  // CRM is shared — all staff see all clients
+  clients.value = listClients({ includeDeleted: false })
 
   return { productsOk, financeOk }
 }
@@ -1529,16 +1581,255 @@ async function undeleteAgent(id) {
 }
 
 function statusClass(status) {
-  if (status === 'paid' || status === 'fulfilled' || status === 'accepted' || status === 'converted') {
+  if (status === 'paid' || status === 'fulfilled' || status === 'accepted' || status === 'converted' || status === 'closed_sold' || status === 'printed') {
     return 'bg-emerald-500/15 text-emerald-300'
   }
-  if (status === 'partially_settled') {
+  if (status === 'partially_settled' || status === 'accepted' || status === 'quote' || status === 'invoice') {
     return 'bg-sky-500/15 text-sky-300'
   }
-  if (status === 'pending' || status === 'sent' || status === 'draft') {
+  if (status === 'pending' || status === 'sent' || status === 'draft' || status === 'none') {
     return 'bg-amber-500/15 text-amber-300'
   }
   return 'bg-red-500/15 text-red-300'
+}
+
+const filteredClients = computed(() => {
+  const q = crmQuery.value.trim().toLowerCase()
+  return clients.value.filter((c) => {
+    if (crmPipelineFilter.value !== 'all' && c.pipelineStatus !== crmPipelineFilter.value) return false
+    if (!q) return true
+    return (
+      (c.name && c.name.toLowerCase().includes(q)) ||
+      (c.company && c.company.toLowerCase().includes(q)) ||
+      (c.email && c.email.toLowerCase().includes(q)) ||
+      (c.phone && c.phone.toLowerCase().includes(q)) ||
+      (c.location && c.location.toLowerCase().includes(q)) ||
+      (c.createdByName && c.createdByName.toLowerCase().includes(q))
+    )
+  })
+})
+
+function clientAddedBy(c) {
+  return c.createdByName || c.createdByEmail || agentName(c.createdByAgentId) || '—'
+}
+
+function clientRowSummary(c) {
+  return clientCrmSummary(c)
+}
+
+function openNewClient({ asReferral = false } = {}) {
+  editingClientId.value = ''
+  clientForm.value = {
+    ...emptyClient(),
+    ownerAgentId: myAgentId.value || '',
+    isReferral: !!asReferral
+  }
+  showClientForm.value = true
+}
+
+function openEditClient(c) {
+  editingClientId.value = c.id
+  clientForm.value = {
+    id: c.id,
+    name: c.name || '',
+    company: c.company || '',
+    email: c.email || '',
+    phone: c.phone || '',
+    location: c.location || '',
+    sampleCardStatus: c.sampleCardStatus || 'none',
+    pipelineStatus: c.pipelineStatus || 'pending',
+    saleStage: c.saleStage || 'no_sale',
+    ownerAgentId: c.ownerAgentId || '',
+    isReferral: !!c.isReferral,
+    referredByClientId: c.referredByClientId || ''
+  }
+  showClientForm.value = true
+}
+
+async function submitClientForm() {
+  const name = String(clientForm.value.name || '').trim()
+  if (!name) {
+    flash('Prospect name is required')
+    return
+  }
+  clientSaving.value = true
+  try {
+    const staff = getStaffUser()
+    saveClient({
+      ...clientForm.value,
+      name,
+      ownerAgentId: clientForm.value.ownerAgentId || myAgentId.value || '',
+      createdByAgentId: editingClientId.value ? undefined : myAgentId.value || '',
+      createdByName: editingClientId.value ? undefined : staff?.name || staff?.email || '',
+      createdByEmail: editingClientId.value ? undefined : staff?.email || ''
+    })
+    showClientForm.value = false
+    await refresh()
+    flash(editingClientId.value ? 'Client updated' : 'Client added')
+  } finally {
+    clientSaving.value = false
+  }
+}
+
+async function removeClient(c) {
+  if (!confirm(`Remove ${c.name || 'this client'} from CRM?`)) return
+  deleteClient(c.id)
+  if (activeClient.value?.id === c.id) {
+    showClientDetail.value = false
+    activeClient.value = null
+  }
+  await refresh()
+  flash('Client removed')
+}
+
+async function openClientDetail(c) {
+  activeClient.value = c
+  showClientDetail.value = true
+  clientDetailLoading.value = true
+  clientActivity.value = clientActivityLog(c.id)
+  const summary = clientCrmSummary(c)
+  clientQuotes.value = summary.quotes
+  clientInvoices.value = summary.invoices
+  try {
+    const res = await apiSalesClientDetail(c.id)
+    if (res.ok && res.data) {
+      if (res.data.client) activeClient.value = { ...c, ...res.data.client }
+      if (Array.isArray(res.data.quotes)) clientQuotes.value = res.data.quotes
+      if (Array.isArray(res.data.invoices)) clientInvoices.value = res.data.invoices
+      // Rebuild activity from freshest remote + local notes/meetings
+      clientActivity.value = clientActivityLog(c.id)
+      // Merge remote quote/invoice events if local store missed them
+      const remoteEvents = []
+      for (const q of res.data.quotes || []) {
+        remoteEvents.push({
+          id: 'quote:' + q.id,
+          type: 'quote',
+          at: q.createdAt,
+          title: `Quote ${q.quoteNumber || q.id}`,
+          detail: `${q.status} · ${formatMoney(q.amount)}`,
+          by: '',
+          raw: q
+        })
+      }
+      for (const inv of res.data.invoices || []) {
+        remoteEvents.push({
+          id: 'inv:' + inv.id,
+          type: 'invoice',
+          at: inv.issuedAt || inv.createdAt,
+          title: `Invoice ${inv.invoiceNumber || inv.id}`,
+          detail: `${inv.status} · ${formatMoney(inv.amount)}`,
+          by: '',
+          raw: inv
+        })
+      }
+      for (const m of res.data.meetings || []) {
+        remoteEvents.push({
+          id: 'mtg:' + m.id,
+          type: 'meeting',
+          at: m.meetingAt,
+          title: m.title || 'Meeting',
+          detail: m.summary || '',
+          by: m.createdByName || m.createdByEmail || '',
+          raw: m
+        })
+      }
+      for (const n of res.data.notes || []) {
+        remoteEvents.push({
+          id: 'note:' + n.id,
+          type: 'note',
+          at: n.createdAt,
+          title: 'Note',
+          detail: n.body,
+          by: n.createdByName || n.createdByEmail || '',
+          raw: n
+        })
+      }
+      if (remoteEvents.length) {
+        const map = new Map()
+        for (const e of [...clientActivity.value, ...remoteEvents]) map.set(e.id, e)
+        clientActivity.value = [...map.values()].sort((a, b) => String(b.at).localeCompare(String(a.at)))
+      }
+    }
+  } catch {
+    /* keep local activity */
+  } finally {
+    clientDetailLoading.value = false
+  }
+}
+
+async function addClientNote() {
+  const body = noteDraft.value.trim()
+  if (!body || !activeClient.value) return
+  const staff = getStaffUser()
+  saveClientNote({
+    clientId: activeClient.value.id,
+    body,
+    createdByAgentId: myAgentId.value || '',
+    createdByName: staff?.name || staff?.email || '',
+    createdByEmail: staff?.email || ''
+  })
+  noteDraft.value = ''
+  await refresh()
+  await openClientDetail(activeClient.value)
+  flash('Note added')
+}
+
+async function removeClientNote(noteId) {
+  if (!confirm('Delete this note?')) return
+  deleteClientNote(noteId)
+  await refresh()
+  if (activeClient.value) await openClientDetail(activeClient.value)
+  flash('Note deleted')
+}
+
+function openAddMeeting() {
+  meetingForm.value = {
+    meetingAt: new Date().toISOString().slice(0, 16),
+    title: '',
+    summary: ''
+  }
+  showMeetingForm.value = true
+}
+
+async function submitMeeting() {
+  if (!activeClient.value) return
+  const staff = getStaffUser()
+  const at = meetingForm.value.meetingAt
+    ? new Date(meetingForm.value.meetingAt).toISOString()
+    : new Date().toISOString()
+  saveClientMeeting({
+    clientId: activeClient.value.id,
+    meetingAt: at,
+    title: meetingForm.value.title || 'Meeting',
+    summary: meetingForm.value.summary || '',
+    createdByAgentId: myAgentId.value || '',
+    createdByName: staff?.name || staff?.email || '',
+    createdByEmail: staff?.email || ''
+  })
+  showMeetingForm.value = false
+  await refresh()
+  await openClientDetail(activeClient.value)
+  flash('Meeting logged')
+}
+
+async function removeClientMeeting(meetingId) {
+  if (!confirm('Delete this meeting?')) return
+  deleteClientMeeting(meetingId)
+  await refresh()
+  if (activeClient.value) await openClientDetail(activeClient.value)
+  flash('Meeting deleted')
+}
+
+async function quickUpdateClientField(field, value) {
+  if (!activeClient.value) return
+  saveClient({ ...activeClient.value, [field]: value })
+  await refresh()
+  const updated = clients.value.find((c) => c.id === activeClient.value.id)
+  if (updated) {
+    activeClient.value = updated
+    await openClientDetail(updated)
+  }
+  flash('Updated')
 }
 
 async function logoutStaff() {
@@ -2004,6 +2295,99 @@ onMounted(async () => {
           </li>
         </ul>
         <p v-if="!filteredInvoices.length" class="text-sm text-gray-500">No invoices yet. Save a sale to generate one.</p>
+      </section>
+
+      <!-- CRM -->
+      <section v-if="tab === 'crm'" class="mb-8 space-y-4">
+        <div class="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-400">CRM</h2>
+            <p class="text-xs text-gray-500 mt-1">
+              Prospects and clients, meetings, notes, quotes, and invoices — shared with the whole sales team
+            </p>
+          </div>
+          <div class="flex gap-2">
+            <button
+              type="button"
+              class="px-3.5 py-2.5 rounded-full text-xs font-bold border border-[var(--border)] text-gray-200"
+              @click="openNewClient({ asReferral: true })"
+            >
+              Add referral
+            </button>
+            <button
+              type="button"
+              class="px-4 py-2.5 rounded-full text-xs font-bold bg-white text-black"
+              @click="openNewClient()"
+            >
+              Add client
+            </button>
+          </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-3">
+          <div class="field-shell flex-1 !rounded-2xl">
+            <span class="material-symbols-outlined field-icon">search</span>
+            <input v-model="crmQuery" type="search" class="field-input" placeholder="Search name, company, email, cell…">
+          </div>
+          <select v-model="crmPipelineFilter" class="field-input sm:w-44 bg-zinc-900 text-xs rounded-2xl">
+            <option value="all">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="closed_sold">Closed (sold)</option>
+            <option value="not_interested">Not interested</option>
+          </select>
+        </div>
+
+        <ul class="space-y-2">
+          <li
+            v-for="c in filteredClients"
+            :key="c.id"
+            class="card-item-bg rounded-2xl p-4 cursor-pointer hover:brightness-110 transition"
+            @click="openClientDetail(c)"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0 space-y-1.5">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <p class="text-sm font-semibold truncate">{{ c.name || 'Unnamed' }}</p>
+                  <span
+                    v-if="c.isReferral"
+                    class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300"
+                  >
+                    Referral
+                  </span>
+                  <span class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full" :class="statusClass(c.pipelineStatus)">
+                    {{ pipelineStatusLabel(c.pipelineStatus) }}
+                  </span>
+                </div>
+                <p class="text-xs text-gray-400 truncate">
+                  {{ c.company || '—' }}
+                  <template v-if="c.email"> · {{ c.email }}</template>
+                  <template v-if="c.phone"> · {{ c.phone }}</template>
+                </p>
+                <p v-if="c.location" class="text-[11px] text-gray-500 truncate">{{ c.location }}</p>
+                <div class="flex flex-wrap gap-1.5 pt-1">
+                  <span class="text-[10px] px-2 py-0.5 rounded-md border border-zinc-700 text-gray-300">
+                    Sample: {{ sampleCardStatusLabel(c.sampleCardStatus) }}
+                  </span>
+                  <span class="text-[10px] px-2 py-0.5 rounded-md border border-zinc-700 text-gray-300">
+                    Meeting: {{ clientRowSummary(c).meetingLabel }}
+                    <template v-if="clientRowSummary(c).meetingCount > 1"> ({{ clientRowSummary(c).meetingCount }})</template>
+                  </span>
+                  <span class="text-[10px] px-2 py-0.5 rounded-md border border-zinc-700 text-gray-300">
+                    {{ clientRowSummary(c).saleStageLabel }}
+                  </span>
+                </div>
+                <p class="text-[10px] text-gray-500 pt-0.5">
+                  Added by {{ clientAddedBy(c) }}
+                  <template v-if="c.ownerAgentId"> · Owner {{ agentName(c.ownerAgentId) }}</template>
+                </p>
+              </div>
+              <span class="material-symbols-outlined text-gray-500 shrink-0">chevron_right</span>
+            </div>
+          </li>
+        </ul>
+        <p v-if="!filteredClients.length" class="text-sm text-gray-500 text-center py-8">
+          No clients yet. Add a prospect or referral to get started.
+        </p>
       </section>
 
       <!-- Products -->
@@ -3330,6 +3714,286 @@ onMounted(async () => {
         <div class="flex gap-2 pt-1">
           <button type="button" class="flex-1 py-3 rounded-full border border-[var(--border)] text-sm font-semibold" @click="showAgentForm = false">Cancel</button>
           <button type="submit" class="flex-1 py-3 rounded-full bg-white text-black text-sm font-bold">Save</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- CRM: Add / Edit client -->
+    <div
+      v-if="showClientForm"
+      class="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+      @click.self="showClientForm = false"
+    >
+      <form
+        class="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl bg-zinc-900 border border-zinc-700 p-5 space-y-3 shadow-2xl"
+        @submit.prevent="submitClientForm"
+      >
+        <div class="flex items-center justify-between">
+          <h3 class="text-lg font-bold">
+            {{ editingClientId ? 'Edit client' : (clientForm.isReferral ? 'Add referral' : 'Add client') }}
+          </h3>
+          <button type="button" class="text-gray-400" @click="showClientForm = false">
+            <span class="material-symbols-outlined">close</span>
+          </button>
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Prospect name *</label>
+          <div class="field-shell"><input v-model="clientForm.name" class="field-input" required placeholder="Full name"></div>
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Company</label>
+          <div class="field-shell"><input v-model="clientForm.company" class="field-input" placeholder="Company"></div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Email</label>
+            <div class="field-shell"><input v-model="clientForm.email" type="email" class="field-input" placeholder="email@…"></div>
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Cell</label>
+            <div class="field-shell"><input v-model="clientForm.phone" class="field-input" placeholder="Phone"></div>
+          </div>
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Location</label>
+          <div class="field-shell"><input v-model="clientForm.location" class="field-input" placeholder="City / area"></div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Sample card</label>
+            <select v-model="clientForm.sampleCardStatus" class="field-input w-full bg-zinc-950 text-sm">
+              <option value="none">No sample card</option>
+              <option value="accepted">Accepted</option>
+              <option value="printed">Printed</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Pipeline</label>
+            <select v-model="clientForm.pipelineStatus" class="field-input w-full bg-zinc-950 text-sm">
+              <option value="pending">Pending</option>
+              <option value="closed_sold">Closed (sold)</option>
+              <option value="not_interested">Not interested</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Sale stage</label>
+          <select v-model="clientForm.saleStage" class="field-input w-full bg-zinc-950 text-sm">
+            <option value="no_sale">No sale</option>
+            <option value="quote">Quote</option>
+            <option value="invoice">Invoice</option>
+          </select>
+        </div>
+        <label class="flex items-center gap-2 text-sm">
+          <input v-model="clientForm.isReferral" type="checkbox" class="rounded">
+          This is a referral
+        </label>
+        <div class="flex gap-2 pt-1">
+          <button type="button" class="flex-1 py-3 rounded-full border border-[var(--border)] text-sm font-semibold" @click="showClientForm = false">Cancel</button>
+          <button type="submit" class="flex-1 py-3 rounded-full bg-white text-black text-sm font-bold" :disabled="clientSaving">
+            {{ clientSaving ? 'Saving…' : 'Save' }}
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- CRM: Client detail + activity log -->
+    <div
+      v-if="showClientDetail && activeClient"
+      class="fixed inset-0 z-[100] bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-3 sm:p-4"
+      @click.self="showClientDetail = false"
+    >
+      <div class="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-3xl bg-zinc-900 border border-zinc-700 p-5 space-y-4 shadow-2xl">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <h3 class="text-lg font-bold truncate">{{ activeClient.name }}</h3>
+              <span
+                v-if="activeClient.isReferral"
+                class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300"
+              >Referral</span>
+            </div>
+            <p class="text-xs text-gray-400 mt-1">
+              {{ activeClient.company || '—' }}
+              <template v-if="activeClient.email"> · {{ activeClient.email }}</template>
+              <template v-if="activeClient.phone"> · {{ activeClient.phone }}</template>
+            </p>
+            <p v-if="activeClient.location" class="text-[11px] text-gray-500 mt-0.5">{{ activeClient.location }}</p>
+            <p class="text-[11px] text-gray-500 mt-1">Added by {{ clientAddedBy(activeClient) }}</p>
+          </div>
+          <button type="button" class="text-gray-400" @click="showClientDetail = false">
+            <span class="material-symbols-outlined">close</span>
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div>
+            <label class="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Sample card</label>
+            <select
+              class="field-input w-full bg-zinc-950 text-xs"
+              :value="activeClient.sampleCardStatus"
+              @change="quickUpdateClientField('sampleCardStatus', $event.target.value)"
+            >
+              <option value="none">No sample card</option>
+              <option value="accepted">Accepted</option>
+              <option value="printed">Printed</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Pipeline</label>
+            <select
+              class="field-input w-full bg-zinc-950 text-xs"
+              :value="activeClient.pipelineStatus"
+              @change="quickUpdateClientField('pipelineStatus', $event.target.value)"
+            >
+              <option value="pending">Pending</option>
+              <option value="closed_sold">Closed (sold)</option>
+              <option value="not_interested">Not interested</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Sale stage</label>
+            <select
+              class="field-input w-full bg-zinc-950 text-xs"
+              :value="activeClient.saleStage"
+              @change="quickUpdateClientField('saleStage', $event.target.value)"
+            >
+              <option value="no_sale">No sale</option>
+              <option value="quote">Quote</option>
+              <option value="invoice">Invoice</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <button type="button" class="px-3 py-2 rounded-xl text-xs font-semibold border border-zinc-700 text-sky-300" @click="openEditClient(activeClient)">
+            Edit details
+          </button>
+          <button type="button" class="px-3 py-2 rounded-xl text-xs font-semibold border border-zinc-700 text-emerald-300" @click="openAddMeeting">
+            Log meeting
+          </button>
+          <button type="button" class="px-3 py-2 rounded-xl text-xs font-semibold border border-zinc-700 text-red-400 ml-auto" @click="removeClient(activeClient)">
+            Remove
+          </button>
+        </div>
+
+        <!-- Quotes & invoices -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="rounded-2xl border border-zinc-800 p-3 space-y-2">
+            <p class="text-[11px] font-bold uppercase tracking-wide text-gray-400">Quotes</p>
+            <div v-if="!clientQuotes.length" class="text-xs text-gray-500">No quotes</div>
+            <div v-for="q in clientQuotes" :key="q.id" class="text-xs flex justify-between gap-2">
+              <span class="truncate">{{ q.quoteNumber || q.id }}</span>
+              <span :class="statusClass(q.status)">{{ formatSalesStatus(q.status) }}</span>
+            </div>
+          </div>
+          <div class="rounded-2xl border border-zinc-800 p-3 space-y-2">
+            <p class="text-[11px] font-bold uppercase tracking-wide text-gray-400">Invoices</p>
+            <div v-if="!clientInvoices.length" class="text-xs text-gray-500">No invoices</div>
+            <div v-for="inv in clientInvoices" :key="inv.id" class="text-xs flex justify-between gap-2">
+              <span class="truncate">{{ inv.invoiceNumber || inv.id }}</span>
+              <span :class="statusClass(inv.status)">{{ formatSalesStatus(inv.status) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add note -->
+        <div class="rounded-2xl border border-zinc-800 p-3 space-y-2">
+          <p class="text-[11px] font-bold uppercase tracking-wide text-gray-400">Add note</p>
+          <textarea v-model="noteDraft" rows="2" class="field-input w-full text-sm" placeholder="Meeting notes or prospect updates…"></textarea>
+          <button
+            type="button"
+            class="px-4 py-2 rounded-full bg-white text-black text-xs font-bold disabled:opacity-40"
+            :disabled="!noteDraft.trim()"
+            @click="addClientNote"
+          >
+            Save note
+          </button>
+        </div>
+
+        <!-- Activity log -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <p class="text-[11px] font-bold uppercase tracking-wide text-gray-400">Activity log</p>
+            <span v-if="clientDetailLoading" class="text-[10px] text-gray-500">Refreshing…</span>
+          </div>
+          <div v-if="!clientActivity.length" class="text-xs text-gray-500 py-4 text-center">No activity yet</div>
+          <ul class="space-y-2">
+            <li
+              v-for="ev in clientActivity"
+              :key="ev.id"
+              class="rounded-2xl bg-zinc-950/80 border border-zinc-800 p-3"
+            >
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span
+                      class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
+                      :class="{
+                        'bg-sky-500/15 text-sky-300': ev.type === 'meeting',
+                        'bg-amber-500/15 text-amber-300': ev.type === 'note',
+                        'bg-emerald-500/15 text-emerald-300': ev.type === 'invoice',
+                        'bg-violet-500/15 text-violet-300': ev.type === 'quote',
+                        'bg-zinc-500/20 text-gray-300': ev.type === 'created'
+                      }"
+                    >{{ ev.type }}</span>
+                    <p class="text-sm font-semibold truncate">{{ ev.title }}</p>
+                  </div>
+                  <p v-if="ev.detail" class="text-xs text-gray-400 mt-1 whitespace-pre-wrap">{{ ev.detail }}</p>
+                  <p class="text-[10px] text-gray-500 mt-1">
+                    {{ formatDate(ev.at) }}
+                    <template v-if="ev.by"> · {{ ev.by }}</template>
+                  </p>
+                </div>
+                <div class="shrink-0 flex flex-col gap-1">
+                  <button
+                    v-if="ev.type === 'note'"
+                    type="button"
+                    class="text-[10px] text-red-400"
+                    @click="removeClientNote(ev.raw.id)"
+                  >Delete</button>
+                  <button
+                    v-if="ev.type === 'meeting'"
+                    type="button"
+                    class="text-[10px] text-red-400"
+                    @click="removeClientMeeting(ev.raw.id)"
+                  >Delete</button>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- CRM: Log meeting -->
+    <div
+      v-if="showMeetingForm"
+      class="fixed inset-0 z-[110] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+      @click.self="showMeetingForm = false"
+    >
+      <form class="w-full max-w-md rounded-3xl bg-zinc-900 border border-zinc-700 p-5 space-y-3" @submit.prevent="submitMeeting">
+        <div class="flex items-center justify-between">
+          <h3 class="text-lg font-bold">Log meeting</h3>
+          <button type="button" class="text-gray-400" @click="showMeetingForm = false">
+            <span class="material-symbols-outlined">close</span>
+          </button>
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Date &amp; time</label>
+          <div class="field-shell"><input v-model="meetingForm.meetingAt" type="datetime-local" class="field-input" required></div>
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Title</label>
+          <div class="field-shell"><input v-model="meetingForm.title" class="field-input" placeholder="Intro call, demo…"></div>
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Summary</label>
+          <textarea v-model="meetingForm.summary" rows="3" class="field-input w-full text-sm" placeholder="What was discussed…"></textarea>
+        </div>
+        <div class="flex gap-2">
+          <button type="button" class="flex-1 py-3 rounded-full border border-[var(--border)] text-sm font-semibold" @click="showMeetingForm = false">Cancel</button>
+          <button type="submit" class="flex-1 py-3 rounded-full bg-white text-black text-sm font-bold">Save meeting</button>
         </div>
       </form>
     </div>
