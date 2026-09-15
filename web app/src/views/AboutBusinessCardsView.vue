@@ -203,12 +203,11 @@ onUnmounted(() => {
             </article>
             <article class="border border-border-subtle rounded-xl p-5 flex flex-col gap-2">
               <div class="flex items-start justify-between gap-3">
-                <h3 class="font-semibold text-lg">Executive</h3>
+                <h3 class="font-semibold text-lg">Executive Exclusive</h3>
                 <span class="font-label-caps text-[10px] uppercase tracking-widest bg-surface-charcoal text-on-primary px-2 py-1">Executive</span>
               </div>
               <p class="text-sm text-on-surface-variant leading-relaxed">
-                Matte black flagship for leaders and larger teams (5+). Company logo(B&amp;W), team management tool, and a company subdomain
-                such as <strong class="text-on-surface">cards.companyname.com</strong>.
+                For team leads. Deactivate team profiles, manage company details (1 lead at a time), personal assistant, and stand-in when you’re away.
               </p>
             </article>
           </div>
@@ -219,7 +218,6 @@ onUnmounted(() => {
           <div class="flex flex-col gap-1">
             <h2 class="font-headline-lg-mobile text-[24px] uppercase font-semibold">Features</h2>
             <div class="h-1 w-12 bg-primary" />
-            
           </div>
           <div class="overflow-x-auto -mx-1 px-1 bg-surface-container rounded-xl p-4 md:p-6">
             <table class="w-full min-w-[560px] text-left text-sm border-collapse">
@@ -247,33 +245,8 @@ onUnmounted(() => {
                   <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
                 <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Contact Details</td>
+                  <td class="py-3 pr-4 text-on-surface">Products &amp; Services Catalogue (Optional)</td>
                   <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Products &amp; Services Catalogue </td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Meeting Booking</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Profile Sharing</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
-                </tr>
-                
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Team profiles </td>
-                  <td class="py-3 px-2 text-center">—</td>
                   <td class="py-3 px-2 text-center text-primary">✓</td>
                   <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
@@ -289,24 +262,29 @@ onUnmounted(() => {
                   <td class="py-3 px-2 text-center text-primary">✓</td>
                   <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
-               
                 <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Customization</td>
+                  <td class="py-3 pr-4 text-on-surface">Custom Logo (B&amp;W)</td>
                   <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center text-xs leading-snug">✓</td>
-                  <td class="py-3 pl-2 text-center text-primary text-xs leading-snug">✓</td>
+                  <td class="py-3 px-2 text-center text-primary">✓</td>
+                  <td class="py-3 pl-2 text-center text-primary">✓</td>
+                </tr>
+                <tr class="border-b border-border-subtle/70">
+                  <td class="py-3 pr-4 text-on-surface">Team manager — deactivate profiles, manage team/company (1 lead)</td>
+                  <td class="py-3 px-2 text-center">—</td>
+                  <td class="py-3 px-2 text-center">—</td>
+                  <td class="py-3 pl-2 text-center text-primary">✓</td>
+                </tr>
+                <tr class="border-b border-border-subtle/70">
+                  <td class="py-3 pr-4 text-on-surface">Personal assistant capability</td>
+                  <td class="py-3 px-2 text-center">—</td>
+                  <td class="py-3 px-2 text-center">—</td>
+                  <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
                 <tr>
-                  <td class="py-3 pr-4 text-on-surface">Custom subdomain</td>
+                  <td class="py-3 pr-4 text-on-surface">Stand-in personal capability</td>
                   <td class="py-3 px-2 text-center">—</td>
                   <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 pl-2 text-center text-primary text-xs leading-snug">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Custom Logo(B&W)</td>
-                  <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center text-primary text-xs">✓</td>
-                  <td class="py-3 pl-2 text-center text-primary text-xs">✓</td>
+                  <td class="py-3 pl-2 text-center text-primary">✓</td>
                 </tr>
               </tbody>
             </table>

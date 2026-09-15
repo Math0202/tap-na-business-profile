@@ -90,7 +90,15 @@ function applyProfileSession(p, passwordHash, token) {
     passwordHash,
     remoteProfileId: p.id,
     shareSlug: p.shareSlug || '',
-    personalType: p.personalType || p.personal_type || ''
+    personalType: p.personalType || p.personal_type || '',
+    assistantProfileId: p.assistantProfileId || '',
+    assistantName: p.assistantName || '',
+    standinProfileId: p.standinProfileId || '',
+    standinActive: !!p.standinActive,
+    standinNote: p.standinNote || '',
+    standinUntil: p.standinUntil || '',
+    standinCover: p.standinCover || null,
+    bookingProfileId: p.bookingProfileId || p.id || ''
   })
   markLoggedIn()
   if (token) setApiToken(token)

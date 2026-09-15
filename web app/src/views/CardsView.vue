@@ -25,6 +25,7 @@ const personalCardOptions = [
     id: 'executive_exclusive',
     name: 'Executive Exclusive',
     subtitle: 'Matte black · NFC + QR',
+    blurb: 'Team lead, personal assistant, and stand-in when you’re away.',
     badge: 'Premium',
     badgeClass: 'bg-amber-500/20 text-amber-300'
   }
@@ -128,6 +129,7 @@ function orderCard(cardName, cardType) {
                 <div class="min-w-0">
                   <h3 class="text-lg font-semibold">{{ PERSONAL_TYPES[card.id].label }}</h3>
                   <p class="text-gray-400 text-sm mt-0.5">{{ card.subtitle }}</p>
+                  <p v-if="card.blurb" class="text-gray-500 text-xs mt-2 leading-relaxed">{{ card.blurb }}</p>
                 </div>
                 <span class="shrink-0 text-xs font-medium px-2.5 py-1 rounded-full" :class="card.badgeClass">{{ card.badge }}</span>
               </div>

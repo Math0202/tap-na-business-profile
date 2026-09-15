@@ -48,7 +48,15 @@ export const DEFAULT_PROFILE = {
   passwordHash: '',
   shareSlug: '',
   remoteProfileId: '',
-  personalType: ''
+  personalType: '',
+  assistantProfileId: '',
+  assistantName: '',
+  standinProfileId: '',
+  standinActive: false,
+  standinNote: '',
+  standinUntil: '',
+  standinCover: null,
+  bookingProfileId: ''
 }
 
 export function hashPassword(password) {

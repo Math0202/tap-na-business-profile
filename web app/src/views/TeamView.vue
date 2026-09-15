@@ -3,7 +3,9 @@ import { computed, onMounted, ref } from 'vue'
 import BrandMark from '../components/BrandMark.vue'
 import {
   assignableRoles,
-  canManageRole,
+  canActAsTeamManager,
+  canReceiveTeamLeadership,
+  canUseExecutiveAssistFeatures,
   DEFAULT_PERSONAL_TYPE,
   memberStatusLabel,
   normalizePersonalType,
@@ -16,12 +18,13 @@ import {
   apiGetMyTeam,
   apiResolveCard,
   apiTransferTeamOwnership,
+  apiUpdateMe,
   apiUpdateMyTeam,
   apiUpdateTeamMember,
   ensureApiSession,
   getApiToken
 } from '../lib/api'
-import { isLoggedIn, isTableBusiness, loadProfile } from '../lib/profileStore'
+import { isLoggedIn, isTableBusiness, loadProfile, saveProfile } from '../lib/profileStore'
 import { RouterLink, useRouter } from 'vue-router'
 import TeamIntegrationsFields from '../components/TeamIntegrationsFields.vue'
 import { validateTeamIntegrations } from '../lib/teamIntegrations'
@@ -36,12 +39,16 @@ const members = ref([])
 const myRole = ref(DEFAULT_PERSONAL_TYPE)
 const ownerRole = ref(DEFAULT_PERSONAL_TYPE)
 const isOwner = ref(false)
+const canManage = ref(false)
+const canUseAssist = ref(false)
 const currentProfileId = computed(() => loadProfile()?.id || '')
 const canUseTeam = ref(true)
 const packageCeiling = ref('business')
 const pendingInvites = ref([])
 
 const teamName = ref('')
+const companyName = ref('')
+const shareCatalog = ref(true)
 const meetingTool = ref('')
 const usesCrm = ref(false)
 const crmProvider = ref('')
@@ -50,6 +57,12 @@ const addSlug = ref('')
 const addEmail = ref('')
 const addRole = ref(DEFAULT_PERSONAL_TYPE)
 const showDeleted = ref(false)
+
+const assistantProfileId = ref('')
+const standinProfileId = ref('')
+const standinActive = ref(false)
+const standinNote = ref('')
+const standinUntil = ref('')
 
 const addMyChoiceOpen = ref(false)
 const addSharing = ref({
@@ -125,11 +138,21 @@ function canInviteCardType(type) {
 
 const roleOptions = computed(() => {
   const byPackage = assignableRoles(packageCeiling.value)
-  const byActor = isOwner.value
+  const byActor = canManage.value
     ? byPackage
     : assignableRoles(myRole.value).filter((id) => byPackage.includes(id))
   return byActor.map((id) => PERSONAL_TYPES[id]).filter(Boolean)
 })
+
+const activeTeammates = computed(() =>
+  members.value.filter(
+    (m) =>
+      !m.deleted &&
+      m.status === 'active' &&
+      m.profileId &&
+      m.profileId !== currentProfileId.value
+  )
+)
 
 async function refresh() {
   loading.value = true
@@ -162,12 +185,31 @@ async function refresh() {
       addRole.value = roleOptions.value[0].id
     }
     isOwner.value = !!res.data.isOwner
+    canManage.value =
+      res.data.canManage !== undefined
+        ? !!res.data.canManage
+        : canActAsTeamManager(myRole.value, isOwner.value)
+    canUseAssist.value =
+      res.data.canUseExecutiveAssist !== undefined
+        ? !!res.data.canUseExecutiveAssist
+        : canUseExecutiveAssistFeatures(myRole.value)
     pendingInvites.value = res.data.pendingInvites || []
     teamName.value = team.value?.name || ''
     meetingTool.value = team.value?.meetingTool || ''
     usesCrm.value = !!team.value?.usesCrm
     crmProvider.value = team.value?.crmProvider || ''
     crmOther.value = team.value?.crmOther || ''
+    shareCatalog.value = !!team.value?.shareCatalog
+
+    const mine = loadProfile()
+    companyName.value = String(mine.company || '').trim()
+    assistantProfileId.value = String(mine.assistantProfileId || '').trim()
+    standinProfileId.value = String(mine.standinProfileId || '').trim()
+    standinActive.value = !!mine.standinActive
+    standinNote.value = String(mine.standinNote || '').trim()
+    standinUntil.value = mine.standinUntil
+      ? String(mine.standinUntil).slice(0, 16)
+      : ''
   } finally {
     loading.value = false
   }
@@ -181,13 +223,13 @@ const visibleMembers = computed(() => {
 function canEditMember(member) {
   if (member.deleted) return false
   if (member.status !== 'active' && member.status !== 'invited' && member.status !== 'pending_claim') return false
-  if (isOwner.value) return true
-  return canManageRole(myRole.value, member.role)
+  if (canManage.value) return true
+  return false
 }
 
 async function saveTeamName() {
   const name = teamName.value.trim()
-  if (!name || !isOwner.value) return
+  if (!name || !canManage.value) return
   saving.value = true
   try {
     const res = await apiUpdateMyTeam({ name, shareCatalog: shareCatalog.value })
@@ -203,8 +245,69 @@ async function saveTeamName() {
   }
 }
 
+async function saveCompanyDetails() {
+  if (!canManage.value) return
+  saving.value = true
+  try {
+    const res = await apiUpdateMe({ company: companyName.value.trim() })
+    if (!res.ok) {
+      flash(res.error || 'Could not save company details')
+      return
+    }
+    if (res.data?.profile) {
+      saveProfile({
+        company: res.data.profile.company || '',
+        remoteProfileId: res.data.profile.id || loadProfile().remoteProfileId
+      })
+      companyName.value = String(res.data.profile.company || '').trim()
+    }
+    flash('Company details saved')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function saveAssistSettings() {
+  if (!canUseAssist.value) return
+  saving.value = true
+  try {
+    const payload = {
+      assistantProfileId: assistantProfileId.value || '',
+      standinProfileId: standinProfileId.value || '',
+      standinActive: !!standinActive.value,
+      standinNote: standinNote.value.trim(),
+      standinUntil: standinUntil.value ? new Date(standinUntil.value).toISOString() : ''
+    }
+    const res = await apiUpdateMe(payload)
+    if (!res.ok) {
+      flash(res.error || 'Could not save assistant / stand-in settings')
+      return
+    }
+    const p = res.data?.profile
+    if (p) {
+      saveProfile({
+        assistantProfileId: p.assistantProfileId || '',
+        assistantName: p.assistantName || '',
+        standinProfileId: p.standinProfileId || '',
+        standinActive: !!p.standinActive,
+        standinNote: p.standinNote || '',
+        standinUntil: p.standinUntil || '',
+        bookingProfileId: p.bookingProfileId || p.id || ''
+      })
+      assistantProfileId.value = p.assistantProfileId || ''
+      standinProfileId.value = p.standinProfileId || ''
+      standinActive.value = !!p.standinActive
+      standinNote.value = p.standinNote || ''
+      standinUntil.value = p.standinUntil ? String(p.standinUntil).slice(0, 16) : ''
+    }
+    flash('Assistant & stand-in saved')
+  } finally {
+    saving.value = false
+  }
+}
+
 async function saveIntegrations() {
-  if (!isOwner.value) return
+  if (!canManage.value) return
   const check = validateTeamIntegrations({
     meetingTool: meetingTool.value,
     usesCrm: usesCrm.value,
@@ -246,7 +349,7 @@ function isAllShared(m) {
 }
 
 function toggleMemberMyChoice(m) {
-  if (!isOwner.value) return
+  if (!canManage.value) return
   const nextVal = !isAllShared(m)
   m.shareCatalog = nextVal
   m.shareBio = nextVal
@@ -259,7 +362,7 @@ function toggleMemberMyChoice(m) {
 }
 
 async function updateMemberSharing(member) {
-  if (!isOwner.value) return
+  if (!canManage.value) return
   saving.value = true
   try {
     const res = await apiUpdateTeamMember(member.id, {
@@ -286,7 +389,7 @@ async function updateMemberSharing(member) {
 }
 
 function promptApplySharingToAll(sourceMember) {
-  if (!isOwner.value) return
+  if (!canManage.value) return
   const label = sourceMember.memberName || sourceMember.slug || 'this member'
   const activeOpts = []
   if (sourceMember.shareCatalog) activeOpts.push('Catalog')
@@ -309,7 +412,7 @@ function promptApplySharingToAll(sourceMember) {
 }
 
 async function executeApplySharingToAll(sourceMember) {
-  if (!isOwner.value) return
+  if (!canManage.value) return
   saving.value = true
   try {
     const res = await apiUpdateTeamMember(sourceMember.id, {
@@ -336,7 +439,7 @@ async function executeApplySharingToAll(sourceMember) {
 }
 
 function promptToggleCardStatus(member) {
-  if (!isOwner.value) return
+  if (!canManage.value) return
   const willDisable = member.cardStatus !== 'disabled'
   const label = member.memberName || member.slug || 'this member'
   openConfirmModal({
@@ -470,7 +573,7 @@ async function executeRemoveMember(member) {
 }
 
 function promptRestoreMember(member) {
-  if (!isOwner.value && !canManageRole(myRole.value, member.role)) return
+  if (!canManage.value) return
   const label = member.memberName || member.slug || 'this member'
   openConfirmModal({
     title: 'Restore Member',
@@ -497,11 +600,15 @@ async function executeRestoreMember(member) {
 }
 
 function promptTransferOwnership(member) {
-  if (!isOwner.value || !member?.profileId) return
+  if (!canManage.value || !member?.profileId) return
+  if (!canReceiveTeamLeadership(member.role)) {
+    flash('Team leadership can only transfer to an Executive Exclusive member')
+    return
+  }
   const label = member.memberName || member.slug || 'this member'
   openConfirmModal({
     title: 'Transfer Team Ownership',
-    message: `Make ${label} the team leader?\nYou will transfer ownership and become a regular team member.`,
+    message: `Make ${label} the team leader?\nYou will transfer ownership and become a regular team member. Only one lead at a time.`,
     confirmText: 'Transfer Ownership',
     confirmClass: 'bg-sky-600 hover:bg-sky-700 text-white',
     onConfirm: () => executeTransferOwnership(member)
@@ -598,11 +705,11 @@ onMounted(() => {
             v-model="teamName"
             type="text"
             class="field-input w-full"
-            :disabled="!isOwner || saving"
+            :disabled="!canManage || saving"
             maxlength="120"
           >
           <button
-            v-if="isOwner"
+            v-if="canManage"
             type="button"
             class="w-full py-2.5 rounded-full bg-zinc-800 text-sm font-semibold disabled:opacity-50"
             :disabled="saving"
@@ -611,13 +718,101 @@ onMounted(() => {
             Save name
           </button>
 
-          <p v-if="isOwner" class="text-xs text-gray-300 font-medium pt-1">
-            You are the team leader.
+          <p v-if="canManage" class="text-xs text-gray-300 font-medium pt-1">
+            You are the Executive team lead (1 lead at a time).
           </p>
+          <div
+            v-else-if="isOwner"
+            class="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 space-y-1"
+          >
+            <p class="text-xs text-amber-200 font-semibold">Executive Exclusive required for team manager tools</p>
+            <p class="text-[11px] text-amber-200/80 leading-relaxed">
+              Deactivate profiles, company details, invites, and sharing are Executive lead features.
+              Upgrade your card or transfer leadership to an Executive teammate.
+            </p>
+          </div>
           <p v-else class="text-xs text-gray-500 pt-1">
             Your role: <span class="text-gray-300">{{ personalTypeLabel(myRole) }}</span>
             · Package: <span class="text-gray-300">{{ personalTypeLabel(packageCeiling) }}</span>
           </p>
+        </div>
+
+        <div v-if="canManage" class="card-item-bg rounded-2xl p-4 mb-4 space-y-3">
+          <h2 class="text-sm font-semibold">Company details</h2>
+          <p class="text-xs text-gray-500 leading-relaxed">
+            Shared company name for your team. Logo and bio stay on your profile and can be shared with members below.
+          </p>
+          <label class="field-label" for="company-name">Company name</label>
+          <input
+            id="company-name"
+            v-model="companyName"
+            type="text"
+            class="field-input w-full"
+            :disabled="saving"
+            maxlength="160"
+          >
+          <button
+            type="button"
+            class="w-full py-2.5 rounded-full bg-zinc-800 text-sm font-semibold disabled:opacity-50"
+            :disabled="saving"
+            @click="saveCompanyDetails"
+          >
+            Save company details
+          </button>
+        </div>
+
+        <div v-if="canUseAssist" class="card-item-bg rounded-2xl p-4 mb-4 space-y-3">
+          <h2 class="text-sm font-semibold">Personal assistant</h2>
+          <p class="text-xs text-gray-500 leading-relaxed">
+            Choose one teammate who can accept and update your meeting requests while your card stays the public face.
+          </p>
+          <select v-model="assistantProfileId" class="field-input w-full bg-transparent" :disabled="saving">
+            <option value="">No personal assistant</option>
+            <option v-for="m in activeTeammates" :key="'pa-' + m.profileId" :value="m.profileId">
+              {{ m.memberName || m.slug }} · {{ personalTypeLabel(m.role) }}
+            </option>
+          </select>
+
+          <h2 class="text-sm font-semibold pt-2">Stand-in (away / vacation)</h2>
+          <p class="text-xs text-gray-500 leading-relaxed">
+            When active, visitors book and contact your stand-in instead. Your NFC card still opens your profile with a covering notice.
+          </p>
+          <select v-model="standinProfileId" class="field-input w-full bg-transparent" :disabled="saving">
+            <option value="">No stand-in</option>
+            <option v-for="m in activeTeammates" :key="'si-' + m.profileId" :value="m.profileId">
+              {{ m.memberName || m.slug }} · {{ personalTypeLabel(m.role) }}
+            </option>
+          </select>
+          <label class="flex items-center gap-2 text-sm text-gray-200">
+            <input v-model="standinActive" type="checkbox" class="rounded border-zinc-600 text-sky-500" :disabled="saving || !standinProfileId">
+            Stand-in is covering for me now
+          </label>
+          <label class="field-label" for="standin-note">Visitor note (optional)</label>
+          <input
+            id="standin-note"
+            v-model="standinNote"
+            type="text"
+            class="field-input w-full"
+            placeholder="e.g. Back on 22 Sep"
+            maxlength="280"
+            :disabled="saving"
+          >
+          <label class="field-label" for="standin-until">Auto-end (optional)</label>
+          <input
+            id="standin-until"
+            v-model="standinUntil"
+            type="datetime-local"
+            class="field-input w-full"
+            :disabled="saving"
+          >
+          <button
+            type="button"
+            class="w-full py-2.5 rounded-full bg-white text-black text-sm font-bold disabled:opacity-50"
+            :disabled="saving"
+            @click="saveAssistSettings"
+          >
+            Save assistant &amp; stand-in
+          </button>
         </div>
 
         <div class="card-item-bg rounded-2xl p-4 mb-4 space-y-3">
@@ -625,7 +820,7 @@ onMounted(() => {
             <h2 class="text-sm font-semibold">Meeting calendar &amp; CRM</h2>
           </div>
 
-          <template v-if="isOwner">
+          <template v-if="canManage">
             <p v-if="!meetingTool" class="text-xs text-amber-300/90 leading-relaxed">
               Choose a meeting calendar so booking emails include your calendar button.
             </p>
@@ -643,14 +838,14 @@ onMounted(() => {
             :uses-crm="usesCrm"
             :crm-provider="crmProvider"
             :crm-other="crmOther"
-            :disabled="!isOwner || saving"
+            :disabled="!canManage || saving"
             @update:meetingTool="meetingTool = $event"
             @update:usesCrm="usesCrm = $event"
             @update:crmProvider="crmProvider = $event"
             @update:crmOther="crmOther = $event"
           />
           <button
-            v-if="isOwner"
+            v-if="canManage"
             type="button"
             class="w-full py-2.5 rounded-full bg-zinc-800 text-sm font-semibold disabled:opacity-50"
             :disabled="saving"
@@ -660,7 +855,7 @@ onMounted(() => {
           </button>
         </div>
 
-        <div class="card-item-bg rounded-2xl p-4 mb-6 space-y-3">
+        <div v-if="canManage" class="card-item-bg rounded-2xl p-4 mb-6 space-y-3">
           <h2 class="text-sm font-semibold">Add member by {{ CARD_ID_LABEL.toLowerCase() }}</h2>
           <p class="text-xs text-gray-500">{{ CARD_ID_HINT }}</p>
           <input v-model="addSlug" type="text" class="field-input w-full" :placeholder="CARD_ID_LABEL" autocomplete="off">
@@ -773,7 +968,7 @@ onMounted(() => {
 
               <!-- Card Activate/Deactivate Control (Team Owner) -->
               <button
-                v-if="isOwner && m.profileId !== team?.ownerProfileId && !m.deleted"
+                v-if="canManage && m.profileId !== team?.ownerProfileId && !m.deleted"
                 type="button"
                 class="py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"
                 :class="m.cardStatus === 'disabled' ? 'bg-emerald-950/70 border border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/60' : 'bg-zinc-800/90 border border-zinc-700 text-amber-300 hover:bg-zinc-700'"
@@ -786,7 +981,7 @@ onMounted(() => {
 
               <!-- Individual Member Sharing Checkboxes (Team Owner) -->
               <div
-                v-if="isOwner && m.profileId !== team?.ownerProfileId && !m.deleted"
+                v-if="canManage && m.profileId !== team?.ownerProfileId && !m.deleted"
                 class="pt-3 pb-1 border-t border-zinc-800 space-y-2"
               >
                 <div class="flex items-center justify-between">
@@ -905,7 +1100,7 @@ onMounted(() => {
                 Team owner
               </button>
               <button
-                v-else-if="isOwner && m.status === 'active' && m.profileId && m.profileId !== team?.ownerProfileId && !m.deleted"
+                v-else-if="canManage && m.status === 'active' && m.profileId && m.profileId !== team?.ownerProfileId && !m.deleted && canReceiveTeamLeadership(m.role)"
                 type="button"
                 class="py-2 rounded-xl bg-zinc-800 text-sm text-sky-300 hover:bg-zinc-700 transition"
                 :disabled="saving"
@@ -917,7 +1112,7 @@ onMounted(() => {
               <!-- Apply to all members button next to Remove -->
               <div v-if="canEditMember(m) && m.profileId !== team?.ownerProfileId && !m.deleted" class="flex gap-2">
                 <button
-                  v-if="isOwner"
+                  v-if="canManage"
                   type="button"
                   class="flex-1 py-2 px-3 rounded-xl bg-zinc-800 text-xs font-semibold text-sky-300 hover:bg-zinc-700 border border-zinc-700 flex items-center justify-center gap-1.5 transition disabled:opacity-50"
                   :disabled="saving"
@@ -938,7 +1133,7 @@ onMounted(() => {
               </div>
 
               <button
-                v-else-if="m.deleted && (isOwner || canManageRole(myRole, m.role))"
+                v-else-if="m.deleted && canManage"
                 type="button"
                 class="py-2 rounded-xl bg-zinc-800 text-sm text-emerald-300 hover:bg-zinc-700 transition"
                 :disabled="saving"
@@ -1005,7 +1200,7 @@ onMounted(() => {
           <div class="w-full max-w-sm rounded-2xl bg-zinc-900 border border-zinc-700 p-5 shadow-xl">
             <h2 class="text-lg font-bold tracking-tight">{{ tierGateTitle }}</h2>
             <p class="text-sm text-gray-400 mt-2 leading-relaxed">{{ tierGateMessage }}</p>
-            <p v-if="isOwner" class="text-xs text-gray-400 mt-3 font-medium">
+            <p v-if="canManage" class="text-xs text-gray-400 mt-3 font-medium">
               You are the team leader · Package: {{ personalTypeLabel(packageCeiling) }}
             </p>
             <p v-else class="text-xs text-gray-500 mt-3">

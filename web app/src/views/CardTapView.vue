@@ -276,12 +276,20 @@ onMounted(async () => {
             cardType: linkedType.value,
             banner: mine.banner || remote.profile.banner,
             bio: mine.bio || remote.profile.bio,
-            shareSlug: remote.card.slug || serial.value
+            shareSlug: remote.card.slug || serial.value,
+            standinActive: !!remote.profile.standinActive,
+            standinCover: remote.profile.standinCover || null,
+            standinNote: remote.profile.standinNote || '',
+            bookingProfileId: remote.profile.bookingProfileId || remote.profile.id || ''
           }
         : {
             ...remote.profile,
             cardType: linkedType.value,
-            shareSlug: remote.card.slug || serial.value
+            shareSlug: remote.card.slug || serial.value,
+            standinActive: !!remote.profile.standinActive,
+            standinCover: remote.profile.standinCover || null,
+            standinNote: remote.profile.standinNote || '',
+            bookingProfileId: remote.profile.bookingProfileId || remote.profile.id || ''
           }
       setViewedProfile(profileToView)
       try {

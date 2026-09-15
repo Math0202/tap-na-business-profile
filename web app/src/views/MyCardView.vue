@@ -51,10 +51,28 @@ const bannerSrc = computed(() => bannerUrl(profile.value))
 const showBooking = computed(
   () => !deleted.value && !disabled.value && profile.value.showBooking !== false
 )
-const bookingProfileId = computed(
-  () => String(profile.value.remoteProfileId || profile.value.id || '').trim()
-)
-const ownerPhone = computed(() => ownerReachPhone(profile.value))
+const standinActive = computed(() => !!profile.value.standinActive && !!profile.value.standinCover?.id)
+const standinCover = computed(() => profile.value.standinCover || null)
+const bookingProfileId = computed(() => {
+  if (standinActive.value && profile.value.bookingProfileId) {
+    return String(profile.value.bookingProfileId).trim()
+  }
+  return String(profile.value.remoteProfileId || profile.value.id || '').trim()
+})
+const bookingOwnerName = computed(() => {
+  if (standinActive.value && standinCover.value?.name) return standinCover.value.name
+  return name.value
+})
+const ownerPhone = computed(() => {
+  if (standinActive.value && standinCover.value) {
+    return ownerReachPhone({
+      ...profile.value,
+      phone: standinCover.value.phone || profile.value.phone,
+      whatsapp: standinCover.value.whatsapp || profile.value.whatsapp
+    })
+  }
+  return ownerReachPhone(profile.value)
+})
 const showConnect = computed(
   () =>
     !deleted.value &&
@@ -444,6 +462,14 @@ watch(() => route.path, () => {
               >
                 {{ company }}
               </p>
+              <p
+                v-if="standinActive && standinCover"
+                class="mt-2 text-[11px] leading-snug text-amber-200/90 bg-amber-500/10 border border-amber-500/25 rounded-lg px-2 py-1.5 whitespace-normal"
+              >
+                Covering for {{ name }} —
+                contact <span class="font-semibold text-amber-100">{{ standinCover.name }}</span>
+                <span v-if="profile.standinNote"> · {{ profile.standinNote }}</span>
+              </p>
               <div class="mt-2 flex items-center gap-2 flex-wrap">
                 <button
                   v-if="isVisitor"
@@ -721,7 +747,7 @@ watch(() => route.path, () => {
     <BookMeetingPopup
       :open="bookOpen"
       :profile-id="bookingProfileId"
-      :owner-name="name"
+      :owner-name="bookingOwnerName"
       @close="bookOpen = false"
     />
 

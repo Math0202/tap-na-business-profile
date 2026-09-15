@@ -12,6 +12,7 @@ import {
 import {
   apiProfileAvailability,
   apiUpdateMeeting,
+  apiListMeetings,
   getApiToken
 } from '../lib/api'
 
@@ -21,6 +22,9 @@ const toast = ref('')
 const taken = ref([])
 const ownerMeetings = ref([])
 const isOwnerFlag = ref(false)
+const isAssistantFlag = ref(false)
+const assisting = ref([])
+const activeAssistExecutiveId = ref('')
 const ownerName = ref(displayName(publicProfile.value) || 'This person')
 const showBooking = ref(true)
 const slotMinutes = ref(30)
@@ -60,7 +64,38 @@ function toDayKey(d) {
 
 function profileId() {
   const p = publicProfile.value
+  if (activeAssistExecutiveId.value) return activeAssistExecutiveId.value
+  // Visitors book the stand-in while cover is active; owners/assistants still manage the viewed calendar.
+  if (!isLoggedIn() || !isOwner.value) {
+    const bookingId = String(p.bookingProfileId || '').trim()
+    if (p.standinActive && bookingId) return bookingId
+  }
   return String(p.remoteProfileId || p.id || '').trim()
+}
+
+async function loadAssisting() {
+  if (!getApiToken()) {
+    assisting.value = []
+    return
+  }
+  const res = await apiListMeetings()
+  if (!res.ok) return
+  assisting.value = Array.isArray(res.data?.assisting) ? res.data.assisting : []
+}
+
+function openAssistedCalendar(exec) {
+  activeAssistExecutiveId.value = exec.executiveId
+  ownerName.value = exec.executiveName
+  isAssistantFlag.value = true
+  loadAvailability()
+}
+
+function clearAssistedCalendar() {
+  activeAssistExecutiveId.value = ''
+  isAssistantFlag.value = false
+  publicProfile.value = loadPublicProfile()
+  ownerName.value = displayName(publicProfile.value) || 'This person'
+  loadAvailability()
 }
 
 const isOwner = computed(() => {
@@ -197,6 +232,7 @@ async function loadAvailability() {
     if (data.slotMinutes) slotMinutes.value = data.slotMinutes
     if (data.dayStartHour !== undefined) dayStartHour.value = data.dayStartHour
     if (data.dayEndHour !== undefined) dayEndHour.value = data.dayEndHour
+    isAssistantFlag.value = !!data.isAssistant
   } finally {
     loading.value = false
   }
@@ -246,6 +282,7 @@ onMounted(() => {
   document.title = 'Meetings · tap-na'
   publicProfile.value = loadPublicProfile()
   ownerName.value = displayName(publicProfile.value) || 'This person'
+  loadAssisting()
   loadAvailability()
 })
 </script>
@@ -257,9 +294,47 @@ onMounted(() => {
         <BrandMark size="sm" class="mb-3" />
         <h1 class="text-2xl font-bold tracking-tight">Meetings</h1>
         <p class="text-gray-400 text-sm mt-1">
-          {{ isOwner ? 'Your booking calendar' : 'Book time with ' + ownerName }}
+          {{ isOwner || isAssistantFlag ? 'Your booking calendar' : 'Book time with ' + ownerName }}
+        </p>
+        <p
+          v-if="publicProfile.standinActive && publicProfile.standinCover && !activeAssistExecutiveId"
+          class="mt-2 text-xs text-amber-200/90 bg-amber-500/10 border border-amber-500/25 rounded-xl px-3 py-2 leading-relaxed"
+        >
+          {{ ownerName }} is away.
+          Covering: <span class="font-semibold text-amber-100">{{ publicProfile.standinCover.name }}</span>
+          <span v-if="publicProfile.standinNote"> · {{ publicProfile.standinNote }}</span>
+        </p>
+        <p
+          v-else-if="isAssistantFlag"
+          class="mt-2 text-xs text-sky-300/90"
+        >
+          Managing this calendar as personal assistant
+          <button type="button" class="underline ml-1" @click="clearAssistedCalendar">Back to mine</button>
+        </p>
+        <p
+          v-else-if="isOwner && publicProfile.assistantName"
+          class="mt-2 text-xs text-sky-300/90"
+        >
+          Personal assistant: {{ publicProfile.assistantName }}
         </p>
       </header>
+
+      <div v-if="assisting.length && !activeAssistExecutiveId" class="mb-4 space-y-2">
+        <p class="text-[10px] uppercase tracking-wide text-gray-500">Assisting</p>
+        <button
+          v-for="exec in assisting"
+          :key="exec.executiveId"
+          type="button"
+          class="w-full text-left card-item-bg rounded-2xl px-4 py-3 flex items-center justify-between gap-3"
+          @click="openAssistedCalendar(exec)"
+        >
+          <div class="min-w-0">
+            <p class="text-sm font-semibold truncate">{{ exec.executiveName }}</p>
+            <p class="text-[11px] text-gray-500">{{ (exec.meetings || []).length }} meeting(s)</p>
+          </div>
+          <span class="material-symbols-outlined text-gray-400">chevron_right</span>
+        </button>
+      </div>
 
       <section class="card-item-bg rounded-3xl p-4 mb-4">
         <div class="flex items-center justify-between mb-4">

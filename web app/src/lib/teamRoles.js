@@ -100,6 +100,21 @@ export function canAccessTeamFeatures(personalType, { hasTeam = false } = {}) {
   return personalTypeRank(personalType) >= personalTypeRank('business')
 }
 
+/** Team manager tools require an Executive Exclusive owner (one lead at a time). */
+export function canActAsTeamManager(personalType, isOwner = false) {
+  return !!isOwner && normalizePersonalType(personalType, { fallback: '' }) === 'executive_exclusive'
+}
+
+/** Ownership / lead seat may only transfer to Executive Exclusive. */
+export function canReceiveTeamLeadership(personalType) {
+  return normalizePersonalType(personalType, { fallback: '' }) === 'executive_exclusive'
+}
+
+/** Personal assistant + stand-in are Executive Exclusive capabilities. */
+export function canUseExecutiveAssistFeatures(personalType) {
+  return normalizePersonalType(personalType, { fallback: '' }) === 'executive_exclusive'
+}
+
 export function memberStatusLabel(status) {
   const map = {
     pending_claim: 'Awaiting claim',

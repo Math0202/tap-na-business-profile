@@ -1497,6 +1497,7 @@ function mapPublicCardRow(c) {
 
 async function publicProfile(env, row, { includeCards = false } = {}) {
   if (!row) return null
+  row = await clearExpiredStandin(env, row)
   const cardRows =
     (await sb(
       env,
@@ -1542,6 +1543,45 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
       }
     }
   } catch {}
+
+  const standinActive = isStandinCoverActive(row)
+  let standinCover = null
+  let bookingProfileId = row.id
+  if (standinActive && row.standin_profile_id) {
+    const standinRows = await sb(
+      env,
+      `profiles?id=eq.${encodeURIComponent(row.standin_profile_id)}&deleted=eq.false&select=id,name,title,company,phone,email,whatsapp,show_booking,disabled`
+    )
+    const standin = standinRows?.[0]
+    if (standin && !standin.disabled) {
+      const standinCards = await sb(
+        env,
+        `cards?profile_id=eq.${encodeURIComponent(standin.id)}&kind=eq.personal&deleted=eq.false&status=eq.linked&select=slug&order=linked_at.desc.nullslast&limit=1`
+      )
+      standinCover = {
+        id: standin.id,
+        name: String(standin.name || standin.company || 'Stand-in').trim() || 'Stand-in',
+        title: standin.title || '',
+        company: standin.company || '',
+        phone: standin.phone || '',
+        email: standin.email || '',
+        whatsapp: standin.whatsapp || '',
+        shareSlug: standinCards?.[0]?.slug || '',
+        showBooking: standin.show_booking !== false
+      }
+      bookingProfileId = standin.id
+    }
+  }
+
+  let assistantName = ''
+  if (row.assistant_profile_id) {
+    const asst = await sb(
+      env,
+      `profiles?id=eq.${encodeURIComponent(row.assistant_profile_id)}&select=id,name,company&limit=1`
+    )
+    assistantName = String(asst?.[0]?.name || asst?.[0]?.company || '').trim()
+  }
+
   return {
     id: row.id,
     cardType: row.card_type === 'table' ? 'table' : 'personal',
@@ -1582,6 +1622,14 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
     video: row.video,
     disabled: !!row.disabled,
     shareSlug: shareHit?.slug || '',
+    assistantProfileId: row.assistant_profile_id || '',
+    assistantName,
+    standinProfileId: row.standin_profile_id || '',
+    standinActive,
+    standinNote: row.standin_note || '',
+    standinUntil: row.standin_until || '',
+    standinCover,
+    bookingProfileId,
     ...(includeCards ? { cards: mapped } : {})
   }
 }
@@ -1738,6 +1786,79 @@ function resolveTeamPackageCeiling(team, memberRows = []) {
 function canAccessTeamFeatures(personalType, { hasTeam = false } = {}) {
   if (hasTeam) return true
   return personalTypeRank(personalType) >= personalTypeRank('business')
+}
+
+/** Team manager tools require an Executive Exclusive owner (one lead at a time). */
+function canActAsTeamManager(personalType, isOwner = false) {
+  return !!isOwner && normalizePersonalType(personalType, '') === 'executive_exclusive'
+}
+
+/** Ownership / lead seat may only transfer to Executive Exclusive. */
+function canReceiveTeamLeadership(personalType) {
+  return normalizePersonalType(personalType, '') === 'executive_exclusive'
+}
+
+function canUseExecutiveAssistFeatures(personalType) {
+  return normalizePersonalType(personalType, '') === 'executive_exclusive'
+}
+
+/** Auto-clear expired stand-in; return whether cover is currently active. */
+function isStandinCoverActive(row) {
+  if (!row || row.standin_active !== true || !row.standin_profile_id) return false
+  if (row.standin_until) {
+    const until = new Date(row.standin_until).getTime()
+    if (!Number.isNaN(until) && until < Date.now()) return false
+  }
+  return true
+}
+
+async function clearExpiredStandin(env, row) {
+  if (!row?.id) return row
+  if (row.standin_active !== true || !row.standin_until) return row
+  const until = new Date(row.standin_until).getTime()
+  if (Number.isNaN(until) || until >= Date.now()) return row
+  await sb(env, `profiles?id=eq.${encodeURIComponent(row.id)}`, {
+    method: 'PATCH',
+    body: { standin_active: false, updated_at: new Date().toISOString() },
+    prefer: 'return=minimal'
+  })
+  return { ...row, standin_active: false }
+}
+
+async function profilesShareActiveTeam(env, executiveId, otherId) {
+  if (!executiveId || !otherId || executiveId === otherId) return false
+  const execMemberships = await sb(
+    env,
+    `team_members?profile_id=eq.${encodeURIComponent(executiveId)}&deleted=eq.false&status=eq.active&select=team_id`
+  )
+  const teamIds = [...new Set((execMemberships || []).map((m) => m.team_id).filter(Boolean))]
+  if (!teamIds.length) return false
+  const other = await sb(
+    env,
+    `team_members?profile_id=eq.${encodeURIComponent(otherId)}&deleted=eq.false&status=eq.active&team_id=in.(${teamIds.map(encodeURIComponent).join(',')})&select=id&limit=1`
+  )
+  return !!(other && other.length)
+}
+
+async function clearAssistantStandinRefsToProfile(env, profileId) {
+  if (!profileId) return
+  const now = new Date().toISOString()
+  await sb(env, `profiles?assistant_profile_id=eq.${encodeURIComponent(profileId)}`, {
+    method: 'PATCH',
+    body: { assistant_profile_id: null, updated_at: now },
+    prefer: 'return=minimal'
+  })
+  await sb(env, `profiles?standin_profile_id=eq.${encodeURIComponent(profileId)}`, {
+    method: 'PATCH',
+    body: {
+      standin_profile_id: null,
+      standin_active: false,
+      standin_note: '',
+      standin_until: null,
+      updated_at: now
+    },
+    prefer: 'return=minimal'
+  })
 }
 
 const SHOP_TEAM_PRODUCT_ROLES = {
@@ -3896,6 +4017,7 @@ async function handleApi(request, env, url) {
       null
     const isOwner = team.owner_profile_id === profile.id
     const myRole = normalizePersonalType(myMembership?.role || myCardType || 'business')
+    const canManage = canActAsTeamManager(myRole, isOwner)
 
     const pendingInvites = (memberships || [])
       .filter((m) => m.status === 'invited' || m.status === 'pending_claim')
@@ -3910,7 +4032,8 @@ async function handleApi(request, env, url) {
       packageCeiling,
       allowedRoles: assignableTeamRoles(packageCeiling),
       isOwner,
-      canManage: true,
+      canManage,
+      canUseExecutiveAssist: canUseExecutiveAssistFeatures(myRole),
       canUseTeam: true,
       pendingInvites
     })
@@ -3923,6 +4046,10 @@ async function handleApi(request, env, url) {
     const body = await readJson(request)
     const team = await getOrCreateOwnedTeam(env, profile)
     if (team.owner_profile_id !== profile.id) return bad('Only the team owner can update the team', 403)
+    const ownerType = await getProfilePersonalType(env, profile.id)
+    if (!canActAsTeamManager(ownerType, true)) {
+      return bad('Team manager tools require an Executive Exclusive lead', 403)
+    }
 
     const patch = { updated_at: new Date().toISOString() }
     if (body?.name !== undefined) {
@@ -4006,6 +4133,9 @@ async function handleApi(request, env, url) {
       ? normalizePersonalType(actorMembership?.role || packageCeiling)
       : normalizePersonalType(actorMembership?.role || '')
     if (!isOwner && !actorMembership) return bad('You are not an active team member', 403)
+    if (!canActAsTeamManager(actorRole, isOwner)) {
+      return bad('Team manager tools require an Executive Exclusive lead', 403)
+    }
 
     const cards = await sb(
       env,
@@ -4197,15 +4327,23 @@ async function handleApi(request, env, url) {
       return json({ ok: true, id: memberId, status: 'active' })
     }
 
-    // Transfer ownership to another active member (current owner only)
+    // Transfer ownership to another active member (current Executive lead only)
     if (body?.action === 'transfer_ownership' || body?.action === 'make_owner') {
       if (!isOwner) return bad('Only the current team owner can transfer ownership', 403)
+      const ownerType = await getProfilePersonalType(env, profile.id)
+      if (!canActAsTeamManager(ownerType, true)) {
+        return bad('Team manager tools require an Executive Exclusive lead', 403)
+      }
       if (member.deleted) return bad('Cannot transfer ownership to a removed member', 400)
       if (member.status !== 'active' || !member.profile_id) {
         return bad('New owner must be an active claimed team member', 400)
       }
       if (member.profile_id === profile.id) {
         return bad('You are already the team owner', 400)
+      }
+      const targetType = normalizePersonalType(member.role || '')
+      if (!canReceiveTeamLeadership(targetType)) {
+        return bad('Team leadership can only transfer to an Executive Exclusive member', 403)
       }
       const now = new Date().toISOString()
       const newOwnerEmail = String(member.invite_email || '').trim().toLowerCase()
@@ -4226,9 +4364,13 @@ async function handleApi(request, env, url) {
       })
     }
 
-    // Toggle card activation status (team owner only)
+    // Toggle card activation status (Executive team lead only)
     if (body?.action === 'toggle_card_status' || body?.action === 'set_card_status' || body?.cardStatus !== undefined) {
       if (!isOwner) return bad('Only the team owner can activate or deactivate team cards', 403)
+      const ownerType = await getProfilePersonalType(env, profile.id)
+      if (!canActAsTeamManager(ownerType, true)) {
+        return bad('Team manager tools require an Executive Exclusive lead', 403)
+      }
       if (member.profile_id === team.owner_profile_id) {
         return bad('Cannot deactivate the team owner card', 400)
       }
@@ -4268,12 +4410,19 @@ async function handleApi(request, env, url) {
         body: { updated_at: now },
         prefer: 'return=minimal'
       })
+      if (targetStatus === 'disabled' && member.profile_id) {
+        await clearAssistantStandinRefsToProfile(env, member.profile_id)
+      }
       return json({ ok: true, id: memberId, cardStatus: targetStatus })
     }
 
-    // Apply member sharing settings to all other active team members (team owner only)
+    // Apply member sharing settings to all other active team members (Executive lead only)
     if (body?.action === 'apply_to_all' || body?.action === 'apply_sharing_to_all') {
       if (!isOwner) return bad('Only the team owner can manage member sharing', 403)
+      const ownerType = await getProfilePersonalType(env, profile.id)
+      if (!canActAsTeamManager(ownerType, true)) {
+        return bad('Team manager tools require an Executive Exclusive lead', 403)
+      }
       const now = new Date().toISOString()
       const patch = {
         share_catalog: member.share_catalog === true,
@@ -4316,6 +4465,10 @@ async function handleApi(request, env, url) {
       body?.shareCalendarCrm !== undefined || body?.share_calendar_crm !== undefined
     ) {
       if (!isOwner) return bad('Only the team owner can manage member sharing', 403)
+      const ownerType = await getProfilePersonalType(env, profile.id)
+      if (!canActAsTeamManager(ownerType, true)) {
+        return bad('Team manager tools require an Executive Exclusive lead', 403)
+      }
       const patch = { updated_at: new Date().toISOString() }
       if (body?.shareCatalog !== undefined || body?.share_catalog !== undefined) {
         patch.share_catalog = !!(body.shareCatalog ?? body.share_catalog)
@@ -4352,13 +4505,13 @@ async function handleApi(request, env, url) {
       return bad('Team members cannot leave after accepting an invite', 403)
     }
 
-    // Soft-remove member (owner or higher-tier manager)
+    // Soft-remove member (Executive lead only)
     if (body?.deleted === true || body?.action === 'remove') {
       if (member.profile_id === team.owner_profile_id) {
         return bad('Cannot remove the team owner. Transfer ownership first.', 403)
       }
-      if (!isOwner && !canManageTeamRole(actorRole, member.role)) {
-        return bad('You cannot manage this member', 403)
+      if (!isOwner || !canActAsTeamManager(actorRole, true)) {
+        return bad('Team manager tools require an Executive Exclusive lead', 403)
       }
       await softDeleteRow(env, {
         table: 'team_members',
@@ -4366,13 +4519,16 @@ async function handleApi(request, env, url) {
         actor: profile.login_email || profile.id,
         extra: { updated_at: new Date().toISOString() }
       })
+      if (member.profile_id) {
+        await clearAssistantStandinRefsToProfile(env, member.profile_id)
+      }
       return json({ ok: true, id: memberId, deleted: true })
     }
 
     // Restore soft-removed member
     if (body?.deleted === false || body?.action === 'restore') {
-      if (!isOwner && !canManageTeamRole(actorRole, member.role)) {
-        return bad('You cannot restore this member', 403)
+      if (!isOwner || !canActAsTeamManager(actorRole, true)) {
+        return bad('Team manager tools require an Executive Exclusive lead', 403)
       }
       await restoreRow(env, {
         table: 'team_members',
@@ -4391,11 +4547,8 @@ async function handleApi(request, env, url) {
           403
         )
       }
-      if (!isOwner && !canManageTeamRole(actorRole, member.role)) {
-        return bad('You cannot manage this member', 403)
-      }
-      if (!isOwner && !canManageTeamRole(actorRole, nextRole)) {
-        return bad('You cannot assign this role', 403)
+      if (!isOwner || !canActAsTeamManager(actorRole, true)) {
+        return bad('Team manager tools require an Executive Exclusive lead', 403)
       }
       await sb(env, `team_members?id=eq.${encodeURIComponent(memberId)}`, {
         method: 'PATCH',
@@ -6680,6 +6833,74 @@ async function handleApi(request, env, url) {
     const profile = await getSessionProfile(env, request)
     if (!profile) return bad('Unauthorized', 401)
     const body = await readJson(request)
+    const myCardType = await getProfilePersonalType(env, profile.id)
+
+    let assistantProfileId = profile.assistant_profile_id || null
+    let standinProfileId = profile.standin_profile_id || null
+    let standinActive = profile.standin_active === true
+    let standinNote = profile.standin_note || ''
+    let standinUntil = profile.standin_until || null
+
+    const assistFieldsTouched =
+      body?.assistantProfileId !== undefined ||
+      body?.assistant_profile_id !== undefined ||
+      body?.standinProfileId !== undefined ||
+      body?.standin_profile_id !== undefined ||
+      body?.standinActive !== undefined ||
+      body?.standin_active !== undefined ||
+      body?.standinNote !== undefined ||
+      body?.standin_note !== undefined ||
+      body?.standinUntil !== undefined ||
+      body?.standin_until !== undefined
+
+    if (assistFieldsTouched) {
+      if (!canUseExecutiveAssistFeatures(myCardType)) {
+        return bad('Personal assistant and stand-in require an Executive Exclusive card', 403)
+      }
+      if (body?.assistantProfileId !== undefined || body?.assistant_profile_id !== undefined) {
+        const nextAssistant = String(body.assistantProfileId ?? body.assistant_profile_id ?? '').trim() || null
+        if (nextAssistant) {
+          if (nextAssistant === profile.id) return bad('You cannot assign yourself as personal assistant', 400)
+          const ok = await profilesShareActiveTeam(env, profile.id, nextAssistant)
+          if (!ok) return bad('Personal assistant must be an active teammate', 400)
+        }
+        assistantProfileId = nextAssistant
+      }
+      if (body?.standinProfileId !== undefined || body?.standin_profile_id !== undefined) {
+        const nextStandin = String(body.standinProfileId ?? body.standin_profile_id ?? '').trim() || null
+        if (nextStandin) {
+          if (nextStandin === profile.id) return bad('You cannot assign yourself as stand-in', 400)
+          const ok = await profilesShareActiveTeam(env, profile.id, nextStandin)
+          if (!ok) return bad('Stand-in must be an active teammate', 400)
+        }
+        standinProfileId = nextStandin
+      }
+      if (body?.standinActive !== undefined || body?.standin_active !== undefined) {
+        standinActive = !!(body.standinActive ?? body.standin_active)
+      }
+      if (body?.standinNote !== undefined || body?.standin_note !== undefined) {
+        standinNote = String(body.standinNote ?? body.standin_note ?? '').trim().slice(0, 280)
+      }
+      if (body?.standinUntil !== undefined || body?.standin_until !== undefined) {
+        const raw = body.standinUntil ?? body.standin_until
+        if (!raw) {
+          standinUntil = null
+        } else {
+          const d = new Date(raw)
+          if (Number.isNaN(d.getTime())) return bad('Invalid stand-in until date')
+          standinUntil = d.toISOString()
+        }
+      }
+      if (standinActive && !standinProfileId) {
+        return bad('Choose a stand-in teammate before turning cover on', 400)
+      }
+      if (!standinProfileId) {
+        standinActive = false
+        standinNote = ''
+        standinUntil = null
+      }
+    }
+
     await sb(env, `profiles?id=eq.${encodeURIComponent(profile.id)}`, {
       method: 'PATCH',
       body: {
@@ -6738,6 +6959,11 @@ async function handleApi(request, env, url) {
         bio: body.bio !== undefined ? String(body.bio || '').trim().slice(0, 500) : (profile.bio || ''),
         video: body.video ?? profile.video,
         disabled: body.disabled !== undefined ? !!body.disabled : !!profile.disabled,
+        assistant_profile_id: assistFieldsTouched ? assistantProfileId : (profile.assistant_profile_id || null),
+        standin_profile_id: assistFieldsTouched ? standinProfileId : (profile.standin_profile_id || null),
+        standin_active: assistFieldsTouched ? standinActive : profile.standin_active === true,
+        standin_note: assistFieldsTouched ? standinNote : (profile.standin_note || ''),
+        standin_until: assistFieldsTouched ? standinUntil : (profile.standin_until || null),
         updated_at: new Date().toISOString()
       },
       prefer: 'return=minimal'
@@ -7205,10 +7431,14 @@ async function handleApi(request, env, url) {
   const availabilityMatch = pathname.match(/^\/api\/profiles\/([^/]+)\/availability$/)
   if (availabilityMatch && method === 'GET') {
     const profileId = decodeURIComponent(availabilityMatch[1])
-    const rows = await sb(env, `profiles?id=eq.${encodeURIComponent(profileId)}&select=id,name,company,disabled,show_booking`)
-    const row = rows?.[0]
+    const rows = await sb(
+      env,
+      `profiles?id=eq.${encodeURIComponent(profileId)}&select=id,name,company,disabled,show_booking,assistant_profile_id,standin_active,standin_profile_id,standin_until,standin_note`
+    )
+    let row = rows?.[0]
     if (!row) return bad('Profile not found', 404)
     if (row.disabled) return bad('This profile is disabled', 403)
+    row = await clearExpiredStandin(env, row)
 
     const fromParam = String(url.searchParams.get('from') || '').trim()
     const toParam = String(url.searchParams.get('to') || '').trim()
@@ -7233,6 +7463,12 @@ async function handleApi(request, env, url) {
 
     const session = await getSessionProfile(env, request)
     const isOwner = !!(session && session.id === profileId)
+    const isAssistant = !!(
+      session &&
+      row.assistant_profile_id &&
+      session.id === row.assistant_profile_id
+    )
+    const canManageMeetings = isOwner || isAssistant
     const taken = (meetings || [])
       .map((m) => m.preferred_at)
       .filter(Boolean)
@@ -7246,9 +7482,12 @@ async function handleApi(request, env, url) {
       dayStartHour: 9,
       dayEndHour: 17,
       taken,
-      isOwner
+      isOwner: canManageMeetings,
+      isAssistant,
+      standinActive: isStandinCoverActive(row),
+      standinNote: row.standin_note || ''
     }
-    if (isOwner) {
+    if (canManageMeetings) {
       payload.meetings = (meetings || []).map((m) => ({
         id: m.id,
         name: m.name || '',
@@ -7822,7 +8061,25 @@ async function handleApi(request, env, url) {
       env,
       'meetings?profile_id=eq.' + encodeURIComponent(profile.id) + '&deleted=eq.false&order=created_at.desc&limit=500'
     )
-    return json({ ok: true, meetings: rows || [] })
+    const assistedExecs = await sb(
+      env,
+      `profiles?assistant_profile_id=eq.${encodeURIComponent(profile.id)}&deleted=eq.false&select=id,name,company`
+    )
+    const assisting = []
+    for (const exec of assistedExecs || []) {
+      const execMeetings = await sb(
+        env,
+        'meetings?profile_id=eq.' +
+          encodeURIComponent(exec.id) +
+          '&deleted=eq.false&order=created_at.desc&limit=500'
+      )
+      assisting.push({
+        executiveId: exec.id,
+        executiveName: String(exec.name || exec.company || 'Executive').trim() || 'Executive',
+        meetings: execMeetings || []
+      })
+    }
+    return json({ ok: true, meetings: rows || [], assisting })
   }
 
   if (pathname === '/api/meetings/stats' && method === 'GET') {
@@ -7832,6 +8089,20 @@ async function handleApi(request, env, url) {
       env,
       'meetings?profile_id=eq.' + encodeURIComponent(profile.id) + '&deleted=eq.false&status=eq.new&select=id'
     )
+    const assistedExecs = await sb(
+      env,
+      `profiles?assistant_profile_id=eq.${encodeURIComponent(profile.id)}&deleted=eq.false&select=id`
+    )
+    let assistedNew = 0
+    for (const exec of assistedExecs || []) {
+      const more = await sb(
+        env,
+        'meetings?profile_id=eq.' +
+          encodeURIComponent(exec.id) +
+          '&deleted=eq.false&status=eq.new&select=id'
+      )
+      assistedNew += more?.length || 0
+    }
     const followups = await sb(
       env,
       'followups?profile_id=eq.' + encodeURIComponent(profile.id) + '&deleted=eq.false&status=eq.open&select=id,due_at'
@@ -7845,7 +8116,7 @@ async function handleApi(request, env, url) {
     return json({
       ok: true,
       stats: {
-        newMeetings: meetings?.length || 0,
+        newMeetings: (meetings?.length || 0) + assistedNew,
         openFollowups: followups?.length || 0,
         overdueFollowups
       }
@@ -7863,9 +8134,20 @@ async function handleApi(request, env, url) {
     if (!allowed.includes(status)) return bad('Invalid status')
     const existing = await sb(
       env,
-      'meetings?id=eq.' + encodeURIComponent(meetingId) + '&profile_id=eq.' + encodeURIComponent(profile.id) + '&select=id'
+      'meetings?id=eq.' + encodeURIComponent(meetingId) + '&select=id,profile_id'
     )
-    if (!existing?.length) return bad('Meeting not found', 404)
+    const meeting = existing?.[0]
+    if (!meeting) return bad('Meeting not found', 404)
+    const ownerId = meeting.profile_id
+    let allowedActor = ownerId === profile.id
+    if (!allowedActor) {
+      const owners = await sb(
+        env,
+        `profiles?id=eq.${encodeURIComponent(ownerId)}&assistant_profile_id=eq.${encodeURIComponent(profile.id)}&select=id&limit=1`
+      )
+      allowedActor = !!(owners && owners.length)
+    }
+    if (!allowedActor) return bad('Meeting not found', 404)
     await sb(env, 'meetings?id=eq.' + encodeURIComponent(meetingId), {
       method: 'PATCH',
       body: { status, updated_at: new Date().toISOString() },
