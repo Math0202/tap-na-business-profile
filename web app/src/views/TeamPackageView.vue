@@ -20,6 +20,10 @@ import {
 } from '../lib/shopCatalog'
 import { setPageSeo } from '../lib/seo'
 import ShopFooterCredit from '../components/ShopFooterCredit.vue'
+import {
+  CONNECT_FEATURE_MATRIX,
+  EXECUTIVE_ONLY_FEATURE_LABELS
+} from '../lib/featureMatrix'
 
 const route = useRoute()
 const router = useRouter()
@@ -139,18 +143,12 @@ function parseCopy(desc) {
   return { about: about.trim(), features: bullets, footer: footer.trim() }
 }
 
-const TEAM_FEATURE_EXTRAS = [
-  'CRM Integration',
-  'Google & Microsoft Meeting Calendar',
-  'Custom Logo (B&W)'
-]
+/** Business/Executive extras beyond Solo baseline (from shared matrix). */
+const TEAM_FEATURE_EXTRAS = CONNECT_FEATURE_MATRIX.filter(
+  (r) => r.solo === 'no' && r.business === 'yes'
+).map((r) => r.feature)
 
-const EXECUTIVE_FEATURE_EXTRAS = [
-  ...TEAM_FEATURE_EXTRAS,
-  'Team manager — deactivate profiles, manage team/company (1 lead)',
-  'Personal assistant capability',
-  'Stand-in personal capability'
-]
+const EXECUTIVE_FEATURE_EXTRAS = [...TEAM_FEATURE_EXTRAS, ...EXECUTIVE_ONLY_FEATURE_LABELS]
 
 const REMOVED_FEATURE_PATTERNS = [
   /custom subdomain/i,

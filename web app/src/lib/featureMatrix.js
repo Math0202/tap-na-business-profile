@@ -12,7 +12,7 @@
  */
 export const CONNECT_FEATURE_MATRIX = [
   {
-    feature: 'NFC + QR u{2192} live digital profile',
+    feature: 'NFC + QR → live digital profile',
     solo: 'yes',
     business: 'yes',
     executive: 'yes'
@@ -42,7 +42,7 @@ export const CONNECT_FEATURE_MATRIX = [
     executive: 'yes'
   },
   {
-    feature: 'Team manager u{2014} deactivate profiles, manage team/company (1 lead)',
+    feature: 'Team manager — deactivate profiles, manage team/company (1 lead)',
     solo: 'no',
     business: 'no',
     executive: 'yes'
@@ -77,7 +77,7 @@ export function featureMarkLabel(mark) {
   return '\u2014'
 }
 
-/** Whether Connect Teams column should show a check (Business or Executive). */
+/** Whether Connect Teams columns should show a check (Business or Executive). */
 export function teamsPackageMark(row) {
   if (row.business === 'yes' || row.executive === 'yes') {
     return row.business === 'no' && row.executive === 'yes' ? 'exec' : 'yes'
