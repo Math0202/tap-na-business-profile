@@ -9005,6 +9005,13 @@ export default {
         if (!iconUrl || iconUrl.startsWith('data:')) {
           iconUrl = absolutePublicUrl(url.origin, '/personal.jpeg')
         }
+        const iconType = /\.jpe?g(\?|$)/i.test(iconUrl)
+          ? 'image/jpeg'
+          : /\.webp(\?|$)/i.test(iconUrl)
+            ? 'image/webp'
+            : /\.svg(\?|$)/i.test(iconUrl)
+              ? 'image/svg+xml'
+              : 'image/png'
         const manifest = {
           id: startUrl,
           name: displayName,
@@ -9018,8 +9025,8 @@ export default {
           background_color: '#121212',
           theme_color: '#121212',
           icons: [
-            { src: iconUrl, sizes: '192x192', type: 'image/png', purpose: 'any' },
-            { src: iconUrl, sizes: '512x512', type: 'image/png', purpose: 'any' }
+            { src: iconUrl, sizes: '192x192', type: iconType, purpose: 'any' },
+            { src: iconUrl, sizes: '512x512', type: iconType, purpose: 'any' }
           ]
         }
         return new Response(JSON.stringify(manifest), {

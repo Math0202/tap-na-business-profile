@@ -8,6 +8,9 @@ if (typeof window !== 'undefined') {
   window.addEventListener('beforeinstallprompt', (event) => {
     event.preventDefault()
     deferredInstallPrompt = event
+    // #region agent log
+    fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'A',location:'profileAppInstall.js:beforeinstallprompt',message:'beforeinstallprompt fired',data:{path:window.location.pathname,hasPrompt:!!event},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     while (installPromptWaiters.length) {
       const resolve = installPromptWaiters.shift()
       resolve(event)
@@ -53,7 +56,12 @@ function waitForInstallPrompt(timeoutMs = 2500) {
 /** Register manifest, icons, and service worker as early as possible (page load). */
 export async function prepareProfileAppInstall({ slug, avatar, name, company }) {
   const manifestUrl = profileManifestUrl(slug)
-  if (!manifestUrl) return { ok: false, error: 'Missing profile link.' }
+  if (!manifestUrl) {
+    // #region agent log
+    fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'B',location:'profileAppInstall.js:prepare',message:'prepare missing slug',data:{slug:String(slug||'')},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    return { ok: false, error: 'Missing profile link.' }
+  }
 
   const iconHref = absoluteUrl(avatar, window.location.origin)
   const safeIcon =
@@ -80,13 +88,36 @@ export async function prepareProfileAppInstall({ slug, avatar, name, company }) 
   const appTitle = String(company || name || '').trim()
   if (appTitle) document.title = `${appTitle} — tap-na`
 
+  let swOk = false
+  let swError = ''
+  let manifestStatus = 0
+  let manifestBody = null
+  try {
+    const mfRes = await fetch(manifestUrl, { credentials: 'omit' })
+    manifestStatus = mfRes.status
+    if (mfRes.ok) {
+      manifestBody = await mfRes.json().catch(() => null)
+    }
+  } catch (err) {
+    manifestStatus = -1
+    // #region agent log
+    fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'E',location:'profileAppInstall.js:prepare',message:'manifest fetch threw',data:{manifestUrl,error:String(err&&err.message||err)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+  }
+
   if ('serviceWorker' in navigator) {
     try {
-      await navigator.serviceWorker.register('/profile-sw.js', { scope: '/' })
-    } catch {
+      const reg = await navigator.serviceWorker.register('/profile-sw.js', { scope: '/' })
+      swOk = !!reg
+    } catch (err) {
+      swError = String(err && err.message ? err.message : err)
       /* install may still work on some browsers */
     }
   }
+
+  // #region agent log
+  fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'A,B,E',location:'profileAppInstall.js:prepare',message:'prepare done',data:{slug:String(slug||''),path:window.location.pathname,manifestUrl,manifestStatus,manifestScope:manifestBody&&manifestBody.scope,manifestStart:manifestBody&&manifestBody.start_url,icon0:manifestBody&&manifestBody.icons&&manifestBody.icons[0]&&manifestBody.icons[0].src,safeIcon,swOk,swError,hasDeferredPrompt:!!deferredInstallPrompt,displayMode:window.matchMedia('(display-mode: standalone)').matches},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   return { ok: true }
 }
@@ -94,6 +125,9 @@ export async function prepareProfileAppInstall({ slug, avatar, name, company }) 
 /** Show the native Install / Cancel dialog when Chrome has made it available. */
 export async function promptProfileAppInstall() {
   let prompt = deferredInstallPrompt
+  // #region agent log
+  fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'A,C',location:'profileAppInstall.js:prompt:start',message:'prompt start',data:{hadDeferred:!!prompt,ua:navigator.userAgent.slice(0,120),path:window.location.pathname},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   if (!prompt) {
     prompt = await waitForInstallPrompt(2500)
   }
@@ -102,13 +136,22 @@ export async function promptProfileAppInstall() {
     prompt.prompt()
     const choice = await prompt.userChoice
     deferredInstallPrompt = null
+    // #region agent log
+    fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'A',location:'profileAppInstall.js:prompt:native',message:'native prompt completed',data:{outcome:choice&&choice.outcome},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     return { ok: true, method: 'install', outcome: choice?.outcome || '' }
   }
 
   if (isIosDevice()) {
+    // #region agent log
+    fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'C',location:'profileAppInstall.js:prompt:ios',message:'fallback ios manual',data:{},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     return { ok: true, method: 'manual', isIos: true, isAndroid: false }
   }
 
+  // #region agent log
+  fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'C',location:'profileAppInstall.js:prompt:unavailable',message:'install unavailable silent path',data:{isAndroid:isAndroidDevice()},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   return { ok: true, method: 'unavailable', isIos: false, isAndroid: isAndroidDevice() }
 }
 

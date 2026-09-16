@@ -10,6 +10,7 @@ import ConnectPopup from '../components/ConnectPopup.vue'
 import {
   loadPublicProfile,
   loadProfile,
+  loadViewedProfile,
   clearViewedProfile,
   avatarUrl,
   bannerUrl,
@@ -217,6 +218,10 @@ function refresh() {
   const viewed = loadViewedProfile()
   const viewedId = String(viewed?.remoteProfileId || viewed?.id || '').trim()
 
+  // #region agent log
+  fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'B',location:'MyCardView.vue:refresh',message:'refresh start',data:{path:typeof location!=='undefined'?location.pathname:'',myId:!!myId,viewedId:!!viewedId,loggedIn:isLoggedIn()},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+
   // /me or logged-in owner viewing their own card always shows the latest local profile
   if (route.path === '/me' && isLoggedIn()) {
     clearViewedProfile()
@@ -234,6 +239,9 @@ function refresh() {
 }
 
 function syncVisitorAppInstall() {
+  // #region agent log
+  fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'B,D',location:'MyCardView.vue:syncVisitorAppInstall',message:'sync install prep',data:{isVisitor:isVisitor.value,shareSlug:String(shareSlug.value||''),actionsBlocked:actionsBlocked.value,path:typeof location!=='undefined'?location.pathname:''},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   if (!isVisitor.value || !shareSlug.value) return
   prepareProfileAppInstall({
     slug: shareSlug.value,
@@ -268,17 +276,36 @@ function openShare() {
 }
 
 async function saveProfileApp() {
+  // #region agent log
+  fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'C,D',location:'MyCardView.vue:saveProfileApp:click',message:'Save profile clicked',data:{actionsBlocked:actionsBlocked.value,shareSlug:String(shareSlug.value||''),isVisitor:isVisitor.value},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   if (actionsBlocked.value || !shareSlug.value) return
   trackClick(LOCAL_ID, 'save_profile_app', 'Save profile')
   logRemote('click:save_profile_app')
+  // Ensure manifest + SW are registered before prompting (do not rely only on page-load prep).
+  await prepareProfileAppInstall({
+    slug: shareSlug.value,
+    avatar: avatar.value,
+    name: name.value,
+    company: profile.value.company || ''
+  }).catch(() => {})
   const res = await promptProfileAppInstall()
+  // #region agent log
+  fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'C',location:'MyCardView.vue:saveProfileApp:result',message:'Save profile result',data:{res},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   if (!res.ok) {
     saveProfileHint.value = res.error || 'Could not prepare install.'
     saveProfileOpen.value = true
     return
   }
   if (res.method === 'install') return
-  if (res.method === 'unavailable') return
+  if (res.method === 'unavailable') {
+    saveProfileHint.value = res.isAndroid
+      ? 'Open this profile in Chrome, then use the browser menu → Install app / Add to Home screen.'
+      : 'Use your browser menu to Install app or Add to Home Screen. Chrome on Android shows Install when available.'
+    saveProfileOpen.value = true
+    return
+  }
   if (res.isIos) {
     saveProfileHint.value =
       'Tap Share in Safari, then choose “Add to Home Screen”. This profile’s photo will be the app icon.'
