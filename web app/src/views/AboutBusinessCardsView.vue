@@ -69,38 +69,45 @@ onUnmounted(() => {
          
           <ul class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <li class="bg-surface-container rounded-xl p-4 flex gap-3">
-              <span class="material-symbols-outlined text-primary shrink-0">payments</span>
+              <span class="material-symbols-outlined text-primary shrink-0">swap_horiz</span>
               <div>
-                <p class="font-medium text-sm">Once-off purchase</p>
-                <p class="text-xs text-on-surface-variant mt-1">No subscriptions or hidden platform fees — just the card.</p>
+                <p class="font-medium text-sm">Convenience to exchange details</p>
+                <p class="text-xs text-on-surface-variant mt-1">Share your contact info instantly with a tap or QR scan.</p>
               </div>
             </li>
             <li class="bg-surface-container rounded-xl p-4 flex gap-3">
-              <span class="material-symbols-outlined text-primary shrink-0">update</span>
+              <span class="material-symbols-outlined text-primary shrink-0">badge</span>
               <div>
-                <p class="font-medium text-sm">No reprint for updates</p>
-                <p class="text-xs text-on-surface-variant mt-1">Change title, number, or links online.</p>
+                <p class="font-medium text-sm">Personal card that is always on you</p>
+                <p class="text-xs text-on-surface-variant mt-1">One card in your wallet — ready whenever you meet someone.</p>
               </div>
             </li>
             <li class="bg-surface-container rounded-xl p-4 flex gap-3">
-              <span class="material-symbols-outlined text-primary shrink-0">local_shipping</span>
+              <span class="material-symbols-outlined text-primary shrink-0">event</span>
               <div>
-                <p class="font-medium text-sm">Free Windhoek delivery</p>
-                <p class="text-xs text-on-surface-variant mt-1">Order online. Made to order. It takes 1-4 working days.</p>
+                <p class="font-medium text-sm">Booking meetings on the go</p>
+                <p class="text-xs text-on-surface-variant mt-1">Let people book time with you straight from your profile.</p>
               </div>
             </li>
             <li class="bg-surface-container rounded-xl p-4 flex gap-3">
-              <span class="material-symbols-outlined text-primary shrink-0">security</span>
+              <span class="material-symbols-outlined text-primary shrink-0">savings</span>
               <div>
-                <p class="font-medium text-sm">Durable</p>
-                <p class="text-xs text-on-surface-variant mt-1">Cards last longer.</p>
+                <p class="font-medium text-sm">Saving time and money</p>
+                <p class="text-xs text-on-surface-variant mt-1">Update online instead of reprinting stacks of paper cards.</p>
               </div>
             </li>
             <li class="bg-surface-container rounded-xl p-4 flex gap-3">
-              <span class="material-symbols-outlined text-primary shrink-0">replay</span>
+              <span class="material-symbols-outlined text-primary shrink-0">inventory_2</span>
               <div>
-                <p class="font-medium text-sm">Lost card?</p>
-                <p class="text-xs text-on-surface-variant mt-1">Order a replacement online.</p>
+                <p class="font-medium text-sm">No need to carry a bunch of cards</p>
+                <p class="text-xs text-on-surface-variant mt-1">Leave the stack at home — one Connect card covers every intro.</p>
+              </div>
+            </li>
+            <li class="bg-surface-container rounded-xl p-4 flex gap-3">
+              <span class="material-symbols-outlined text-primary shrink-0">verified</span>
+              <div>
+                <p class="font-medium text-sm">Professional</p>
+                <p class="text-xs text-on-surface-variant mt-1">A modern first impression that matches how you work.</p>
               </div>
             </li>
           </ul>
