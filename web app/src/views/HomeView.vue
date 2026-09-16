@@ -526,6 +526,107 @@ onUnmounted(() => {
           </div>
         </section>
 
+        <!-- Why Connect cards -->
+        <section
+          :ref="setSectionRef"
+          class="px-margin-mobile md:px-margin-desktop pt-stack-lg flex flex-col gap-5 scroll-mt-20"
+        >
+          <div class="flex flex-col gap-1">
+            <h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg uppercase">
+              Why Connect cards?
+            </h2>
+            <div class="h-1 w-12 bg-primary" />
+          </div>
+          <ul class="grid grid-cols-1 sm:grid-cols-2 gap-3 list-none p-0 m-0">
+            <li class="bg-surface-container rounded-xl p-4 flex gap-3">
+              <span class="material-symbols-outlined text-primary shrink-0" aria-hidden="true">swap_horiz</span>
+              <div>
+                <p class="font-medium text-sm">Convenience to exchange details</p>
+                <p class="text-xs text-on-surface-variant mt-1">Share your contact info instantly with a tap or QR scan.</p>
+              </div>
+            </li>
+            <li class="bg-surface-container rounded-xl p-4 flex gap-3">
+              <span class="material-symbols-outlined text-primary shrink-0" aria-hidden="true">badge</span>
+              <div>
+                <p class="font-medium text-sm">Personal card that is always on you</p>
+                <p class="text-xs text-on-surface-variant mt-1">One card in your wallet — ready whenever you meet someone.</p>
+              </div>
+            </li>
+            <li class="bg-surface-container rounded-xl p-4 flex gap-3">
+              <span class="material-symbols-outlined text-primary shrink-0" aria-hidden="true">event</span>
+              <div>
+                <p class="font-medium text-sm">Booking meetings on the go</p>
+                <p class="text-xs text-on-surface-variant mt-1">Let people book time with you straight from your profile.</p>
+              </div>
+            </li>
+            <li class="bg-surface-container rounded-xl p-4 flex gap-3">
+              <span class="material-symbols-outlined text-primary shrink-0" aria-hidden="true">savings</span>
+              <div>
+                <p class="font-medium text-sm">Saving time and money</p>
+                <p class="text-xs text-on-surface-variant mt-1">Update online instead of reprinting stacks of paper cards.</p>
+              </div>
+            </li>
+            <li class="bg-surface-container rounded-xl p-4 flex gap-3">
+              <span class="material-symbols-outlined text-primary shrink-0" aria-hidden="true">inventory_2</span>
+              <div>
+                <p class="font-medium text-sm">No need to carry a bunch of cards</p>
+                <p class="text-xs text-on-surface-variant mt-1">Leave the stack at home — one Connect card covers every intro.</p>
+              </div>
+            </li>
+            <li class="bg-surface-container rounded-xl p-4 flex gap-3">
+              <span class="material-symbols-outlined text-primary shrink-0" aria-hidden="true">verified</span>
+              <div>
+                <p class="font-medium text-sm">Professional</p>
+                <p class="text-xs text-on-surface-variant mt-1">A modern first impression that matches how you work.</p>
+              </div>
+            </li>
+          </ul>
+        </section>
+
+        <!-- How Connect cards works -->
+        <section
+          :ref="setSectionRef"
+          class="px-margin-mobile md:px-margin-desktop pt-stack-lg flex flex-col gap-5 scroll-mt-20"
+        >
+          <div class="flex flex-col gap-1">
+            <h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg uppercase">
+              How connect cards works
+            </h2>
+            <div class="h-1 w-12 bg-primary" />
+          </div>
+          <ol class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 list-none p-0 m-0">
+            <li class="flex flex-col gap-3 sm:text-center bg-surface-container rounded-xl p-5">
+              <span class="material-symbols-outlined text-primary text-[32px] sm:mx-auto" aria-hidden="true">contactless</span>
+              <p class="font-label-caps text-[12px] uppercase tracking-[0.2em] text-on-surface">Tap</p>
+              <p class="text-sm text-on-surface-variant leading-relaxed">
+                Hold the card to a phone (NFC) or scan the QR. No app needed for visitors.
+              </p>
+            </li>
+            <li class="flex flex-col gap-3 sm:text-center bg-surface-container rounded-xl p-5">
+              <span class="material-symbols-outlined text-primary text-[32px] sm:mx-auto" aria-hidden="true">link</span>
+              <p class="font-label-caps text-[12px] uppercase tracking-[0.2em] text-on-surface">Connect</p>
+              <p class="text-sm text-on-surface-variant leading-relaxed">
+                Their browser opens your live Tap-Na profile instantly — always the latest version.
+              </p>
+            </li>
+            <li class="flex flex-col gap-3 sm:text-center bg-surface-container rounded-xl p-5">
+              <span class="material-symbols-outlined text-primary text-[32px] sm:mx-auto" aria-hidden="true">ios_share</span>
+              <p class="font-label-caps text-[12px] uppercase tracking-[0.2em] text-on-surface">Share</p>
+              <p class="text-sm text-on-surface-variant leading-relaxed">
+                They save your digital card, open links, browse your catalogue, or book a meeting.
+              </p>
+            </li>
+          </ol>
+          <div class="pt-1">
+            <RouterLink
+              to="/about/business-cards"
+              class="inline-flex items-center justify-center bg-primary text-on-primary font-button-text text-button-text px-8 py-4 rounded-full uppercase tracking-widest hover:opacity-90 transition-opacity no-underline"
+            >
+              Learn more
+            </RouterLink>
+          </div>
+        </section>
+
         <!-- Testimonials -->
         <section :ref="setSectionRef" class="px-margin-mobile md:px-margin-desktop pt-stack-lg">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 max-w-6xl">

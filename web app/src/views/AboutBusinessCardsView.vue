@@ -103,7 +103,7 @@ onUnmounted(() => {
               <span class="material-symbols-outlined text-primary shrink-0">inventory_2</span>
               <div>
                 <p class="font-medium text-sm">No need to carry a bunch of cards</p>
-                <p class="text-xs text-on-surface-variant mt-1">.</p>
+                <p class="text-xs text-on-surface-variant mt-1">Leave the stack at home — one Connect card covers every intro.</p>
               </div>
             </li>
             <li class="bg-surface-container rounded-xl p-4 flex gap-3">
