@@ -137,11 +137,9 @@ onUnmounted(() => {
       <div class="flex items-center gap-2">
         <RouterLink
           :to="authTo"
-          class="w-11 h-11 flex items-center justify-center text-on-surface"
-          :aria-label="authLabel"
-          :title="authLabel"
+          class="hidden sm:flex md:hidden font-label-caps text-[11px] uppercase tracking-widest text-on-surface-variant no-underline px-2"
         >
-          <span class="material-symbols-outlined">{{ loggedIn ? 'account_circle' : 'login' }}</span>
+          {{ authLabel }}
         </RouterLink>
         <RouterLink
           to="/cart"
