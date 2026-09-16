@@ -13,9 +13,12 @@ import {
 import { BRAND_SOCIAL_LINKS } from '../lib/brandLinks'
 import ShopFooterCredit from '../components/ShopFooterCredit.vue'
 import { openLegalRequest } from '../lib/legalRequest'
+import { CONNECT_FEATURE_MATRIX, featureMarkLabel } from '../lib/featureMatrix'
 
 const route = useRoute()
 const router = useRouter()
+const featureMatrix = CONNECT_FEATURE_MATRIX
+const markLabel = featureMarkLabel
 const menuOpen = ref(false)
 const subscribed = ref(false)
 const email = ref('')
@@ -499,71 +502,24 @@ onUnmounted(() => {
                 </tr>
               </thead>
               <tbody class="text-on-surface-variant">
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">NFC + QR → live digital profile</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Contact Details</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Products &amp; Services Catalogue</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Meeting Booking</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Profile Sharing</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Team profiles</td>
-                  <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">CRM Integration</td>
-                  <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Google &amp; Microsoft Meeting Calendar</td>
-                  <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Customization</td>
-                  <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Custom subdomain</td>
-                  <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
-                </tr>
-                <tr>
-                  <td class="py-3 pr-4 text-on-surface">Custom Logo(B&W)</td>
-                  <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
+                <tr
+                  v-for="(row, idx) in featureMatrix"
+                  :key="row.feature"
+                  :class="idx < featureMatrix.length - 1 ? 'border-b border-border-subtle/70' : ''"
+                >
+                  <td class="py-3 pr-4 text-on-surface">{{ row.feature }}</td>
+                  <td
+                    class="py-3 px-2 text-center"
+                    :class="row.solo === 'yes' ? 'text-primary' : ''"
+                  >{{ markLabel(row.solo) }}</td>
+                  <td
+                    class="py-3 px-2 text-center"
+                    :class="row.business === 'yes' ? 'text-primary' : ''"
+                  >{{ markLabel(row.business) }}</td>
+                  <td
+                    class="py-3 pl-2 text-center"
+                    :class="row.executive === 'yes' ? 'text-primary' : ''"
+                  >{{ markLabel(row.executive) }}</td>
                 </tr>
               </tbody>
             </table>

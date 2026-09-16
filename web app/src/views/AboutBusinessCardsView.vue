@@ -3,9 +3,12 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import ShopHeader from '../components/ShopHeader.vue'
 import ShopFooterCredit from '../components/ShopFooterCredit.vue'
+import { CONNECT_FEATURE_MATRIX, featureMarkLabel } from '../lib/featureMatrix'
 
 const router = useRouter()
 const menuOpen = ref(false)
+const featureMatrix = CONNECT_FEATURE_MATRIX
+const markLabel = featureMarkLabel
 
 function shopAll() {
   menuOpen.value = false
@@ -100,7 +103,7 @@ onUnmounted(() => {
               <span class="material-symbols-outlined text-primary shrink-0">inventory_2</span>
               <div>
                 <p class="font-medium text-sm">No need to carry a bunch of cards</p>
-                <p class="text-xs text-on-surface-variant mt-1">Leave the stack at home — one Connect card covers every intro.</p>
+                <p class="text-xs text-on-surface-variant mt-1">.</p>
               </div>
             </li>
             <li class="bg-surface-container rounded-xl p-4 flex gap-3">
@@ -154,7 +157,7 @@ onUnmounted(() => {
             <li class="flex gap-4">
               <span class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-caps text-xs shrink-0">1</span>
               <p class="text-sm text-on-surface-variant leading-relaxed pt-1">
-                Order online. Delivery free in Windhoek within <strong class="text-on-surface">1–4 working days. Courier nationwide</strong>.
+                Order online. Delivery free in Windhoek within <strong class="text-on-surface">2–4 working days. Courier nationwide</strong>.
               </p>
             </li>
             <li class="flex gap-4">
@@ -245,53 +248,24 @@ onUnmounted(() => {
                 </tr>
               </thead>
               <tbody class="text-on-surface-variant">
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">NFC + QR → live digital profile</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Products &amp; Services Catalogue (Optional)</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">CRM Integration</td>
-                  <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Google &amp; Microsoft Meeting Calendar</td>
-                  <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Custom Logo (B&amp;W)</td>
-                  <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center text-primary">✓</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Team manager — deactivate profiles, manage team/company (1 lead)</td>
-                  <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/70">
-                  <td class="py-3 pr-4 text-on-surface">Personal assistant capability</td>
-                  <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
-                </tr>
-                <tr>
-                  <td class="py-3 pr-4 text-on-surface">Stand-in personal capability</td>
-                  <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 px-2 text-center">—</td>
-                  <td class="py-3 pl-2 text-center text-primary">✓</td>
+                <tr
+                  v-for="(row, idx) in featureMatrix"
+                  :key="row.feature"
+                  :class="idx < featureMatrix.length - 1 ? 'border-b border-border-subtle/70' : ''"
+                >
+                  <td class="py-3 pr-4 text-on-surface">{{ row.feature }}</td>
+                  <td
+                    class="py-3 px-2 text-center"
+                    :class="row.solo === 'yes' ? 'text-primary' : ''"
+                  >{{ markLabel(row.solo) }}</td>
+                  <td
+                    class="py-3 px-2 text-center"
+                    :class="row.business === 'yes' ? 'text-primary' : ''"
+                  >{{ markLabel(row.business) }}</td>
+                  <td
+                    class="py-3 pl-2 text-center"
+                    :class="row.executive === 'yes' ? 'text-primary' : ''"
+                  >{{ markLabel(row.executive) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -308,7 +282,7 @@ onUnmounted(() => {
             <li>• Fully online store — order on tapnam.com.</li>
             <li>• Solo Cards are readily available, Business & Executive Cards are made on order.</li>
             <li>• Free delivery in Windhoek, Courier nationwide.</li>
-            <li>• Delivery: 1–4 working days.</li>
+            <li>• Delivery: 2–4 working days.</li>
             <li>• Quote on order -> invoice after payment and delivery as agreed with sales.</li>
           </ul>
         </section>

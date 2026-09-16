@@ -86,6 +86,39 @@ export function saleStageLabel(stage) {
   return map[String(stage || '').trim()] || 'No sale'
 }
 
+/** Human-readable deal badge from CRM client + linked docs. */
+export function clientDealLabel(client, summary) {
+  const s = summary || clientCrmSummary(client || {})
+  const openInvoices = (s.invoices || []).filter((inv) =>
+    ['draft', 'sent', 'partially_settled'].includes(inv.status)
+  )
+  const paidInvoices = (s.invoices || []).filter((inv) => inv.status === 'paid')
+  const openQuotes = (s.quotes || []).filter((q) =>
+    ['draft', 'sent', 'accepted'].includes(q.status)
+  )
+
+  if (client?.pipelineStatus === 'not_interested') return 'Not interested'
+  if (paidInvoices.length && openInvoices.length) {
+    return `Sold · ${openInvoices.length} invoice pending`
+  }
+  if (client?.pipelineStatus === 'closed_sold' || paidInvoices.length) return 'Sold'
+  if (openInvoices.length) {
+    const st = openInvoices[0].status
+    if (st === 'draft') return 'Invoice draft'
+    if (st === 'partially_settled') return 'Invoice partial'
+    return 'Invoice pending'
+  }
+  if (openQuotes.length) {
+    const st = openQuotes[0].status
+    if (st === 'draft') return 'Quote draft'
+    if (st === 'accepted') return 'Quote accepted'
+    return 'Quote sent'
+  }
+  if (client?.saleStage === 'quote') return 'Quote'
+  if (client?.saleStage === 'invoice') return 'Invoice'
+  return 'No sale'
+}
+
 export const COMPANY = {
   name: 'tap-na',
   legalName: 'Auckmund Investment CC',
@@ -2667,7 +2700,8 @@ export function clientCrmSummary(client) {
       : 'No meeting',
     meetingCount: meetings.length,
     saleStage,
-    saleStageLabel: saleStageLabel(saleStage)
+    saleStageLabel: saleStageLabel(saleStage),
+    dealLabel: clientDealLabel(client, { meetings, quotes, invoices, saleStage })
   }
 }
 
