@@ -26,7 +26,7 @@ import { preferredShareSlug, listCardsForAccount, cardImageSrc, kindLabel, perso
 import { trackVisit, trackShare, trackClick, LOCAL_ID } from '../lib/adminStore'
 import { apiLogCardEvent, apiPublicCatalog } from '../lib/api'
 import { personalPagePath } from '../lib/profilePaths'
-import { prepareProfileAppInstall, promptProfileAppInstall } from '../lib/profileAppInstall'
+import { prepareProfileAppInstall, promptProfileAppInstall, canInstallProfileApp, isAndroidDevice } from '../lib/profileAppInstall'
 import { CARD_ID_HINT_SHORT, CARD_ID_LABEL } from '../lib/cardLabels'
 
 const route = useRoute()
@@ -277,35 +277,35 @@ function openShare() {
 
 async function saveProfileApp() {
   // #region agent log
-  fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'C,D',location:'MyCardView.vue:saveProfileApp:click',message:'Save profile clicked',data:{actionsBlocked:actionsBlocked.value,shareSlug:String(shareSlug.value||''),isVisitor:isVisitor.value},timestamp:Date.now()})}).catch(()=>{});
+  fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'post-fix',hypothesisId:'C,D',location:'MyCardView.vue:saveProfileApp:click',message:'Save profile clicked',data:{actionsBlocked:actionsBlocked.value,shareSlug:String(shareSlug.value||''),isVisitor:isVisitor.value,canInstall:canInstallProfileApp(),android:isAndroidDevice()},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
   if (actionsBlocked.value || !shareSlug.value) return
   trackClick(LOCAL_ID, 'save_profile_app', 'Save profile')
   logRemote('click:save_profile_app')
-  // Ensure manifest + SW are registered before prompting (do not rely only on page-load prep).
-  await prepareProfileAppInstall({
-    slug: shareSlug.value,
-    avatar: avatar.value,
-    name: name.value,
-    company: profile.value.company || ''
-  }).catch(() => {})
-  const res = await promptProfileAppInstall()
+
+  // Prefer immediate native prompt when Chrome already offered install (keeps user gesture).
+  if (!canInstallProfileApp()) {
+    await prepareProfileAppInstall({
+      slug: shareSlug.value,
+      avatar: avatar.value,
+      name: name.value,
+      company: profile.value.company || ''
+    }).catch(() => {})
+  }
+
+  const res = await promptProfileAppInstall({
+    timeoutMs: isAndroidDevice() ? 4000 : 1500
+  })
   // #region agent log
-  fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'C',location:'MyCardView.vue:saveProfileApp:result',message:'Save profile result',data:{res},timestamp:Date.now()})}).catch(()=>{});
+  fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'post-fix',hypothesisId:'C',location:'MyCardView.vue:saveProfileApp:result',message:'Save profile result',data:{res},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
   if (!res.ok) {
     saveProfileHint.value = res.error || 'Could not prepare install.'
     saveProfileOpen.value = true
     return
   }
-  if (res.method === 'install') return
-  if (res.method === 'unavailable') {
-    saveProfileHint.value = res.isAndroid
-      ? 'Open this profile in Chrome, then use the browser menu → Install app / Add to Home screen.'
-      : 'Use your browser menu to Install app or Add to Home Screen. Chrome on Android shows Install when available.'
-    saveProfileOpen.value = true
-    return
-  }
+  // Native Android/Chrome Install dialog handled the action — no custom copy.
+  if (res.method === 'install' || res.method === 'unavailable') return
   if (res.isIos) {
     saveProfileHint.value =
       'Tap Share in Safari, then choose “Add to Home Screen”. This profile’s photo will be the app icon.'
@@ -501,14 +501,14 @@ watch(() => route.path, () => {
                 <button
                   v-if="isVisitor"
                   type="button"
-                  aria-label="Save profile"
+                  :aria-label="isAndroidDevice() ? 'Install' : 'Save profile'"
                   class="inline-flex items-center gap-1 h-9 px-3 rounded-full bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold border border-zinc-700 transition-colors"
                   :class="{ 'opacity-40 pointer-events-none': actionsBlocked }"
                   :disabled="actionsBlocked"
                   @click="saveProfileApp"
                 >
-                  <span class="material-symbols-outlined text-[16px]">download</span>
-                  Save profile
+                  <span class="material-symbols-outlined text-[16px]">{{ isAndroidDevice() ? 'install_mobile' : 'download' }}</span>
+                  {{ isAndroidDevice() ? 'Install' : 'Save profile' }}
                 </button>
                 <button
                   v-else
