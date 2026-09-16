@@ -19,6 +19,11 @@ import {
   validateTeamMix
 } from '../lib/shopCatalog'
 import { addToCart, removeFromCart, setTeamPackage } from '../lib/cartStore'
+import {
+  CONNECT_FEATURE_MATRIX,
+  featureMarkLabel,
+  teamsPackageMark
+} from '../lib/featureMatrix'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -32,6 +37,10 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'ordered', 'added-to-cart', 'switch-to-team'])
+
+const featureMatrix = CONNECT_FEATURE_MATRIX
+const markLabel = featureMarkLabel
+const teamsMark = teamsPackageMark
 
 const soloQty = ref(1)
 const businessQty = ref(2)
@@ -379,55 +388,26 @@ async function addPackageToCart() {
                 </tr>
               </thead>
               <tbody class="text-on-surface-variant">
-                <tr class="border-b border-border-subtle/60">
-                  <td class="py-2 pr-2 text-on-surface">NFC + QR → live digital profile</td>
-                  <td class="py-2 px-1 text-center text-primary">✓</td>
-                  <td class="py-2 pl-1 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/60">
-                  <td class="py-2 pr-2 text-on-surface">Once-off (no monthly fee)</td>
-                  <td class="py-2 px-1 text-center text-primary">✓</td>
-                  <td class="py-2 pl-1 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/60">
-                  <td class="py-2 pr-2 text-on-surface">Catalogue &amp; book meeting</td>
-                  <td class="py-2 px-1 text-center text-primary">✓</td>
-                  <td class="py-2 pl-1 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/60">
-                  <td class="py-2 pr-2 text-on-surface">Custom Logo(B&W)</td>
-                  <td class="py-2 px-1 text-center">—</td>
-                  <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/60">
-                  <td class="py-2 pr-2 text-on-surface">Team profiles </td>
-                  <td class="py-2 px-1 text-center">—</td>
-                  <td class="py-2 pl-1 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/60">
-                  <td class="py-2 pr-2 text-on-surface">CRM Integration</td>
-                  <td class="py-2 px-1 text-center">—</td>
-                  <td class="py-2 pl-1 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/60">
-                  <td class="py-2 pr-2 text-on-surface">Google &amp; Microsoft Meeting Calendar</td>
-                  <td class="py-2 px-1 text-center">—</td>
-                  <td class="py-2 pl-1 text-center text-primary">✓</td>
-                </tr>
-                <tr class="border-b border-border-subtle/60">
-                  <td class="py-2 pr-2 text-on-surface">Quantity</td>
-                  <td class="py-2 px-1 text-center text-primary text-[11px] leading-snug">Up to {{ SOLO_PACKAGE_MAX }}</td>
-                  <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">Min {{ TEAM_PACKAGE_MIN }}</td>
-                </tr>
-                <tr>
-                  <td class="py-2 pr-2 text-on-surface">Custom subdomain</td>
-                  <td class="py-2 px-1 text-center">—</td>
-                  <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">✓</td>
+                <tr
+                  v-for="(row, idx) in featureMatrix"
+                  :key="'solo-' + row.feature"
+                  :class="idx < featureMatrix.length - 1 ? 'border-b border-border-subtle/60' : ''"
+                >
+                  <td class="py-2 pr-2 text-on-surface">{{ row.feature }}</td>
+                  <td
+                    class="py-2 px-1 text-center"
+                    :class="row.solo === 'yes' ? 'text-primary' : ''"
+                  >{{ markLabel(row.solo) }}</td>
+                  <td
+                    class="py-2 pl-1 text-center text-[11px] leading-snug"
+                    :class="teamsMark(row) !== 'no' ? 'text-primary' : ''"
+                  >{{ markLabel(teamsMark(row)) }}</td>
                 </tr>
               </tbody>
             </table>
             <p class="text-[11px] text-on-surface-variant leading-snug">
               Need {{ TEAM_PACKAGE_MIN }}+ cards, choose Connect Teams (Business package).
+              <span class="block mt-1">Exec = Executive Exclusive only (team manager, assistant, stand-in).</span>
             </p>
             <button
               type="button"
@@ -453,50 +433,20 @@ async function addPackageToCart() {
                   </tr>
                 </thead>
                 <tbody class="text-on-surface-variant">
-                  <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">NFC + QR → live digital profile</td>
-                    <td class="py-2 px-1 text-center text-primary">✓</td>
-                    <td class="py-2 pl-1 text-center text-primary">✓</td>
-                  </tr>
-                  <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">Once-off</td>
-                    <td class="py-2 px-1 text-center text-primary">✓</td>
-                    <td class="py-2 pl-1 text-center text-primary">✓</td>
-                  </tr>
-                  <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">Product &amp; Service Catalogue</td>
-                    <td class="py-2 px-1 text-center text-primary">✓</td>
-                    <td class="py-2 pl-1 text-center text-primary">✓</td>
-                  </tr>
-                  <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">Meeting booking</td>
-                    <td class="py-2 px-1 text-center text-primary">✓</td>
-                    <td class="py-2 pl-1 text-center text-primary">✓</td>
-                  </tr>
-                  <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">Custom Logo(B&amp;W)</td>
-                    <td class="py-2 px-1 text-center text-primary">✓</td>
-                    <td class="py-2 pl-1 text-center text-primary">✓</td>
-                  </tr>
-                  <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">Team profiles</td>
-                    <td class="py-2 px-1 text-center text-primary">✓</td>
-                    <td class="py-2 pl-1 text-center text-primary">✓</td>
-                  </tr>
-                  <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">CRM Integration</td>
-                    <td class="py-2 px-1 text-center text-primary">✓</td>
-                    <td class="py-2 pl-1 text-center text-primary">✓</td>
-                  </tr>
-                  <tr class="border-b border-border-subtle/60">
-                    <td class="py-2 pr-2 text-on-surface">Google &amp; Microsoft Meeting Calendar</td>
-                    <td class="py-2 px-1 text-center text-primary">✓</td>
-                    <td class="py-2 pl-1 text-center text-primary">✓</td>
-                  </tr>
-                  <tr>
-                    <td class="py-2 pr-2 text-on-surface">Custom subdomain</td>
-                    <td class="py-2 px-1 text-center">—</td>
-                    <td class="py-2 pl-1 text-center text-primary text-[11px] leading-snug">✓</td>
+                  <tr
+                    v-for="(row, idx) in featureMatrix"
+                    :key="'team-' + row.feature"
+                    :class="idx < featureMatrix.length - 1 ? 'border-b border-border-subtle/60' : ''"
+                  >
+                    <td class="py-2 pr-2 text-on-surface">{{ row.feature }}</td>
+                    <td
+                      class="py-2 px-1 text-center"
+                      :class="row.business === 'yes' ? 'text-primary' : ''"
+                    >{{ markLabel(row.business) }}</td>
+                    <td
+                      class="py-2 pl-1 text-center"
+                      :class="row.executive === 'yes' ? 'text-primary' : ''"
+                    >{{ markLabel(row.executive) }}</td>
                   </tr>
                 </tbody>
               </table>

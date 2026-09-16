@@ -139,18 +139,40 @@ function parseCopy(desc) {
   return { about: about.trim(), features: bullets, footer: footer.trim() }
 }
 
-const TEAM_FEATURE_EXTRAS = ['CRM Integration', 'Google & Microsoft Meeting Calendar']
+const TEAM_FEATURE_EXTRAS = [
+  'CRM Integration',
+  'Google & Microsoft Meeting Calendar',
+  'Custom Logo (B&W)'
+]
 
-function withTeamFeatures(copy) {
-  const features = [...(copy.features || [])]
-  for (const extra of TEAM_FEATURE_EXTRAS) {
+const EXECUTIVE_FEATURE_EXTRAS = [
+  ...TEAM_FEATURE_EXTRAS,
+  'Team manager — deactivate profiles, manage team/company (1 lead)',
+  'Personal assistant capability',
+  'Stand-in personal capability'
+]
+
+const REMOVED_FEATURE_PATTERNS = [
+  /custom subdomain/i,
+  /contact details/i,
+  /profile sharing/i,
+  /^customization$/i,
+  /team profiles/i,
+  /^meeting booking$/i
+]
+
+function withTeamFeatures(copy, extras) {
+  const features = (copy.features || []).filter(
+    (f) => !REMOVED_FEATURE_PATTERNS.some((re) => re.test(String(f)))
+  )
+  for (const extra of extras) {
     if (!features.some((f) => String(f).toLowerCase() === extra.toLowerCase())) features.push(extra)
   }
   return { ...copy, features }
 }
 
-const businessCopy = computed(() => withTeamFeatures(parseCopy(businessProduct.value?.desc)))
-const executiveCopy = computed(() => withTeamFeatures(parseCopy(executiveProduct.value?.desc)))
+const businessCopy = computed(() => withTeamFeatures(parseCopy(businessProduct.value?.desc), TEAM_FEATURE_EXTRAS))
+const executiveCopy = computed(() => withTeamFeatures(parseCopy(executiveProduct.value?.desc), EXECUTIVE_FEATURE_EXTRAS))
 
 function applyFocus(focusId) {
   const mix = initialTeamMix(focusId)
