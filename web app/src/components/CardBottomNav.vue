@@ -5,10 +5,11 @@ import {
   isLoggedIn,
   isTableBusiness,
   loadProfile,
+  loadPublicProfile,
   loadViewedProfile,
   logout
 } from '../lib/profileStore'
-import { apiGetMyTeam, setApiToken } from '../lib/api'
+import { apiGetMyTeam, apiPublicCatalog, setApiToken } from '../lib/api'
 import { anyCatalogCartCount, catalogCartCount } from '../lib/profileCatalogCart'
 import { hideFloatingChrome } from '../lib/uiChrome'
 import { browsingPersonalSlug, personalPagePath } from '../lib/profilePaths'
@@ -20,6 +21,37 @@ const isTableOwner = ref(isTableBusiness(loadProfile()))
 const viewedIsTable = ref(isTableBusiness(loadViewedProfile()))
 const guestCartCount = ref(anyCatalogCartCount())
 const canUseTeam = ref(false)
+const hasCatalog = ref(false)
+let catalogCheckSeq = 0
+
+function activeCatalogItems(list) {
+  return (Array.isArray(list) ? list : []).filter(
+    (item) => item && item.active !== false && String(item.name || '').trim()
+  )
+}
+
+function profileIdForCatalog() {
+  const p = loadPublicProfile()
+  return String(p?.remoteProfileId || p?.id || '').trim()
+}
+
+async function refreshCatalogVisibility() {
+  const seq = ++catalogCheckSeq
+  const local = activeCatalogItems(loadPublicProfile()?.catalogItems)
+  hasCatalog.value = local.length > 0
+
+  const id = profileIdForCatalog()
+  if (!id) return
+  try {
+    const res = await apiPublicCatalog(id)
+    if (seq !== catalogCheckSeq) return
+    if (res.ok && Array.isArray(res.data?.catalogItems)) {
+      hasCatalog.value = activeCatalogItems(res.data.catalogItems).length > 0
+    }
+  } catch {
+    /* keep local hasCatalog */
+  }
+}
 
 async function refreshTeamAccess() {
   if (!isLoggedIn() || isTableBusiness(loadProfile())) {
@@ -39,6 +71,7 @@ function refreshAuth() {
   isTableOwner.value = isTableBusiness(loadProfile())
   viewedIsTable.value = isTableBusiness(loadViewedProfile())
   guestCartCount.value = anyCatalogCartCount()
+  refreshCatalogVisibility()
 }
 
 watch(
@@ -103,14 +136,17 @@ const navItems = computed(() => {
       label: 'Profile',
       icon: 'badge',
       match: (p) => p === '/me' || /^\/c\/[^/]+$/.test(p)
-    },
-    {
+    }
+  ]
+
+  if (hasCatalog.value) {
+    items.push({
       to: catalogTo,
       label: 'Catalog',
       icon: 'inventory_2',
       match: (p) => p === '/catalog' || /\/c\/[^/]+\/catalog$/.test(p)
-    }
-  ]
+    })
+  }
 
   if (loggedIn.value) {
     items.splice(1, 0, {
@@ -135,7 +171,8 @@ const navItems = computed(() => {
     })
   } else {
     if (showCartNav.value) {
-      items.splice(2, 0, {
+      const cartIndex = items.findIndex((i) => i.label === 'Catalog')
+      items.splice(cartIndex >= 0 ? cartIndex + 1 : items.length, 0, {
         to: cartTo,
         label: 'Cart',
         icon: 'shopping_cart',
