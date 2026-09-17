@@ -953,18 +953,40 @@ export async function refreshFinanceFromApi() {
       : prunedCash
 
     writeJson(AGENTS_KEY, mergedAgents)
-    writeJson(SALES_KEY, mergedOrders)
-    writeJson(QUOTES_KEY, mergedQuotes)
-    writeJson(INVOICES_KEY, mergedInvoices)
+    writeJson(SALES_KEY, salesAgentScoped
+      ? mergedOrders.filter((o) => o.agentId === scopedAgentId)
+      : mergedOrders)
+    writeJson(QUOTES_KEY, salesAgentScoped
+      ? mergedQuotes.filter((q) => q.agentId === scopedAgentId)
+      : mergedQuotes)
+    writeJson(INVOICES_KEY, salesAgentScoped
+      ? mergedInvoices.filter(
+          (inv) =>
+            inv.agentId === scopedAgentId ||
+            (inv.saleId && agentSaleIds.has(inv.saleId))
+        )
+      : mergedInvoices)
     writeJson(CASH_KEY, finalCash)
 
-    const mergedClients = mergeById(localBefore.clients, data.clients || [], normalizeClient)
-    const mergedMeetings = mergeById(
+    let mergedClients = mergeById(localBefore.clients, data.clients || [], normalizeClient)
+    if (salesAgentScoped) {
+      mergedClients = mergedClients.filter((c) => {
+        const owner = String(c.ownerAgentId || '').trim()
+        if (owner) return owner === scopedAgentId
+        return String(c.createdByAgentId || '').trim() === scopedAgentId
+      })
+    }
+    const allowedClientIds = new Set(mergedClients.map((c) => c.id))
+    let mergedMeetings = mergeById(
       localBefore.clientMeetings,
       data.clientMeetings || [],
       normalizeClientMeeting
     )
-    const mergedNotes = mergeById(localBefore.clientNotes, data.clientNotes || [], normalizeClientNote)
+    let mergedNotes = mergeById(localBefore.clientNotes, data.clientNotes || [], normalizeClientNote)
+    if (salesAgentScoped) {
+      mergedMeetings = mergedMeetings.filter((m) => allowedClientIds.has(m.clientId))
+      mergedNotes = mergedNotes.filter((n) => allowedClientIds.has(n.clientId))
+    }
     writeJson(CLIENTS_KEY, mergedClients)
     writeJson(CLIENT_MEETINGS_KEY, mergedMeetings)
     writeJson(CLIENT_NOTES_KEY, mergedNotes)
@@ -2672,19 +2694,26 @@ export function deleteClientNote(id) {
   })
 }
 
-/** Derive sale stage + meeting summary for a CRM client row. */
-export function clientCrmSummary(client) {
+/** Derive sale stage + meeting summary for a CRM client row.
+ * Optional agentId scopes quotes/invoices to that agent (sales privacy).
+ */
+export function clientCrmSummary(client, { agentId = '' } = {}) {
   const meetings = listClientMeetings({ clientId: client.id })
-  const quotes = listQuotes().filter(
+  const aid = String(agentId || '').trim()
+  let quotes = listQuotes().filter(
     (q) =>
       q.clientId === client.id ||
       (client.email && String(q.customerEmail || '').toLowerCase() === String(client.email).toLowerCase())
   )
-  const invoices = listInvoices().filter(
+  let invoices = listInvoices().filter(
     (inv) =>
       inv.clientId === client.id ||
       (client.email && String(inv.customerEmail || '').toLowerCase() === String(client.email).toLowerCase())
   )
+  if (aid) {
+    quotes = quotes.filter((q) => String(q.agentId || '') === aid)
+    invoices = invoices.filter((inv) => String(inv.agentId || '') === aid)
+  }
   let saleStage = client.saleStage || 'no_sale'
   if (invoices.length) saleStage = 'invoice'
   else if (quotes.length) saleStage = 'quote'
@@ -2706,7 +2735,7 @@ export function clientCrmSummary(client) {
 }
 
 /** Build a chronological activity timeline for a client. */
-export function clientActivityLog(clientId) {
+export function clientActivityLog(clientId, { agentId = '' } = {}) {
   const client = getClient(clientId)
   if (!client) return []
   const events = []
@@ -2732,7 +2761,7 @@ export function clientActivityLog(clientId) {
       raw: n
     })
   }
-  const summary = clientCrmSummary(client)
+  const summary = clientCrmSummary(client, { agentId })
   for (const q of summary.quotes) {
     events.push({
       id: 'quote:' + q.id,

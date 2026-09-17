@@ -221,6 +221,10 @@ const clientQuotes = ref([])
 const clientInvoices = ref([])
 const crmPipelineFilter = ref('all')
 const crmQuery = ref('')
+const crmSampleFilter = ref('all')
+const crmStageFilter = ref('all')
+const crmOwnerFilter = ref('all')
+const crmReferralFilter = ref('all')
 const clientForm = ref(emptyClient())
 const noteDraft = ref('')
 const meetingForm = ref({ meetingAt: '', title: '', summary: '' })
@@ -388,8 +392,11 @@ async function refresh() {
     sales.value = allSales.filter((s) => s.agentId === aid && !s.deleted)
     quotes.value = allQuotes.filter((q) => q.agentId === aid && !q.deleted)
     const saleIds = new Set(sales.value.map((s) => s.id))
+    // Agent financials: own agentId on the doc, or invoices tied to their sales
     invoices.value = allInvoices.filter(
-      (inv) => !inv.deleted && inv.saleId && saleIds.has(inv.saleId)
+      (inv) =>
+        !inv.deleted &&
+        (inv.agentId === aid || (inv.saleId && saleIds.has(inv.saleId)))
     )
     cash.value = listCashFlowForAgent(aid, { includeDeleted: false, saleIds })
     const scopedSaleIds = [...saleIds]
@@ -406,6 +413,12 @@ async function refresh() {
       agentsActive: agents.value.filter((a) => a.active).length,
       agentsTotal: agents.value.length
     }
+    // Agents only see their own CRM clients
+    clients.value = listClients({ includeDeleted: false }).filter((c) => {
+      const owner = String(c.ownerAgentId || '').trim()
+      if (owner) return owner === aid
+      return String(c.createdByAgentId || '').trim() === aid
+    })
   } else {
     const visible = (list) => (includeDeleted ? list : list.filter((x) => !x.deleted))
     agents.value = visible(allAgents)
@@ -420,10 +433,8 @@ async function refresh() {
     cash.value = visible(allCash)
     products.value = visible(products.value)
     stats.value = getSalesStats()
+    clients.value = listClients({ includeDeleted: false })
   }
-
-  // CRM is shared — all staff see all clients
-  clients.value = listClients({ includeDeleted: false })
 
   return { productsOk, financeOk }
 }
@@ -636,9 +647,15 @@ const cashByAgentRows = computed(() => {
 })
 
 const filteredInvoices = computed(() => {
+  let list = invoices.value
+  if (!isSalesScoped.value && agentFilter.value === '__none__') {
+    list = list.filter((inv) => !inv.agentId)
+  } else if (!isSalesScoped.value && agentFilter.value) {
+    list = list.filter((inv) => inv.agentId === agentFilter.value)
+  }
   const q = query.value.trim().toLowerCase()
-  if (!q) return invoices.value
-  return invoices.value.filter((inv) =>
+  if (!q) return list
+  return list.filter((inv) =>
     [
       inv.invoiceNumber,
       inv.customerName,
@@ -646,7 +663,8 @@ const filteredInvoices = computed(() => {
       inv.status,
       formatSalesStatus(inv.status),
       inv.customerEmail,
-      inv.emailStatus
+      inv.emailStatus,
+      agentName(inv.agentId)
     ]
       .join(' ')
       .toLowerCase()
@@ -1597,6 +1615,22 @@ const filteredClients = computed(() => {
   const q = crmQuery.value.trim().toLowerCase()
   return clients.value.filter((c) => {
     if (crmPipelineFilter.value !== 'all' && c.pipelineStatus !== crmPipelineFilter.value) return false
+    if (crmSampleFilter.value !== 'all' && c.sampleCardStatus !== crmSampleFilter.value) return false
+    if (crmStageFilter.value !== 'all') {
+      const stage = clientCrmSummary(c, {
+        agentId: isSalesScoped.value ? myAgentId.value : ''
+      }).saleStage
+      if (stage !== crmStageFilter.value) return false
+    }
+    if (crmReferralFilter.value === 'referral' && !c.isReferral) return false
+    if (crmReferralFilter.value === 'direct' && c.isReferral) return false
+    if (!isSalesScoped.value && crmOwnerFilter.value !== 'all') {
+      if (crmOwnerFilter.value === '__none__') {
+        if (c.ownerAgentId) return false
+      } else if (c.ownerAgentId !== crmOwnerFilter.value) {
+        return false
+      }
+    }
     if (!q) return true
     return (
       (c.name && c.name.toLowerCase().includes(q)) ||
@@ -1604,17 +1638,22 @@ const filteredClients = computed(() => {
       (c.email && c.email.toLowerCase().includes(q)) ||
       (c.phone && c.phone.toLowerCase().includes(q)) ||
       (c.location && c.location.toLowerCase().includes(q)) ||
-      (c.createdByName && c.createdByName.toLowerCase().includes(q))
+      (c.createdByName && c.createdByName.toLowerCase().includes(q)) ||
+      agentName(c.ownerAgentId).toLowerCase().includes(q)
     )
   })
 })
+
+function clientFinanceScope() {
+  return isSalesScoped.value ? myAgentId.value : ''
+}
 
 function clientAddedBy(c) {
   return c.createdByName || c.createdByEmail || agentName(c.createdByAgentId) || '—'
 }
 
 function clientRowSummary(c) {
-  return clientCrmSummary(c)
+  return clientCrmSummary(c, { agentId: clientFinanceScope() })
 }
 
 function openNewClient({ asReferral = false } = {}) {
@@ -1686,8 +1725,9 @@ async function openClientDetail(c) {
   activeClient.value = c
   showClientDetail.value = true
   clientDetailLoading.value = true
-  clientActivity.value = clientActivityLog(c.id)
-  const summary = clientCrmSummary(c)
+  const scope = { agentId: clientFinanceScope() }
+  clientActivity.value = clientActivityLog(c.id, scope)
+  const summary = clientCrmSummary(c, scope)
   clientQuotes.value = summary.quotes
   clientInvoices.value = summary.invoices
   try {
@@ -1697,7 +1737,7 @@ async function openClientDetail(c) {
       if (Array.isArray(res.data.quotes)) clientQuotes.value = res.data.quotes
       if (Array.isArray(res.data.invoices)) clientInvoices.value = res.data.invoices
       // Rebuild activity from freshest remote + local notes/meetings
-      clientActivity.value = clientActivityLog(c.id)
+      clientActivity.value = clientActivityLog(c.id, scope)
       // Merge remote quote/invoice events if local store missed them
       const remoteEvents = []
       for (const q of res.data.quotes || []) {
@@ -2303,7 +2343,12 @@ onMounted(async () => {
           <div>
             <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-400">CRM</h2>
             <p class="text-xs text-gray-500 mt-1">
-              Prospects and clients, meetings, notes, quotes, and invoices — shared with the whole sales team
+              <template v-if="isSalesScoped">
+                Your prospects and clients — quotes and invoice amounts stay private to you
+              </template>
+              <template v-else>
+                All prospects and clients across agents — full financial visibility for admins
+              </template>
             </p>
           </div>
           <div class="flex gap-2">
@@ -2324,17 +2369,45 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div class="flex flex-col sm:flex-row gap-3">
+        <div class="flex flex-col gap-3">
           <div class="field-shell flex-1 !rounded-2xl">
             <span class="material-symbols-outlined field-icon">search</span>
-            <input v-model="crmQuery" type="search" class="field-input" placeholder="Search name, company, email, cell…">
+            <input v-model="crmQuery" type="search" class="field-input" placeholder="Search name, company, email, cell, owner…">
           </div>
-          <select v-model="crmPipelineFilter" class="field-input sm:w-44 bg-zinc-900 text-xs rounded-2xl">
-            <option value="all">All statuses</option>
-            <option value="pending">Pending</option>
-            <option value="closed_sold">Closed (sold)</option>
-            <option value="not_interested">Not interested</option>
-          </select>
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+            <select v-model="crmPipelineFilter" class="field-input bg-zinc-900 text-xs rounded-2xl">
+              <option value="all">All pipeline</option>
+              <option value="pending">Pending</option>
+              <option value="closed_sold">Closed (sold)</option>
+              <option value="not_interested">Not interested</option>
+            </select>
+            <select v-model="crmStageFilter" class="field-input bg-zinc-900 text-xs rounded-2xl">
+              <option value="all">All stages</option>
+              <option value="no_sale">No sale</option>
+              <option value="quote">Quote</option>
+              <option value="invoice">Invoice</option>
+            </select>
+            <select v-model="crmSampleFilter" class="field-input bg-zinc-900 text-xs rounded-2xl">
+              <option value="all">All samples</option>
+              <option value="none">No sample</option>
+              <option value="accepted">Accepted</option>
+              <option value="printed">Printed</option>
+            </select>
+            <select v-model="crmReferralFilter" class="field-input bg-zinc-900 text-xs rounded-2xl">
+              <option value="all">All sources</option>
+              <option value="direct">Direct</option>
+              <option value="referral">Referrals</option>
+            </select>
+            <select
+              v-if="!isSalesScoped"
+              v-model="crmOwnerFilter"
+              class="field-input bg-zinc-900 text-xs rounded-2xl"
+            >
+              <option value="all">All owners</option>
+              <option value="__none__">Unassigned</option>
+              <option v-for="a in agents" :key="a.id" :value="a.id">{{ a.name }}</option>
+            </select>
+          </div>
         </div>
 
         <ul class="space-y-2">
@@ -3784,6 +3857,13 @@ onMounted(async () => {
             <option value="invoice">Invoice</option>
           </select>
         </div>
+        <div v-if="!isSalesScoped">
+          <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Owner agent</label>
+          <select v-model="clientForm.ownerAgentId" class="field-input w-full bg-zinc-950 text-sm">
+            <option value="">Unassigned</option>
+            <option v-for="a in agents" :key="a.id" :value="a.id">{{ a.name }}</option>
+          </select>
+        </div>
         <label class="flex items-center gap-2 text-sm">
           <input v-model="clientForm.isReferral" type="checkbox" class="rounded">
           This is a referral
@@ -3884,7 +3964,10 @@ onMounted(async () => {
             <div v-if="!clientQuotes.length" class="text-xs text-gray-500">No quotes</div>
             <div v-for="q in clientQuotes" :key="q.id" class="text-xs flex justify-between gap-2">
               <span class="truncate">{{ q.quoteNumber || q.id }}</span>
-              <span :class="statusClass(q.status)">{{ formatSalesStatus(q.status) }}</span>
+              <span class="shrink-0 text-right">
+                <span class="text-gray-300 tabular-nums">{{ formatMoney(q.amount) }}</span>
+                <span class="ml-2" :class="statusClass(q.status)">{{ formatSalesStatus(q.status) }}</span>
+              </span>
             </div>
           </div>
           <div class="rounded-2xl border border-zinc-800 p-3 space-y-2">
@@ -3892,7 +3975,10 @@ onMounted(async () => {
             <div v-if="!clientInvoices.length" class="text-xs text-gray-500">No invoices</div>
             <div v-for="inv in clientInvoices" :key="inv.id" class="text-xs flex justify-between gap-2">
               <span class="truncate">{{ inv.invoiceNumber || inv.id }}</span>
-              <span :class="statusClass(inv.status)">{{ formatSalesStatus(inv.status) }}</span>
+              <span class="shrink-0 text-right">
+                <span class="text-gray-300 tabular-nums">{{ formatMoney(inv.amount) }}</span>
+                <span class="ml-2" :class="statusClass(inv.status)">{{ formatSalesStatus(inv.status) }}</span>
+              </span>
             </div>
           </div>
         </div>
