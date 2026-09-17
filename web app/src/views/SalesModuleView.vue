@@ -66,6 +66,7 @@ import {
   listClients,
   saveClient,
   deleteClient,
+  canDeleteCrmClient,
   listClientMeetings,
   saveClientMeeting,
   deleteClientMeeting,
@@ -1711,8 +1712,16 @@ async function submitClientForm() {
 }
 
 async function removeClient(c) {
+  if (!canDeleteCrmClient(c)) {
+    flash('You can only remove your own contacts')
+    return
+  }
   if (!confirm(`Remove ${c.name || 'this client'} from CRM?`)) return
-  deleteClient(c.id)
+  const result = deleteClient(c.id)
+  if (result && result.ok === false) {
+    flash(result.error || 'Could not remove client')
+    return
+  }
   if (activeClient.value?.id === c.id) {
     showClientDetail.value = false
     activeClient.value = null
@@ -3952,7 +3961,12 @@ onMounted(async () => {
           <button type="button" class="px-3 py-2 rounded-xl text-xs font-semibold border border-zinc-700 text-emerald-300" @click="openAddMeeting">
             Log meeting
           </button>
-          <button type="button" class="px-3 py-2 rounded-xl text-xs font-semibold border border-zinc-700 text-red-400 ml-auto" @click="removeClient(activeClient)">
+          <button
+            v-if="canDeleteCrmClient(activeClient)"
+            type="button"
+            class="px-3 py-2 rounded-xl text-xs font-semibold border border-zinc-700 text-red-400 ml-auto"
+            @click="removeClient(activeClient)"
+          >
             Remove
           </button>
         </div>

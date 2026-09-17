@@ -4,6 +4,7 @@
 
 import { PERSONAL_CARD_IMAGES } from './teamRoles'
 import { buddyPaymentUrl } from './buddyPayment'
+import { canManageSalesOrg, isStaffSales, staffAgentId } from './staffAuth'
 
 const AGENTS_KEY = 'tapna_sales_agents'
 const SALES_KEY = 'tapna_sales_orders'
@@ -1002,10 +1003,77 @@ export async function refreshFinanceFromApi() {
 
     await reconcileFinanceFromCash({ sync: true })
 
+    // Link legacy quotes/sales (missing clientId) into CRM for this device's visible docs
+    await backfillDocumentClientIds(salesAgentScoped ? scopedAgentId : '')
+
     return true
   } catch {
     return false
   }
+}
+
+/** Patch quotes/sales that have customer details but no clientId. */
+async function backfillDocumentClientIds(agentId = '') {
+  const aid = String(agentId || '').trim()
+  let quoteList = listQuotes({ includeDeleted: true })
+  let saleList = listSales({ includeDeleted: true })
+  let quoteChanged = false
+  let saleChanged = false
+  const patchedQuotes = []
+  const patchedSales = []
+
+  for (let i = 0; i < quoteList.length; i++) {
+    const q = quoteList[i]
+    if (q.deleted || q.clientId) continue
+    if (!q.customerName && !q.customerEmail && !q.customerPhone) continue
+    const docAgent = String(q.agentId || '').trim()
+    if (!docAgent) continue
+    if (aid && docAgent !== aid) continue
+    const client = ensureCrmClientFromCustomer({
+      name: q.customerName,
+      email: q.customerEmail,
+      phone: q.customerPhone,
+      location: q.customerAddress,
+      agentId: docAgent,
+      clientId: ''
+    })
+    if (!client?.id) continue
+    quoteList[i] = { ...q, clientId: client.id }
+    quoteChanged = true
+    patchedQuotes.push(quoteList[i])
+  }
+
+  for (let i = 0; i < saleList.length; i++) {
+    const s = saleList[i]
+    if (s.deleted || s.clientId) continue
+    if (!s.customerName && !s.customerEmail && !s.customerPhone) continue
+    const docAgent = String(s.agentId || '').trim()
+    if (!docAgent) continue
+    if (aid && docAgent !== aid) continue
+    const client = ensureCrmClientFromCustomer({
+      name: s.customerName,
+      email: s.customerEmail,
+      phone: s.customerPhone,
+      location: s.customerAddress,
+      agentId: docAgent,
+      clientId: ''
+    })
+    if (!client?.id) continue
+    saleList[i] = { ...s, clientId: client.id }
+    saleChanged = true
+    patchedSales.push(saleList[i])
+  }
+
+  if (quoteChanged) writeJson(QUOTES_KEY, quoteList)
+  if (saleChanged) writeJson(SALES_KEY, saleList)
+
+  if (!patchedQuotes.length && !patchedSales.length) return
+
+  syncFinanceQuiet(async () => {
+    const { apiUpsertSalesQuote, apiUpsertSalesOrder } = await import('./api.js')
+    for (const q of patchedQuotes) await apiUpsertSalesQuote(q)
+    for (const s of patchedSales) await apiUpsertSalesOrder(s)
+  })
 }
 
 /* ——— Sales ——— */
@@ -1031,8 +1099,26 @@ export function saveSale(payload, { recordCash = true, createInvoice = true } = 
     ? Math.round(summary.amount * (rate / 100) * 100) / 100
     : 0
 
+  let clientId = String(payload.clientId || '').trim()
+  const customerName = String(payload.customerName || '').trim()
+  if (
+    String(payload.agentId || '').trim() &&
+    (customerName || payload.customerEmail || payload.customerPhone)
+  ) {
+    const client = ensureCrmClientFromCustomer({
+      name: customerName,
+      email: payload.customerEmail,
+      phone: payload.customerPhone,
+      location: payload.customerAddress,
+      agentId: payload.agentId,
+      clientId
+    })
+    if (client?.id) clientId = client.id
+  }
+
   const next = normalizeSale({
     ...payload,
+    clientId,
     lines: summary.lines,
     productId: summary.productId,
     productName: summary.productName,
@@ -1135,6 +1221,7 @@ export function saveSale(payload, { recordCash = true, createInvoice = true } = 
         customerEmail: next.customerEmail,
         customerAddress: next.customerAddress,
         agentId: next.agentId,
+        clientId: next.clientId || invoice.clientId || '',
         notes: next.notes,
         status: paidNow ? 'paid' : invoice.status
       })
@@ -1217,8 +1304,25 @@ export function getQuote(id) {
 export function saveQuote(payload) {
   const list = listQuotes()
   const summary = summarizeLines(payload.lines, payload)
+  let clientId = String(payload.clientId || '').trim()
+  const customerName = String(payload.customerName || '').trim()
+  if (
+    String(payload.agentId || '').trim() &&
+    (customerName || payload.customerEmail || payload.customerPhone)
+  ) {
+    const client = ensureCrmClientFromCustomer({
+      name: customerName,
+      email: payload.customerEmail,
+      phone: payload.customerPhone,
+      location: payload.customerAddress,
+      agentId: payload.agentId,
+      clientId
+    })
+    if (client?.id) clientId = client.id
+  }
   const next = normalizeQuote({
     ...payload,
+    clientId,
     lines: summary.lines,
     productId: summary.productId,
     productName: summary.productName,
@@ -1263,6 +1367,7 @@ export function convertQuoteToSale(quoteId, overrides = {}) {
 
   const result = saveSale({
     agentId: overrides.agentId || quote.agentId,
+    clientId: quote.clientId || '',
     customerName: quote.customerName,
     customerPhone: quote.customerPhone,
     customerEmail: quote.customerEmail,
@@ -1281,6 +1386,7 @@ export function convertQuoteToSale(quoteId, overrides = {}) {
 
   const converted = normalizeQuote({
     ...quote,
+    clientId: result.sale?.clientId || quote.clientId || '',
     status: 'converted',
     saleId: result.sale.id
   })
@@ -1340,6 +1446,7 @@ export function createInvoiceFromSale(sale) {
     saleId: sale.id,
     quoteId: sale.quoteId || '',
     agentId: sale.agentId,
+    clientId: sale.clientId || '',
     customerName: sale.customerName,
     customerPhone: sale.customerPhone,
     customerEmail: sale.customerEmail,
@@ -2590,6 +2697,100 @@ export function getClient(id) {
   return listClients({ includeDeleted: true }).find((c) => c.id === id) || null
 }
 
+function phoneDigits(value) {
+  return String(value || '').replace(/\D/g, '')
+}
+
+/** Whether a CRM client belongs to this sales agent (owner, or creator if unassigned). */
+export function clientBelongsToAgent(client, agentId) {
+  const aid = String(agentId || '').trim()
+  if (!aid || !client) return false
+  const owner = String(client.ownerAgentId || '').trim()
+  if (owner) return owner === aid
+  return String(client.createdByAgentId || '').trim() === aid
+}
+
+/**
+ * Find or create a CRM client for quote/sale customer details (scoped to agent).
+ * Match: owner+email → owner+phone → owner+name (only when no email/phone).
+ */
+export function ensureCrmClientFromCustomer({
+  name = '',
+  email = '',
+  phone = '',
+  location = '',
+  agentId = '',
+  clientId = '',
+  createdByName = '',
+  createdByEmail = '',
+  createdByUserId = ''
+} = {}) {
+  const aid = String(agentId || '').trim()
+  const existingId = String(clientId || '').trim()
+  if (existingId) {
+    const existing = getClient(existingId)
+    if (existing && !existing.deleted) {
+      // Refresh contact fields lightly when we have newer info
+      const patch = {}
+      const n = String(name || '').trim()
+      const e = String(email || '').trim()
+      const p = String(phone || '').trim()
+      const loc = String(location || '').trim()
+      if (n && n !== existing.name) patch.name = n
+      if (e && e !== existing.email) patch.email = e
+      if (p && p !== existing.phone) patch.phone = p
+      if (loc && !existing.location) patch.location = loc
+      if (Object.keys(patch).length) {
+        return saveClient({ ...existing, ...patch })
+      }
+      return existing
+    }
+  }
+
+  const nm = String(name || '').trim()
+  if (!nm && !String(email || '').trim() && !String(phone || '').trim()) return null
+
+  const emailNorm = String(email || '').trim().toLowerCase()
+  const phoneNorm = phoneDigits(phone)
+  const mine = listClients({ includeDeleted: false }).filter((c) => clientBelongsToAgent(c, aid))
+
+  let hit = null
+  if (emailNorm) {
+    hit = mine.find((c) => String(c.email || '').trim().toLowerCase() === emailNorm) || null
+  }
+  if (!hit && phoneNorm) {
+    hit = mine.find((c) => phoneDigits(c.phone) === phoneNorm) || null
+  }
+  if (!hit && nm && !emailNorm && !phoneNorm) {
+    hit = mine.find((c) => String(c.name || '').trim().toLowerCase() === nm.toLowerCase()) || null
+  }
+
+  if (hit) {
+    const patch = {}
+    if (nm && nm !== hit.name) patch.name = nm
+    if (emailNorm && emailNorm !== String(hit.email || '').toLowerCase()) patch.email = String(email || '').trim()
+    if (phoneNorm && phoneDigits(hit.phone) !== phoneNorm) patch.phone = String(phone || '').trim()
+    if (location && !hit.location) patch.location = String(location || '').trim()
+    if (Object.keys(patch).length) return saveClient({ ...hit, ...patch })
+    return hit
+  }
+
+  return saveClient({
+    name: nm || emailNorm || phoneNorm || 'Contact',
+    email: String(email || '').trim(),
+    phone: String(phone || '').trim(),
+    location: String(location || '').trim(),
+    ownerAgentId: aid,
+    createdByAgentId: aid,
+    createdByName: createdByName || '',
+    createdByEmail: createdByEmail || '',
+    createdByUserId: createdByUserId || '',
+    pipelineStatus: 'pending',
+    saleStage: 'no_sale',
+    sampleCardStatus: 'none'
+  })
+}
+
 export function saveClient(payload) {
   const list = listClients({ includeDeleted: true })
   const next = normalizeClient({
@@ -2620,12 +2821,24 @@ export function saveClient(payload) {
   return idx >= 0 ? list[idx] : next
 }
 
+export function canDeleteCrmClient(client) {
+  if (!client) return false
+  if (!isStaffSales() || canManageSalesOrg()) return true
+  return clientBelongsToAgent(client, staffAgentId())
+}
+
+/** Soft-delete a CRM client. Sales agents may only delete their own contacts. */
 export function deleteClient(id) {
+  const client = getClient(id)
+  if (client && !canDeleteCrmClient(client)) {
+    return { ok: false, error: 'You can only remove your own contacts' }
+  }
   markLocalDeleted(CLIENTS_KEY, id, normalizeClient)
   syncFinanceQuiet(async () => {
     const { apiDeleteSalesClient } = await import('./api.js')
     await apiDeleteSalesClient(id)
   })
+  return { ok: true }
 }
 
 export function listClientMeetings({ clientId = '', includeDeleted = false } = {}) {
