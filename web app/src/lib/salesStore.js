@@ -931,43 +931,29 @@ export async function refreshFinanceFromApi() {
 
     const salesAgentScoped = isStaffSales() && !canManageSalesOrg()
     const scopedAgentId = salesAgentScoped ? staffAgentId() : ''
-    const localCashForMerge = salesAgentScoped
-      ? localBefore.cashflow.filter((c) => c.agentId === scopedAgentId)
-      : localBefore.cashflow
-    const mergedCash = mergeById(localCashForMerge, data.cashflow || [], normalizeCash)
+    // Always merge full local cash — agent-scoped API only returns this agent's rows;
+    // do not drop other agents' local cash (shared device / admin later).
+    const mergedCash = mergeById(localBefore.cashflow, data.cashflow || [], normalizeCash)
     const remoteOrderIds = new Set((data.orders || []).map((o) => o.id).filter(Boolean))
     const remoteCashIds = new Set((data.cashflow || []).map((c) => c.id).filter(Boolean))
-    // Drop stale local sale-cash clones. Cloud is source of truth once the sale exists remotely
-    // (server soft-deletes / replacements won't reappear via merge alone).
+    // Drop stale local sale-cash clones for sales we know about from this response.
+    // Keep other agents' cash when this session only fetched one agent's finance.
     const prunedCash = mergedCash.filter((c) => {
       const saleId = String(c.saleId || '').trim()
       if (!saleId) return true
       if (remoteCashIds.has(c.id)) return true
+      if (salesAgentScoped && c.agentId && c.agentId !== scopedAgentId) return true
       if (remoteOrderIds.has(saleId)) return false
       return true
     })
-    const agentSaleIds = new Set(
-      mergedOrders.filter((o) => o.agentId === scopedAgentId).map((o) => o.id)
-    )
-    const finalCash = salesAgentScoped
-      ? filterCashForSalesAgent(prunedCash, scopedAgentId, agentSaleIds)
-      : prunedCash
 
+    // Persist full merge. UI (SalesModuleView.refresh) scopes what sales agents see;
+    // never rewrite localStorage down to one agent (wipes shared-browser admin data).
     writeJson(AGENTS_KEY, mergedAgents)
-    writeJson(SALES_KEY, salesAgentScoped
-      ? mergedOrders.filter((o) => o.agentId === scopedAgentId)
-      : mergedOrders)
-    writeJson(QUOTES_KEY, salesAgentScoped
-      ? mergedQuotes.filter((q) => q.agentId === scopedAgentId)
-      : mergedQuotes)
-    writeJson(INVOICES_KEY, salesAgentScoped
-      ? mergedInvoices.filter(
-          (inv) =>
-            inv.agentId === scopedAgentId ||
-            (inv.saleId && agentSaleIds.has(inv.saleId))
-        )
-      : mergedInvoices)
-    writeJson(CASH_KEY, finalCash)
+    writeJson(SALES_KEY, mergedOrders)
+    writeJson(QUOTES_KEY, mergedQuotes)
+    writeJson(INVOICES_KEY, mergedInvoices)
+    writeJson(CASH_KEY, prunedCash)
 
     let mergedClients = mergeById(localBefore.clients, data.clients || [], normalizeClient)
     // CRM contacts are shared — do not prune other agents' clients for sales-scoped sessions

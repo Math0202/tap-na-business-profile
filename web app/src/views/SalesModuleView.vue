@@ -512,6 +512,14 @@ const filteredSales = computed(() => {
   )
 })
 
+const salesHiddenByAgentFilter = computed(
+  () =>
+    !isSalesScoped.value &&
+    !!agentFilter.value &&
+    !filteredSales.value.length &&
+    sales.value.length > 0
+)
+
 /** Dashboard preview: admin sees every agent’s sales; sales sees own only (already scoped in refresh). */
 const overviewSales = computed(() => sales.value.slice(0, 12))
 
@@ -536,6 +544,24 @@ const filteredQuotes = computed(() => {
       .join(' ')
       .toLowerCase()
       .includes(q)
+  )
+})
+
+const quotesHiddenByAgentFilter = computed(
+  () =>
+    !isSalesScoped.value &&
+    !!agentFilter.value &&
+    !filteredQuotes.value.length &&
+    quotes.value.length > 0
+)
+
+/** Pending sales that have not created a cash-in row yet (Cash tab note). */
+const pendingSalesWithoutCash = computed(() => {
+  const cashSaleIds = new Set(
+    cash.value.filter((c) => c.saleId && !c.deleted).map((c) => c.saleId)
+  )
+  return sales.value.filter(
+    (s) => !s.deleted && s.status === 'pending' && !cashSaleIds.has(s.id)
   )
 })
 
@@ -2318,7 +2344,13 @@ onMounted(async () => {
             </div>
           </li>
         </ul>
-        <p v-if="salesListMode === 'orders' && !filteredSales.length" class="text-sm text-gray-500">No sales found.</p>
+        <p v-if="salesListMode === 'orders' && !filteredSales.length" class="text-sm text-gray-500">
+          <template v-if="salesHiddenByAgentFilter">
+            No sales for this agent filter — switch to
+            <button type="button" class="underline font-semibold text-sky-300" @click="agentFilter = ''">All agents</button>.
+          </template>
+          <template v-else>No sales found.</template>
+        </p>
 
         <ul v-if="salesListMode === 'quotes'" class="space-y-2">
           <li v-for="q in filteredQuotes" :key="q.id" class="card-item-bg rounded-2xl p-4">
@@ -2383,7 +2415,13 @@ onMounted(async () => {
             </div>
           </li>
         </ul>
-        <p v-if="salesListMode === 'quotes' && !filteredQuotes.length" class="text-sm text-gray-500">No quotes found.</p>
+        <p v-if="salesListMode === 'quotes' && !filteredQuotes.length" class="text-sm text-gray-500">
+          <template v-if="quotesHiddenByAgentFilter">
+            No quotes for this agent filter — switch to
+            <button type="button" class="underline font-semibold text-sky-300" @click="agentFilter = ''">All agents</button>.
+          </template>
+          <template v-else>No quotes found.</template>
+        </p>
       </section>
 
       <!-- Invoices -->
@@ -2614,6 +2652,21 @@ onMounted(async () => {
 
       <!-- Cash flow -->
       <section v-if="tab === 'cash'" class="mb-8 space-y-4">
+        <p
+          v-if="!isSalesScoped && pendingSalesWithoutCash.length"
+          class="text-xs text-amber-300/90 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-3 py-2"
+        >
+          {{ pendingSalesWithoutCash.length }} pending sale{{ pendingSalesWithoutCash.length === 1 ? '' : 's' }}
+          ({{ formatMoney(pendingSalesWithoutCash.reduce((sum, s) => sum + (Number(s.amount) || 0), 0)) }})
+          not in cash yet — cash-in appears when a sale is marked paid.
+          <button
+            type="button"
+            class="underline font-semibold ml-1"
+            @click="tab = 'sales'; salesListMode = 'orders'; agentFilter = ''; query = ''"
+          >
+            View sales
+          </button>
+        </p>
         <div v-if="!isSalesScoped" class="grid gap-3 grid-cols-3">
           <div class="card-item-bg rounded-2xl p-3">
             <p class="text-[10px] uppercase tracking-wide text-gray-500">In</p>
