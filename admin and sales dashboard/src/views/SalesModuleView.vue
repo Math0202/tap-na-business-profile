@@ -1800,7 +1800,7 @@ async function submitClientForm() {
   clientSaving.value = true
   try {
     const staff = getStaffUser()
-    saveClient({
+    const res = await saveClient({
       ...clientForm.value,
       name,
       ownerAgentId: clientForm.value.ownerAgentId || myAgentId.value || '',
@@ -1808,6 +1808,10 @@ async function submitClientForm() {
       createdByName: editingClientId.value ? undefined : staff?.name || staff?.email || '',
       createdByEmail: editingClientId.value ? undefined : staff?.email || ''
     })
+    if (res && res.ok === false) {
+      flash(res.error || 'Saved locally — could not sync online')
+      return
+    }
     showClientForm.value = false
     await refresh()
     flash(editingClientId.value ? 'Client updated' : 'Client added')
@@ -1822,7 +1826,7 @@ async function removeClient(c) {
     return
   }
   if (!confirm(`Remove ${c.name || 'this client'} from CRM?`)) return
-  const result = deleteClient(c.id)
+  const result = await deleteClient(c.id)
   if (result && result.ok === false) {
     flash(result.error || 'Could not remove client')
     return
@@ -1915,13 +1919,17 @@ async function addClientNote() {
   const body = noteDraft.value.trim()
   if (!body || !activeClient.value) return
   const staff = getStaffUser()
-  saveClientNote({
+  const res = await saveClientNote({
     clientId: activeClient.value.id,
     body,
     createdByAgentId: myAgentId.value || '',
     createdByName: staff?.name || staff?.email || '',
     createdByEmail: staff?.email || ''
   })
+  if (res && res.ok === false) {
+    flash(res.error || 'Saved locally — could not sync online')
+    return
+  }
   noteDraft.value = ''
   await refresh()
   await openClientDetail(activeClient.value)
@@ -1930,7 +1938,11 @@ async function addClientNote() {
 
 async function removeClientNote(noteId) {
   if (!confirm('Delete this note?')) return
-  deleteClientNote(noteId)
+  const res = await deleteClientNote(noteId)
+  if (res && res.ok === false) {
+    flash(res.error || 'Could not delete note online')
+    return
+  }
   await refresh()
   if (activeClient.value) await openClientDetail(activeClient.value)
   flash('Note deleted')
@@ -1951,7 +1963,7 @@ async function submitMeeting() {
   const at = meetingForm.value.meetingAt
     ? new Date(meetingForm.value.meetingAt).toISOString()
     : new Date().toISOString()
-  saveClientMeeting({
+  const res = await saveClientMeeting({
     clientId: activeClient.value.id,
     meetingAt: at,
     title: meetingForm.value.title || 'Meeting',
@@ -1960,6 +1972,10 @@ async function submitMeeting() {
     createdByName: staff?.name || staff?.email || '',
     createdByEmail: staff?.email || ''
   })
+  if (res && res.ok === false) {
+    flash(res.error || 'Saved locally — could not sync online')
+    return
+  }
   showMeetingForm.value = false
   await refresh()
   await openClientDetail(activeClient.value)
@@ -1968,7 +1984,11 @@ async function submitMeeting() {
 
 async function removeClientMeeting(meetingId) {
   if (!confirm('Delete this meeting?')) return
-  deleteClientMeeting(meetingId)
+  const res = await deleteClientMeeting(meetingId)
+  if (res && res.ok === false) {
+    flash(res.error || 'Could not delete meeting online')
+    return
+  }
   await refresh()
   if (activeClient.value) await openClientDetail(activeClient.value)
   flash('Meeting deleted')
@@ -1980,7 +2000,11 @@ async function quickUpdateClientField(field, value) {
     flash('You can only edit your own contacts')
     return
   }
-  saveClient({ ...activeClient.value, [field]: value })
+  const res = await saveClient({ ...activeClient.value, [field]: value })
+  if (res && res.ok === false) {
+    flash(res.error || 'Saved locally — could not sync online')
+    return
+  }
   await refresh()
   const updated = clients.value.find((c) => c.id === activeClient.value.id)
   if (updated) {
@@ -2576,6 +2600,13 @@ onMounted(async () => {
                   </span>
                   <span class="text-[10px] px-2 py-0.5 rounded-md border border-zinc-700 text-gray-300">
                     {{ clientRowSummary(c).saleStageLabel }}
+                  </span>
+                  <span
+                    v-if="clientRowSummary(c).docsMissing"
+                    class="text-[10px] px-2 py-0.5 rounded-md border border-amber-700/60 text-amber-300"
+                    title="CRM stage has no matching quote or invoice in finance"
+                  >
+                    No documents
                   </span>
                 </div>
                 <p class="text-[10px] text-gray-500 pt-0.5">

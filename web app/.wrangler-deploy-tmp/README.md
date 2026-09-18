@@ -1,1 +1,0 @@
-This folder contains the built output assets for the worker "tap-na" generated at 2026-08-02T07:18:27.970Z.

@@ -843,13 +843,19 @@ async function pushMissingFinance(remote) {
     apiUpsertSalesOrder,
     apiUpsertSalesQuote,
     apiUpsertSalesInvoice,
-    apiUpsertSalesCash
+    apiUpsertSalesCash,
+    apiUpsertSalesClient,
+    apiUpsertSalesClientMeeting,
+    apiUpsertSalesClientNote
   } = await import('./api.js')
   const remoteAgentIds = new Set((remote.agents || []).map((a) => a.id))
   const remoteOrderIds = new Set((remote.orders || []).map((o) => o.id))
   const remoteQuoteIds = new Set((remote.quotes || []).map((q) => q.id))
   const remoteInvoiceIds = new Set((remote.invoices || []).map((i) => i.id))
   const remoteCashIds = new Set((remote.cashflow || []).map((c) => c.id))
+  const remoteClientIds = new Set((remote.clients || []).map((c) => c.id))
+  const remoteMeetingIds = new Set((remote.clientMeetings || []).map((m) => m.id))
+  const remoteNoteIds = new Set((remote.clientNotes || []).map((n) => n.id))
 
   for (const a of listAgents()) {
     if (!remoteAgentIds.has(a.id)) await apiUpsertSalesAgent(a)
@@ -869,6 +875,16 @@ async function pushMissingFinance(remote) {
     const saleId = String(c.saleId || '').trim()
     if (saleId && remoteOrderIds.has(saleId)) continue
     await apiUpsertSalesCash(c)
+  }
+  // CRM: push anything that only exists on this device
+  for (const c of listClients({ includeDeleted: false })) {
+    if (!remoteClientIds.has(c.id)) await apiUpsertSalesClient(c)
+  }
+  for (const m of listClientMeetings({ includeDeleted: false })) {
+    if (!remoteMeetingIds.has(m.id)) await apiUpsertSalesClientMeeting(m)
+  }
+  for (const n of listClientNotes({ includeDeleted: false })) {
+    if (!remoteNoteIds.has(n.id)) await apiUpsertSalesClientNote(n)
   }
 }
 
@@ -973,13 +989,16 @@ export async function refreshFinanceFromApi() {
     writeJson(CLIENT_MEETINGS_KEY, mergedMeetings)
     writeJson(CLIENT_NOTES_KEY, mergedNotes)
 
-    // Upload anything that still only exists on this device
+    // Upload anything that still only exists on this device (finance + CRM)
     await pushMissingFinance({
       agents: data.agents || [],
       orders: data.orders || [],
       quotes: data.quotes || [],
       invoices: data.invoices || [],
-      cashflow: data.cashflow || []
+      cashflow: data.cashflow || [],
+      clients: data.clients || [],
+      clientMeetings: data.clientMeetings || [],
+      clientNotes: data.clientNotes || []
     })
 
     await reconcileFinanceFromCash({ sync: true })
@@ -2691,9 +2710,36 @@ export function clientBelongsToAgent(client, agentId) {
   return String(client.createdByAgentId || '').trim() === aid
 }
 
+function upsertClientLocal(payload) {
+  const list = listClients({ includeDeleted: true })
+  const next = normalizeClient({
+    ...payload,
+    id: payload.id || uid('scli'),
+    updatedAt: new Date().toISOString()
+  })
+  const idx = list.findIndex((c) => c.id === next.id)
+  if (idx >= 0) {
+    list[idx] = {
+      ...list[idx],
+      ...next,
+      id: list[idx].id,
+      createdAt: list[idx].createdAt,
+      createdByAgentId: list[idx].createdByAgentId || next.createdByAgentId,
+      createdByUserId: list[idx].createdByUserId || next.createdByUserId,
+      createdByName: list[idx].createdByName || next.createdByName,
+      createdByEmail: list[idx].createdByEmail || next.createdByEmail
+    }
+  } else {
+    list.unshift(next)
+  }
+  writeJson(CLIENTS_KEY, list)
+  return idx >= 0 ? list[idx] : next
+}
+
 /**
  * Find or create a CRM client for quote/sale customer details (scoped to agent).
  * Match: owner+email → owner+phone → owner+name (only when no email/phone).
+ * Writes local immediately and pushes online in the background.
  */
 export function ensureCrmClientFromCustomer({
   name = '',
@@ -2711,7 +2757,6 @@ export function ensureCrmClientFromCustomer({
   if (existingId) {
     const existing = getClient(existingId)
     if (existing && !existing.deleted) {
-      // Refresh contact fields lightly when we have newer info
       const patch = {}
       const n = String(name || '').trim()
       const e = String(email || '').trim()
@@ -2722,7 +2767,12 @@ export function ensureCrmClientFromCustomer({
       if (p && p !== existing.phone) patch.phone = p
       if (loc && !existing.location) patch.location = loc
       if (Object.keys(patch).length) {
-        return saveClient({ ...existing, ...patch })
+        const saved = upsertClientLocal({ ...existing, ...patch })
+        syncFinanceQuiet(async () => {
+          const { apiUpsertSalesClient } = await import('./api.js')
+          await apiUpsertSalesClient(saved)
+        })
+        return saved
       }
       return existing
     }
@@ -2752,11 +2802,18 @@ export function ensureCrmClientFromCustomer({
     if (emailNorm && emailNorm !== String(hit.email || '').toLowerCase()) patch.email = String(email || '').trim()
     if (phoneNorm && phoneDigits(hit.phone) !== phoneNorm) patch.phone = String(phone || '').trim()
     if (location && !hit.location) patch.location = String(location || '').trim()
-    if (Object.keys(patch).length) return saveClient({ ...hit, ...patch })
+    if (Object.keys(patch).length) {
+      const saved = upsertClientLocal({ ...hit, ...patch })
+      syncFinanceQuiet(async () => {
+        const { apiUpsertSalesClient } = await import('./api.js')
+        await apiUpsertSalesClient(saved)
+      })
+      return saved
+    }
     return hit
   }
 
-  return saveClient({
+  const saved = upsertClientLocal({
     name: nm || emailNorm || phoneNorm || 'Contact',
     email: String(email || '').trim(),
     phone: String(phone || '').trim(),
@@ -2770,36 +2827,28 @@ export function ensureCrmClientFromCustomer({
     saleStage: 'no_sale',
     sampleCardStatus: 'none'
   })
-}
-
-export function saveClient(payload) {
-  const list = listClients({ includeDeleted: true })
-  const next = normalizeClient({
-    ...payload,
-    id: payload.id || uid('scli'),
-    updatedAt: new Date().toISOString()
-  })
-  const idx = list.findIndex((c) => c.id === next.id)
-  if (idx >= 0) {
-    list[idx] = {
-      ...list[idx],
-      ...next,
-      id: list[idx].id,
-      createdAt: list[idx].createdAt,
-      createdByAgentId: list[idx].createdByAgentId || next.createdByAgentId,
-      createdByUserId: list[idx].createdByUserId || next.createdByUserId,
-      createdByName: list[idx].createdByName || next.createdByName,
-      createdByEmail: list[idx].createdByEmail || next.createdByEmail
-    }
-  } else {
-    list.unshift(next)
-  }
-  writeJson(CLIENTS_KEY, list)
   syncFinanceQuiet(async () => {
     const { apiUpsertSalesClient } = await import('./api.js')
-    await apiUpsertSalesClient(idx >= 0 ? list[idx] : next)
+    await apiUpsertSalesClient(saved)
   })
-  return idx >= 0 ? list[idx] : next
+  return saved
+}
+
+/** Persist CRM client locally and await cloud upsert (source of truth). */
+export async function saveClient(payload) {
+  const saved = upsertClientLocal(payload)
+  try {
+    const { apiUpsertSalesClient } = await import('./api.js')
+    const res = await apiUpsertSalesClient(saved)
+    if (!res.ok) return { ok: false, error: res.error || 'Could not save client online', client: saved }
+    if (res.data?.client) {
+      const cloud = upsertClientLocal(res.data.client)
+      return { ok: true, client: cloud }
+    }
+    return { ok: true, client: saved }
+  } catch (e) {
+    return { ok: false, error: e?.message || 'Could not save client online', client: saved }
+  }
 }
 
 export function canDeleteCrmClient(client) {
@@ -2809,17 +2858,20 @@ export function canDeleteCrmClient(client) {
 }
 
 /** Soft-delete a CRM client. Sales agents may only delete their own contacts. */
-export function deleteClient(id) {
+export async function deleteClient(id) {
   const client = getClient(id)
   if (client && !canDeleteCrmClient(client)) {
     return { ok: false, error: 'You can only remove your own contacts' }
   }
   markLocalDeleted(CLIENTS_KEY, id, normalizeClient)
-  syncFinanceQuiet(async () => {
+  try {
     const { apiDeleteSalesClient } = await import('./api.js')
-    await apiDeleteSalesClient(id)
-  })
-  return { ok: true }
+    const res = await apiDeleteSalesClient(id)
+    if (!res.ok) return { ok: false, error: res.error || 'Could not delete client online' }
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e?.message || 'Could not delete client online' }
+  }
 }
 
 export function listClientMeetings({ clientId = '', includeDeleted = false } = {}) {
@@ -2830,7 +2882,7 @@ export function listClientMeetings({ clientId = '', includeDeleted = false } = {
   return list.sort((a, b) => String(b.meetingAt).localeCompare(String(a.meetingAt)))
 }
 
-export function saveClientMeeting(payload) {
+export async function saveClientMeeting(payload) {
   const list = listClientMeetings({ includeDeleted: true })
   const next = normalizeClientMeeting({
     ...payload,
@@ -2840,19 +2892,26 @@ export function saveClientMeeting(payload) {
   if (idx >= 0) list[idx] = { ...list[idx], ...next, id: list[idx].id, createdAt: list[idx].createdAt }
   else list.unshift(next)
   writeJson(CLIENT_MEETINGS_KEY, list)
-  syncFinanceQuiet(async () => {
+  try {
     const { apiUpsertSalesClientMeeting } = await import('./api.js')
-    await apiUpsertSalesClientMeeting(next)
-  })
-  return next
+    const res = await apiUpsertSalesClientMeeting(next)
+    if (!res.ok) return { ok: false, error: res.error || 'Could not save meeting online', meeting: next }
+    return { ok: true, meeting: next }
+  } catch (e) {
+    return { ok: false, error: e?.message || 'Could not save meeting online', meeting: next }
+  }
 }
 
-export function deleteClientMeeting(id) {
+export async function deleteClientMeeting(id) {
   markLocalDeleted(CLIENT_MEETINGS_KEY, id, normalizeClientMeeting)
-  syncFinanceQuiet(async () => {
+  try {
     const { apiDeleteSalesClientMeeting } = await import('./api.js')
-    await apiDeleteSalesClientMeeting(id)
-  })
+    const res = await apiDeleteSalesClientMeeting(id)
+    if (!res.ok) return { ok: false, error: res.error || 'Could not delete meeting online' }
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e?.message || 'Could not delete meeting online' }
+  }
 }
 
 export function listClientNotes({ clientId = '', includeDeleted = false } = {}) {
@@ -2863,7 +2922,7 @@ export function listClientNotes({ clientId = '', includeDeleted = false } = {}) 
   return list.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
 }
 
-export function saveClientNote(payload) {
+export async function saveClientNote(payload) {
   const list = listClientNotes({ includeDeleted: true })
   const next = normalizeClientNote({
     ...payload,
@@ -2873,19 +2932,26 @@ export function saveClientNote(payload) {
   if (idx >= 0) list[idx] = { ...list[idx], ...next, id: list[idx].id, createdAt: list[idx].createdAt }
   else list.unshift(next)
   writeJson(CLIENT_NOTES_KEY, list)
-  syncFinanceQuiet(async () => {
+  try {
     const { apiUpsertSalesClientNote } = await import('./api.js')
-    await apiUpsertSalesClientNote(next)
-  })
-  return next
+    const res = await apiUpsertSalesClientNote(next)
+    if (!res.ok) return { ok: false, error: res.error || 'Could not save note online', note: next }
+    return { ok: true, note: next }
+  } catch (e) {
+    return { ok: false, error: e?.message || 'Could not save note online', note: next }
+  }
 }
 
-export function deleteClientNote(id) {
+export async function deleteClientNote(id) {
   markLocalDeleted(CLIENT_NOTES_KEY, id, normalizeClientNote)
-  syncFinanceQuiet(async () => {
+  try {
     const { apiDeleteSalesClientNote } = await import('./api.js')
-    await apiDeleteSalesClientNote(id)
-  })
+    const res = await apiDeleteSalesClientNote(id)
+    if (!res.ok) return { ok: false, error: res.error || 'Could not delete note online' }
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e?.message || 'Could not delete note online' }
+  }
 }
 
 /** Derive sale stage + meeting summary for a CRM client row.
@@ -2908,12 +2974,17 @@ export function clientCrmSummary(client, { agentId = '' } = {}) {
     quotes = quotes.filter((q) => String(q.agentId || '') === aid)
     invoices = invoices.filter((inv) => String(inv.agentId || '') === aid)
   }
-  let saleStage = client.saleStage || 'no_sale'
+  // Prefer live docs over stored stage so purged/restored finance stays honest.
+  let saleStage = 'no_sale'
   if (invoices.length) saleStage = 'invoice'
   else if (quotes.length) saleStage = 'quote'
-  else if (!client.saleStage || client.saleStage === 'no_sale') saleStage = 'no_sale'
+  else if (client.saleStage === 'quote' || client.saleStage === 'invoice') {
+    saleStage = client.saleStage
+  }
 
   const latestMeeting = meetings[0] || null
+  const docsMissing =
+    (saleStage === 'quote' || saleStage === 'invoice') && !quotes.length && !invoices.length
   return {
     meetings,
     quotes,
@@ -2924,6 +2995,7 @@ export function clientCrmSummary(client, { agentId = '' } = {}) {
     meetingCount: meetings.length,
     saleStage,
     saleStageLabel: saleStageLabel(saleStage),
+    docsMissing,
     dealLabel: clientDealLabel(client, { meetings, quotes, invoices, saleStage })
   }
 }
