@@ -67,6 +67,7 @@ import {
   saveClient,
   deleteClient,
   canDeleteCrmClient,
+  clientBelongsToAgent,
   listClientMeetings,
   saveClientMeeting,
   deleteClientMeeting,
@@ -1612,7 +1613,7 @@ function statusClass(status) {
 
 const filteredClients = computed(() => {
   const q = crmQuery.value.trim().toLowerCase()
-  return clients.value.filter((c) => {
+  const list = clients.value.filter((c) => {
     if (crmPipelineFilter.value !== 'all' && c.pipelineStatus !== crmPipelineFilter.value) return false
     if (crmSampleFilter.value !== 'all' && c.sampleCardStatus !== crmSampleFilter.value) return false
     if (crmStageFilter.value !== 'all') {
@@ -1645,7 +1646,48 @@ const filteredClients = computed(() => {
       agentName(c.ownerAgentId).toLowerCase().includes(q)
     )
   })
+  const byUpdated = (a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''))
+  const aid = myAgentId.value
+  if (isSalesScoped.value && aid) {
+    const mine = list.filter((c) => clientBelongsToAgent(c, aid)).sort(byUpdated)
+    const others = list.filter((c) => !clientBelongsToAgent(c, aid)).sort(byUpdated)
+    return [...mine, ...others]
+  }
+  return [...list].sort(byUpdated)
 })
+
+/** Similar CRM names while adding a new client (not when editing). */
+const clientNameSuggestions = computed(() => {
+  if (editingClientId.value) return []
+  const typed = String(clientForm.value.name || '').trim().toLowerCase()
+  if (typed.length < 2) return []
+  const typedWords = typed.split(/\s+/).filter(Boolean)
+  const scored = []
+  for (const c of clients.value) {
+    const nm = String(c.name || '').trim().toLowerCase()
+    if (!nm) continue
+    let score = 0
+    if (nm === typed) score = 100
+    else if (nm.startsWith(typed)) score = 80
+    else if (nm.includes(typed)) score = 60
+    else {
+      const words = nm.split(/\s+/).filter(Boolean)
+      const hit = typedWords.some((tw) => words.some((w) => w === tw || w.startsWith(tw) || tw.startsWith(w)))
+      if (hit) score = 40
+    }
+    if (score) scored.push({ client: c, score, exact: score === 100 })
+  }
+  return scored
+    .sort((a, b) => b.score - a.score || String(b.client.updatedAt || '').localeCompare(String(a.client.updatedAt || '')))
+    .slice(0, 8)
+})
+
+const exactClientNameMatch = computed(() => clientNameSuggestions.value.find((s) => s.exact)?.client || null)
+
+function pickSuggestedClient(c) {
+  showClientForm.value = false
+  openClientDetail(c)
+}
 
 function clientFinanceScope() {
   return isSalesScoped.value ? myAgentId.value : ''
@@ -1717,6 +1759,17 @@ async function submitClientForm() {
   if (!name) {
     flash('Prospect name is required')
     return
+  }
+  if (!editingClientId.value) {
+    const exact = clients.value.find(
+      (c) => String(c.name || '').trim().toLowerCase() === name.toLowerCase()
+    )
+    if (exact) {
+      const ok = confirm(
+        `A client named "${exact.name}" already exists (owner: ${agentName(exact.ownerAgentId)}). Create another anyway?`
+      )
+      if (!ok) return
+    }
   }
   clientSaving.value = true
   try {
@@ -3849,7 +3902,37 @@ onMounted(async () => {
         </div>
         <div>
           <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Prospect name *</label>
-          <div class="field-shell"><input v-model="clientForm.name" class="field-input" required placeholder="Full name"></div>
+          <div class="field-shell"><input v-model="clientForm.name" class="field-input" required placeholder="Full name" autocomplete="off"></div>
+          <template v-if="!editingClientId && clientNameSuggestions.length">
+            <p
+              v-if="exactClientNameMatch"
+              class="mt-2 text-[11px] text-amber-300"
+            >
+              A client named “{{ exactClientNameMatch.name }}” already exists.
+              <button
+                type="button"
+                class="underline font-semibold ml-1"
+                @click="pickSuggestedClient(exactClientNameMatch)"
+              >
+                Open
+              </button>
+            </p>
+            <ul class="mt-2 max-h-40 overflow-y-auto rounded-xl border border-zinc-700 divide-y divide-zinc-800 bg-zinc-950">
+              <li
+                v-for="s in clientNameSuggestions"
+                :key="s.client.id"
+                class="px-3 py-2 text-xs cursor-pointer hover:bg-zinc-800/80"
+                @click="pickSuggestedClient(s.client)"
+              >
+                <span class="font-semibold text-gray-100">{{ s.client.name }}</span>
+                <span v-if="s.exact" class="ml-1 text-[10px] uppercase tracking-wide text-amber-300">Exact</span>
+                <span class="block text-gray-500 truncate">
+                  {{ s.client.company || '—' }}
+                  · {{ agentName(s.client.ownerAgentId) }}
+                </span>
+              </li>
+            </ul>
+          </template>
         </div>
         <div>
           <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Company</label>
