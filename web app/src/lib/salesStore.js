@@ -970,13 +970,7 @@ export async function refreshFinanceFromApi() {
     writeJson(CASH_KEY, finalCash)
 
     let mergedClients = mergeById(localBefore.clients, data.clients || [], normalizeClient)
-    if (salesAgentScoped) {
-      mergedClients = mergedClients.filter((c) => {
-        const owner = String(c.ownerAgentId || '').trim()
-        if (owner) return owner === scopedAgentId
-        return String(c.createdByAgentId || '').trim() === scopedAgentId
-      })
-    }
+    // CRM contacts are shared — do not prune other agents' clients for sales-scoped sessions
     const allowedClientIds = new Set(mergedClients.map((c) => c.id))
     let mergedMeetings = mergeById(
       localBefore.clientMeetings,
@@ -984,9 +978,10 @@ export async function refreshFinanceFromApi() {
       normalizeClientMeeting
     )
     let mergedNotes = mergeById(localBefore.clientNotes, data.clientNotes || [], normalizeClientNote)
+    // Keep meetings/notes for all visible CRM clients
     if (salesAgentScoped) {
-      mergedMeetings = mergedMeetings.filter((m) => allowedClientIds.has(m.clientId))
-      mergedNotes = mergedNotes.filter((n) => allowedClientIds.has(n.clientId))
+      mergedMeetings = mergedMeetings.filter((m) => !m.clientId || allowedClientIds.has(m.clientId))
+      mergedNotes = mergedNotes.filter((n) => !n.clientId || allowedClientIds.has(n.clientId))
     }
     writeJson(CLIENTS_KEY, mergedClients)
     writeJson(CLIENT_MEETINGS_KEY, mergedMeetings)

@@ -1202,6 +1202,15 @@ function clientBelongsToAgent(clientRow, agentId) {
   return created === aid
 }
 
+/** Any sales staff may read CRM clients (shared contact book). */
+function assertClientRead(staff, clientRow) {
+  if (isSalesElevated(staff)) return null
+  if (!staff.agentId) return bad('Sales account is not linked to an agent', 403)
+  if (!clientRow) return bad('Client not found', 404)
+  return null
+}
+
+/** Write/delete client record: own contacts only (admins/managers unrestricted). */
 function assertClientAccess(staff, clientRow) {
   if (isSalesElevated(staff)) return null
   if (!staff.agentId) return bad('Sales account is not linked to an agent', 403)
@@ -1215,6 +1224,27 @@ function filterFinanceDocsForAgent(rows, agentId) {
   const aid = String(agentId || '').trim()
   if (!aid) return []
   return (rows || []).filter((r) => String(r.agent_id || '').trim() === aid)
+}
+
+/** Keep issuance visible; hide money fields on other agents' docs. */
+function redactFinanceMappedForViewer(mapped, staff) {
+  if (!mapped) return mapped
+  if (isSalesElevated(staff)) return { ...mapped, amountRedacted: false }
+  const aid = String(staff.agentId || '').trim()
+  if (aid && String(mapped.agentId || '').trim() === aid) {
+    return { ...mapped, amountRedacted: false }
+  }
+  return {
+    ...mapped,
+    amount: null,
+    unitPrice: null,
+    quantity: mapped.quantity ?? null,
+    commission: null,
+    commissionRate: null,
+    paidAmount: null,
+    lines: [],
+    amountRedacted: true
+  }
 }
 
 function withDeletedFields(mapped, row) {
@@ -4988,46 +5018,58 @@ async function handleApi(request, env, url) {
   const agentId = String(staff.agentId || '').trim()
   if (!isElevated && !agentId) return bad('Sales account is not linked to an agent', 403)
 
+  // Agents see all teammates for CRM owner labels; finance rows stay scoped below
   const agentQ = isElevated
     ? 'sales_agents?select=*&order=name.asc&limit=1000'
-    : 'sales_agents?deleted=eq.false&id=eq.' + encodeURIComponent(agentId) + '&select=*&limit=1'
+    : 'sales_agents?deleted=eq.false&select=*&order=name.asc&limit=1000'
   const scope = isElevated
     ? ''
     : 'deleted=eq.false&agent_id=eq.' + encodeURIComponent(agentId) + '&'
-  // CRM: agents only see their own clients; admin/manager see all
+  // CRM contacts are shared across sales agents; finance docs remain agent-scoped
   const clientsQ = isElevated
     ? 'sales_clients?select=*&order=updated_at.desc&limit=3000'
-    : 'sales_clients?deleted=eq.false&or=(owner_agent_id.eq.' +
-      encodeURIComponent(agentId) +
-      ',and(owner_agent_id.is.null,created_by_agent_id.eq.' +
-      encodeURIComponent(agentId) +
-      '))&select=*&order=updated_at.desc&limit=3000'
-  const [agents, orders, quotes, invoices, cash, clientsRaw, meetingsRaw, notesRaw] = await Promise.all([
-    sb(env, agentQ),
-    sb(env, 'sales_orders?' + scope + 'select=*&order=sold_at.desc&limit=2000'),
-    sb(env, 'sales_quotes?' + scope + 'select=*&order=created_at.desc&limit=2000'),
-    sb(env, 'sales_invoices?' + scope + 'select=*&order=issued_at.desc&limit=2000'),
-    sb(env, 'sales_cashflow?' + scope + 'select=*&order=occurred_at.desc&limit=2000'),
-    sb(env, clientsQ),
-    sb(env, 'sales_client_meetings?deleted=eq.false&select=*&order=meeting_at.desc&limit=5000'),
-    sb(env, 'sales_client_notes?deleted=eq.false&select=*&order=created_at.desc&limit=8000')
-  ])
+    : 'sales_clients?deleted=eq.false&select=*&order=updated_at.desc&limit=3000'
+  const [agents, orders, quotes, invoices, cash, clientsRaw, meetingsRaw, notesRaw, issuanceQuotes, issuanceInvoices] =
+    await Promise.all([
+      sb(env, agentQ),
+      sb(env, 'sales_orders?' + scope + 'select=*&order=sold_at.desc&limit=2000'),
+      sb(env, 'sales_quotes?' + scope + 'select=*&order=created_at.desc&limit=2000'),
+      sb(env, 'sales_invoices?' + scope + 'select=*&order=issued_at.desc&limit=2000'),
+      sb(env, 'sales_cashflow?' + scope + 'select=*&order=occurred_at.desc&limit=2000'),
+      sb(env, clientsQ),
+      sb(env, 'sales_client_meetings?deleted=eq.false&select=*&order=meeting_at.desc&limit=5000'),
+      sb(env, 'sales_client_notes?deleted=eq.false&select=*&order=created_at.desc&limit=8000'),
+      // Lightweight issuance (no amounts) so CRM stage badges reflect any agent’s docs
+      sb(env, 'sales_quotes?deleted=eq.false&select=client_id&limit=5000'),
+      sb(env, 'sales_invoices?deleted=eq.false&select=client_id&limit=5000')
+    ])
   let clients = clientsRaw || []
-  if (!isElevated) {
-    clients = clients.filter((c) => clientBelongsToAgent(c, agentId))
-  }
-  const clientIds = new Set(clients.map((c) => c.id).filter(Boolean))
+  const clientsWithQuote = new Set(
+    (issuanceQuotes || []).map((r) => r.client_id).filter(Boolean)
+  )
+  const clientsWithInvoice = new Set(
+    (issuanceInvoices || []).map((r) => r.client_id).filter(Boolean)
+  )
   let meetings = meetingsRaw || []
   let notes = notesRaw || []
-  if (!isElevated) {
-    meetings = meetings.filter((m) => clientIds.has(m.client_id))
-    notes = notes.filter((n) => clientIds.has(n.client_id))
-  }
   let cashflow = (cash || []).map(mapSalesCashRow)
   if (!isElevated) {
     const orderIds = new Set((orders || []).map((o) => o.id))
     cashflow = cashflow.filter((c) => c.saleId && orderIds.has(c.saleId))
   }
+  const mappedClients = clients.map((row) => {
+    const mapped = mapSalesClientRow(row)
+    const cid = mapped.id
+    let saleStage = mapped.saleStage || 'no_sale'
+    if (clientsWithInvoice.has(cid)) saleStage = 'invoice'
+    else if (clientsWithQuote.has(cid)) saleStage = 'quote'
+    return {
+      ...mapped,
+      saleStage,
+      hasIssuedQuote: clientsWithQuote.has(cid),
+      hasIssuedInvoice: clientsWithInvoice.has(cid)
+    }
+  })
   return json({
     ok: true,
     scope: isElevated ? 'all' : 'agent',
@@ -5036,7 +5078,7 @@ async function handleApi(request, env, url) {
     quotes: (quotes || []).map(mapSalesQuoteRow),
     invoices: (invoices || []).map(mapSalesInvoiceRow),
     cashflow,
-    clients: clients.map(mapSalesClientRow),
+    clients: mappedClients,
     clientMeetings: meetings.map(mapSalesClientMeetingRow),
     clientNotes: notes.map(mapSalesClientNoteRow)
   })
@@ -5522,7 +5564,7 @@ async function handleApi(request, env, url) {
   })
   }
 
-  // ---- Sales CRM (agent-owned clients; admin/manager see all) ----
+  // ---- Sales CRM (shared contacts; finance stays private on other endpoints) ----
   if (pathname === '/api/sales/clients' && method === 'GET') {
     const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
     if (gate.error) return gate.error
@@ -5538,11 +5580,9 @@ async function handleApi(request, env, url) {
       sb(env, 'sales_client_meetings?deleted=eq.false&select=*&order=meeting_at.desc&limit=5000'),
       sb(env, 'sales_client_notes?deleted=eq.false&select=*&order=created_at.desc&limit=8000')
     ])
-    let clients = clientsRaw || []
-    if (!elevated) clients = clients.filter((c) => clientBelongsToAgent(c, agentId))
-    const clientIds = new Set(clients.map((c) => c.id).filter(Boolean))
-    const meetings = (meetingsRaw || []).filter((m) => elevated || clientIds.has(m.client_id))
-    const notes = (notesRaw || []).filter((n) => elevated || clientIds.has(n.client_id))
+    const clients = clientsRaw || []
+    const meetings = meetingsRaw || []
+    const notes = notesRaw || []
     return json({
       ok: true,
       clients: clients.map(mapSalesClientRow),
@@ -5608,10 +5648,8 @@ async function handleApi(request, env, url) {
     const clients = await sb(env, 'sales_clients?id=eq.' + encodeURIComponent(id) + '&select=*')
     const client = clients?.[0]
     if (!client || client.deleted === true) return bad('Client not found', 404)
-    const denied = assertClientAccess(gate.staff, client)
+    const denied = assertClientRead(gate.staff, client)
     if (denied) return denied
-    const elevated = isSalesElevated(gate.staff)
-    const agentId = String(gate.staff.agentId || '').trim()
     const email = String(client.email || '').trim().toLowerCase()
     const phone = String(client.phone || '').trim()
     const [meetings, notes, quotesById, invoicesById, ordersById] = await Promise.all([
@@ -5654,20 +5692,15 @@ async function handleApi(request, env, url) {
       invoices = mergeUnique(invoices, i2)
       orders = mergeUnique(orders, o2)
     }
-    // Sales agents only see their own quotes/invoices/orders (amounts included); admin sees all
-    if (!elevated) {
-      quotes = filterFinanceDocsForAgent(quotes, agentId)
-      invoices = filterFinanceDocsForAgent(invoices, agentId)
-      orders = filterFinanceDocsForAgent(orders, agentId)
-    }
+    // Shared issuance: all agents see docs exist; amounts redacted for other agents' docs
     return json({
       ok: true,
       client: mapSalesClientRow(client),
       meetings: (meetings || []).map(mapSalesClientMeetingRow),
       notes: (notes || []).map(mapSalesClientNoteRow),
-      quotes: quotes.map(mapSalesQuoteRow),
-      invoices: invoices.map(mapSalesInvoiceRow),
-      orders: orders.map(mapSalesOrderRow)
+      quotes: quotes.map((r) => redactFinanceMappedForViewer(mapSalesQuoteRow(r), gate.staff)),
+      invoices: invoices.map((r) => redactFinanceMappedForViewer(mapSalesInvoiceRow(r), gate.staff)),
+      orders: orders.map((r) => redactFinanceMappedForViewer(mapSalesOrderRow(r), gate.staff))
     })
   }
 
@@ -5732,7 +5765,7 @@ async function handleApi(request, env, url) {
     const clients = await sb(env, 'sales_clients?id=eq.' + encodeURIComponent(row.client_id) + '&select=*')
     const clientRow = clients?.[0]
     if (!clientRow || clientRow.deleted === true) return bad('Client not found', 404)
-    const denied = assertClientAccess(gate.staff, clientRow)
+    const denied = assertClientRead(gate.staff, clientRow)
     if (denied) return denied
     const payload = {
       ...row,
@@ -5763,7 +5796,7 @@ async function handleApi(request, env, url) {
       env,
       'sales_clients?id=eq.' + encodeURIComponent(existing[0].client_id || '') + '&select=*'
     )
-    const denied = assertClientAccess(gate.staff, clients?.[0])
+    const denied = assertClientRead(gate.staff, clients?.[0])
     if (denied) return denied
     await softDeleteRow(env, {
       table: 'sales_client_meetings',
@@ -5790,7 +5823,7 @@ async function handleApi(request, env, url) {
     const clients = await sb(env, 'sales_clients?id=eq.' + encodeURIComponent(row.client_id) + '&select=*')
     const clientRow = clients?.[0]
     if (!clientRow || clientRow.deleted === true) return bad('Client not found', 404)
-    const denied = assertClientAccess(gate.staff, clientRow)
+    const denied = assertClientRead(gate.staff, clientRow)
     if (denied) return denied
     const payload = {
       ...row,
@@ -5821,7 +5854,7 @@ async function handleApi(request, env, url) {
       env,
       'sales_clients?id=eq.' + encodeURIComponent(existing[0].client_id || '') + '&select=*'
     )
-    const denied = assertClientAccess(gate.staff, clients?.[0])
+    const denied = assertClientRead(gate.staff, clients?.[0])
     if (denied) return denied
     await softDeleteRow(env, {
       table: 'sales_client_notes',

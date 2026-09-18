@@ -130,6 +130,8 @@ const canManageProducts = computed(() => canManageSalesOrg())
 /** Sales agents only see their own data; admins and managers see every agent. */
 const isSalesScoped = computed(() => isStaffSales() && !canManageSalesOrg())
 const myAgentId = computed(() => staffAgentId())
+/** Full agent roster for CRM owner filter (finance refresh stores all agents). */
+const crmOwnerAgents = computed(() => listAgents().filter((a) => !a.deleted))
 const staffLabel = computed(() => {
   const u = getStaffUser()
   if (!u) return ''
@@ -414,12 +416,8 @@ async function refresh() {
       agentsActive: agents.value.filter((a) => a.active).length,
       agentsTotal: agents.value.length
     }
-    // Agents only see their own CRM clients
-    clients.value = listClients({ includeDeleted: false }).filter((c) => {
-      const owner = String(c.ownerAgentId || '').trim()
-      if (owner) return owner === aid
-      return String(c.createdByAgentId || '').trim() === aid
-    })
+    // Agents see all CRM clients; Quotes/Invoices amounts stay private via detail API + local finance scope
+    clients.value = listClients({ includeDeleted: false })
   } else {
     const visible = (list) => (includeDeleted ? list : list.filter((x) => !x.deleted))
     agents.value = visible(allAgents)
@@ -1618,14 +1616,18 @@ const filteredClients = computed(() => {
     if (crmPipelineFilter.value !== 'all' && c.pipelineStatus !== crmPipelineFilter.value) return false
     if (crmSampleFilter.value !== 'all' && c.sampleCardStatus !== crmSampleFilter.value) return false
     if (crmStageFilter.value !== 'all') {
-      const stage = clientCrmSummary(c, {
-        agentId: isSalesScoped.value ? myAgentId.value : ''
-      }).saleStage
+      // Prefer enriched saleStage from finance refresh (shared issuance); fall back to own docs
+      const stage =
+        c.saleStage && c.saleStage !== 'no_sale'
+          ? c.saleStage
+          : clientCrmSummary(c, {
+              agentId: isSalesScoped.value ? myAgentId.value : ''
+            }).saleStage
       if (stage !== crmStageFilter.value) return false
     }
     if (crmReferralFilter.value === 'referral' && !c.isReferral) return false
     if (crmReferralFilter.value === 'direct' && c.isReferral) return false
-    if (!isSalesScoped.value && crmOwnerFilter.value !== 'all') {
+    if (crmOwnerFilter.value !== 'all') {
       if (crmOwnerFilter.value === '__none__') {
         if (c.ownerAgentId) return false
       } else if (c.ownerAgentId !== crmOwnerFilter.value) {
@@ -1649,6 +1651,26 @@ function clientFinanceScope() {
   return isSalesScoped.value ? myAgentId.value : ''
 }
 
+function canEditCrmClient(c) {
+  return canDeleteCrmClient(c)
+}
+
+/** Amount on CRM issuance rows — hide other agents' money. */
+function formatIssuanceAmount(doc) {
+  if (!doc) return '—'
+  if (doc.amountRedacted === true || doc.amount == null) return 'Private'
+  if (isSalesScoped.value && myAgentId.value && doc.agentId && doc.agentId !== myAgentId.value) {
+    return 'Private'
+  }
+  return formatMoney(doc.amount)
+}
+
+function issuanceDetailLine(doc, status) {
+  const amt = formatIssuanceAmount(doc)
+  const who = doc.agentId && doc.agentId !== myAgentId.value ? ` · ${agentName(doc.agentId)}` : ''
+  return `${status}${amt !== 'Private' ? ` · ${amt}` : ' · amount private'}${who}`
+}
+
 function clientAddedBy(c) {
   return c.createdByName || c.createdByEmail || agentName(c.createdByAgentId) || '—'
 }
@@ -1668,6 +1690,10 @@ function openNewClient({ asReferral = false } = {}) {
 }
 
 function openEditClient(c) {
+  if (!canEditCrmClient(c)) {
+    flash('You can only edit your own contacts')
+    return
+  }
   editingClientId.value = c.id
   clientForm.value = {
     id: c.id,
@@ -1755,8 +1781,8 @@ async function openClientDetail(c) {
           type: 'quote',
           at: q.createdAt,
           title: `Quote ${q.quoteNumber || q.id}`,
-          detail: `${q.status} · ${formatMoney(q.amount)}`,
-          by: '',
+          detail: issuanceDetailLine(q, q.status),
+          by: q.agentId ? agentName(q.agentId) : '',
           raw: q
         })
       }
@@ -1766,8 +1792,8 @@ async function openClientDetail(c) {
           type: 'invoice',
           at: inv.issuedAt || inv.createdAt,
           title: `Invoice ${inv.invoiceNumber || inv.id}`,
-          detail: `${inv.status} · ${formatMoney(inv.amount)}`,
-          by: '',
+          detail: issuanceDetailLine(inv, inv.status),
+          by: inv.agentId ? agentName(inv.agentId) : '',
           raw: inv
         })
       }
@@ -1871,6 +1897,10 @@ async function removeClientMeeting(meetingId) {
 
 async function quickUpdateClientField(field, value) {
   if (!activeClient.value) return
+  if (!canEditCrmClient(activeClient.value)) {
+    flash('You can only edit your own contacts')
+    return
+  }
   saveClient({ ...activeClient.value, [field]: value })
   await refresh()
   const updated = clients.value.find((c) => c.id === activeClient.value.id)
@@ -2408,13 +2438,12 @@ onMounted(async () => {
               <option value="referral">Referrals</option>
             </select>
             <select
-              v-if="!isSalesScoped"
               v-model="crmOwnerFilter"
               class="field-input bg-zinc-900 text-xs rounded-2xl"
             >
               <option value="all">All owners</option>
               <option value="__none__">Unassigned</option>
-              <option v-for="a in agents" :key="a.id" :value="a.id">{{ a.name }}</option>
+              <option v-for="a in crmOwnerAgents" :key="a.id" :value="a.id">{{ a.name }}</option>
             </select>
           </div>
         </div>
@@ -3921,6 +3950,7 @@ onMounted(async () => {
             <select
               class="field-input w-full bg-zinc-950 text-xs"
               :value="activeClient.sampleCardStatus"
+              :disabled="!canEditCrmClient(activeClient)"
               @change="quickUpdateClientField('sampleCardStatus', $event.target.value)"
             >
               <option value="none">No sample card</option>
@@ -3933,6 +3963,7 @@ onMounted(async () => {
             <select
               class="field-input w-full bg-zinc-950 text-xs"
               :value="activeClient.pipelineStatus"
+              :disabled="!canEditCrmClient(activeClient)"
               @change="quickUpdateClientField('pipelineStatus', $event.target.value)"
             >
               <option value="pending">Pending</option>
@@ -3945,6 +3976,7 @@ onMounted(async () => {
             <select
               class="field-input w-full bg-zinc-950 text-xs"
               :value="activeClient.saleStage"
+              :disabled="!canEditCrmClient(activeClient)"
               @change="quickUpdateClientField('saleStage', $event.target.value)"
             >
               <option value="no_sale">No sale</option>
@@ -3955,7 +3987,12 @@ onMounted(async () => {
         </div>
 
         <div class="flex flex-wrap gap-2">
-          <button type="button" class="px-3 py-2 rounded-xl text-xs font-semibold border border-zinc-700 text-sky-300" @click="openEditClient(activeClient)">
+          <button
+            v-if="canEditCrmClient(activeClient)"
+            type="button"
+            class="px-3 py-2 rounded-xl text-xs font-semibold border border-zinc-700 text-sky-300"
+            @click="openEditClient(activeClient)"
+          >
             Edit details
           </button>
           <button type="button" class="px-3 py-2 rounded-xl text-xs font-semibold border border-zinc-700 text-emerald-300" @click="openAddMeeting">
@@ -3977,9 +4014,12 @@ onMounted(async () => {
             <p class="text-[11px] font-bold uppercase tracking-wide text-gray-400">Quotes</p>
             <div v-if="!clientQuotes.length" class="text-xs text-gray-500">No quotes</div>
             <div v-for="q in clientQuotes" :key="q.id" class="text-xs flex justify-between gap-2">
-              <span class="truncate">{{ q.quoteNumber || q.id }}</span>
+              <span class="truncate">
+                {{ q.quoteNumber || q.id }}
+                <span v-if="q.agentId" class="text-gray-500"> · {{ agentName(q.agentId) }}</span>
+              </span>
               <span class="shrink-0 text-right">
-                <span class="text-gray-300 tabular-nums">{{ formatMoney(q.amount) }}</span>
+                <span class="text-gray-300 tabular-nums">{{ formatIssuanceAmount(q) }}</span>
                 <span class="ml-2" :class="statusClass(q.status)">{{ formatSalesStatus(q.status) }}</span>
               </span>
             </div>
@@ -3988,9 +4028,12 @@ onMounted(async () => {
             <p class="text-[11px] font-bold uppercase tracking-wide text-gray-400">Invoices</p>
             <div v-if="!clientInvoices.length" class="text-xs text-gray-500">No invoices</div>
             <div v-for="inv in clientInvoices" :key="inv.id" class="text-xs flex justify-between gap-2">
-              <span class="truncate">{{ inv.invoiceNumber || inv.id }}</span>
+              <span class="truncate">
+                {{ inv.invoiceNumber || inv.id }}
+                <span v-if="inv.agentId" class="text-gray-500"> · {{ agentName(inv.agentId) }}</span>
+              </span>
               <span class="shrink-0 text-right">
-                <span class="text-gray-300 tabular-nums">{{ formatMoney(inv.amount) }}</span>
+                <span class="text-gray-300 tabular-nums">{{ formatIssuanceAmount(inv) }}</span>
                 <span class="ml-2" :class="statusClass(inv.status)">{{ formatSalesStatus(inv.status) }}</span>
               </span>
             </div>
