@@ -1,0 +1,38 @@
+export function buildConnectShareMessage({ guestName, guestPhone, guestEmail, guestCompany, ownerName }) {
+  const first = String(ownerName || '').trim().split(/\s+/)[0] || ''
+  const lines = [`Hi${first ? ` ${first}` : ''}, I'd like to connect.`, '', `Name: ${guestName}`]
+  const phone = String(guestPhone || '').trim()
+  const email = String(guestEmail || '').trim()
+  const company = String(guestCompany || '').trim()
+  if (phone) lines.push(`Phone: ${phone}`)
+  if (email) lines.push(`Email: ${email}`)
+  if (company) lines.push(`Company: ${company}`)
+  return lines.join('\n')
+}
+
+export function phoneDigits(phone) {
+  return String(phone || '').replace(/\D/g, '')
+}
+
+export function whatsAppShareUrl(phone, text) {
+  const digits = phoneDigits(phone)
+  if (!digits) return ''
+  return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`
+}
+
+export function smsShareUrl(phone, text) {
+  const digits = phoneDigits(phone)
+  if (!digits) return ''
+  return `sms:${digits}?body=${encodeURIComponent(text)}`
+}
+
+export function ownerReachPhone(profile) {
+  const phone = String(profile?.phone || '').trim()
+  if (phone) return phone
+  const wa = String(profile?.whatsapp || '').trim()
+  if (/wa\.me\//i.test(wa)) {
+    const m = wa.match(/wa\.me\/(\d+)/i)
+    if (m?.[1]) return m[1]
+  }
+  return wa
+}

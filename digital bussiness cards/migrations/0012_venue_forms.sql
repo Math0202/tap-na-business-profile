@@ -1,0 +1,15 @@
+-- Customizable check-in / feedback forms + extra submission fields
+
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS feedback_form JSONB NOT NULL DEFAULT '{}'::jsonb,
+  ADD COLUMN IF NOT EXISTS checkin_form JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE public.checkins
+  ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS email TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS answers JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE public.feedback
+  ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS email TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS answers JSONB NOT NULL DEFAULT '{}'::jsonb;

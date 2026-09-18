@@ -1,0 +1,34 @@
+-- Partial settlement: amount received + status
+ALTER TABLE public.sales_invoices
+  ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(12,2) NOT NULL DEFAULT 0;
+
+DO $$ BEGIN
+  ALTER TABLE public.sales_invoices
+    DROP CONSTRAINT IF EXISTS sales_invoices_paid_amount_check;
+  ALTER TABLE public.sales_invoices
+    ADD CONSTRAINT sales_invoices_paid_amount_check
+    CHECK (paid_amount >= 0);
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+UPDATE public.sales_invoices
+SET paid_amount = amount
+WHERE status = 'paid' AND paid_amount = 0 AND amount > 0;
+
+DO $$ BEGIN
+  ALTER TABLE public.sales_invoices
+    DROP CONSTRAINT IF EXISTS sales_invoices_status_check;
+  ALTER TABLE public.sales_invoices
+    ADD CONSTRAINT sales_invoices_status_check
+    CHECK (status = ANY (ARRAY[
+      'draft'::text,
+      'sent'::text,
+      'partially_settled'::text,
+      'paid'::text,
+      'void'::text
+    ]));
+EXCEPTION WHEN others THEN NULL;
+END $$;
+
+COMMENT ON COLUMN public.sales_invoices.paid_amount IS
+  'Amount already received. Remaining due is amount - paid_amount.';
