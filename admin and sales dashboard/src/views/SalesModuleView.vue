@@ -2376,69 +2376,78 @@ onMounted(async () => {
           <template v-else>No sales found.</template>
         </p>
 
-        <ul v-if="salesListMode === 'quotes'" class="space-y-2">
-          <li v-for="q in filteredQuotes" :key="q.id" class="card-item-bg rounded-2xl p-4">
-            <div class="flex items-start justify-between gap-3">
-              <div class="flex items-start gap-3 min-w-0">
-                <img
-                  v-if="productThumbFor(q.productId || q.lines?.[0]?.productId)"
-                  :src="productThumbFor(q.productId || q.lines?.[0]?.productId)"
-                  alt=""
-                  class="w-12 h-12 rounded-lg object-contain bg-zinc-900/80 p-0.5 shrink-0 border border-zinc-700"
-                >
-                <div class="min-w-0">
-                <div class="flex items-center gap-2 flex-wrap">
-                  <p class="text-sm font-semibold truncate">{{ q.quoteNumber }}</p>
-                  <span
-                    v-if="isShopQuote(q)"
-                    class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300"
-                  >
-                    Shop
-                  </span>
+        <div v-if="salesListMode === 'quotes' && filteredQuotes.length" class="card-item-bg rounded-2xl overflow-x-auto">
+          <table class="w-full min-w-[820px] text-left text-xs border-collapse">
+            <thead>
+              <tr class="border-b border-zinc-700/80 text-[10px] uppercase tracking-wide text-gray-500">
+                <th class="px-3 py-2.5 font-semibold">Number</th>
+                <th class="px-3 py-2.5 font-semibold">Customer</th>
+                <th class="px-3 py-2.5 font-semibold">Lines</th>
+                <th class="px-3 py-2.5 font-semibold text-right">Amount</th>
+                <th class="px-3 py-2.5 font-semibold">Status</th>
+                <th class="px-3 py-2.5 font-semibold">Agent</th>
+                <th class="px-3 py-2.5 font-semibold">Valid</th>
+                <th class="px-3 py-2.5 font-semibold text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-zinc-800">
+              <tr v-for="q in filteredQuotes" :key="q.id" class="hover:bg-white/[0.03]">
+                <td class="px-3 py-2.5 align-middle">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="font-semibold text-sm text-[var(--text)]">{{ q.quoteNumber }}</span>
+                    <span
+                      v-if="isShopQuote(q)"
+                      class="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300"
+                    >
+                      Shop
+                    </span>
+                  </div>
+                </td>
+                <td class="px-3 py-2.5 align-middle text-gray-300 max-w-[10rem] truncate">{{ q.customerName || '—' }}</td>
+                <td class="px-3 py-2.5 align-middle text-gray-400 max-w-[12rem] truncate">{{ docLinesLabel(q) }}</td>
+                <td class="px-3 py-2.5 align-middle text-right tabular-nums font-medium">{{ formatMoney(q.amount) }}</td>
+                <td class="px-3 py-2.5 align-middle">
                   <span class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full" :class="statusClass(q.status)">
                     {{ q.status }}
                   </span>
-                </div>
-                <p class="text-xs text-gray-400 mt-0.5">
-                  {{ q.customerName }} · {{ docLinesLabel(q) }}
-                </p>
-                <p class="text-[11px] text-gray-500 mt-1">
-                  {{ formatMoney(q.amount) }} · {{ agentName(q.agentId) }} · valid {{ formatDay(q.validUntil) }}
-                </p>
-                </div>
-              </div>
-              <div class="flex flex-col gap-1 shrink-0 text-right">
-                <button
-                  v-if="q.status !== 'converted'"
-                  type="button"
-                  class="text-xs font-semibold text-emerald-300 hover:text-emerald-200"
-                  @click="convertQuote(q)"
-                >
-                  Convert
-                </button>
-                <button
-                  v-if="!isSalesScoped && q.status !== 'converted' && !q.agentId"
-                  type="button"
-                  class="text-xs font-semibold text-sky-300 hover:text-sky-200"
-                  @click="openEditQuote(q)"
-                >
-                  Assign
-                </button>
-                <button
-                  v-if="q.status !== 'converted'"
-                  type="button"
-                  class="text-xs font-semibold text-gray-300 hover:text-white"
-                  @click="openQuoteEmail(q)"
-                >
-                  Email
-                </button>
-                <button type="button" class="text-xs font-semibold text-gray-300 hover:text-white" @click="openEditQuote(q)">Edit</button>
-                <button v-if="!q.deleted" type="button" class="text-xs font-semibold text-red-400" @click="removeQuote(q.id)">Delete</button>
-                <button v-else-if="canManageAgents" type="button" class="text-xs font-semibold text-emerald-300" @click="undeleteQuote(q.id)">Restore</button>
-              </div>
-            </div>
-          </li>
-        </ul>
+                </td>
+                <td class="px-3 py-2.5 align-middle text-gray-400 whitespace-nowrap">{{ agentName(q.agentId) }}</td>
+                <td class="px-3 py-2.5 align-middle text-gray-400 whitespace-nowrap">{{ formatDay(q.validUntil) }}</td>
+                <td class="px-3 py-2.5 align-middle text-right">
+                  <div class="inline-flex flex-wrap justify-end gap-x-2 gap-y-1">
+                    <button
+                      v-if="q.status !== 'converted'"
+                      type="button"
+                      class="font-semibold text-emerald-300 hover:text-emerald-200"
+                      @click="convertQuote(q)"
+                    >
+                      Convert
+                    </button>
+                    <button
+                      v-if="!isSalesScoped && q.status !== 'converted' && !q.agentId"
+                      type="button"
+                      class="font-semibold text-sky-300 hover:text-sky-200"
+                      @click="openEditQuote(q)"
+                    >
+                      Assign
+                    </button>
+                    <button
+                      v-if="q.status !== 'converted'"
+                      type="button"
+                      class="font-semibold text-gray-300 hover:text-white"
+                      @click="openQuoteEmail(q)"
+                    >
+                      Email
+                    </button>
+                    <button type="button" class="font-semibold text-gray-300 hover:text-white" @click="openEditQuote(q)">Edit</button>
+                    <button v-if="!q.deleted" type="button" class="font-semibold text-red-400" @click="removeQuote(q.id)">Delete</button>
+                    <button v-else-if="canManageAgents" type="button" class="font-semibold text-emerald-300" @click="undeleteQuote(q.id)">Restore</button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <p v-if="salesListMode === 'quotes' && !filteredQuotes.length" class="text-sm text-gray-500">
           <template v-if="quotesHiddenByAgentFilter">
             No quotes for this agent filter — switch to
@@ -2457,37 +2466,53 @@ onMounted(async () => {
           </div>
         </div>
 
-        <ul class="space-y-2">
-          <li v-for="inv in filteredInvoices" :key="inv.id" class="card-item-bg rounded-2xl p-4">
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
-                <div class="flex items-center gap-2 flex-wrap">
-                  <p class="text-sm font-semibold truncate">{{ inv.invoiceNumber }}</p>
-                  <span class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full" :class="statusClass(inv.status)">
-                    {{ formatSalesStatus(inv.status) }}
-                  </span>
-                </div>
-                <p class="text-xs text-gray-400 mt-0.5">
-                  {{ inv.customerName }} · {{ docLinesLabel(inv) }}
-                </p>
-                <p class="text-[11px] text-gray-500 mt-1">
-                  {{ formatMoney(inv.amount) }}
+        <div v-if="filteredInvoices.length" class="card-item-bg rounded-2xl overflow-x-auto">
+          <table class="w-full min-w-[780px] text-left text-xs border-collapse">
+            <thead>
+              <tr class="border-b border-zinc-700/80 text-[10px] uppercase tracking-wide text-gray-500">
+                <th class="px-3 py-2.5 font-semibold">Number</th>
+                <th class="px-3 py-2.5 font-semibold">Customer</th>
+                <th class="px-3 py-2.5 font-semibold">Lines</th>
+                <th class="px-3 py-2.5 font-semibold text-right">Amount</th>
+                <th class="px-3 py-2.5 font-semibold text-right">Paid / Due</th>
+                <th class="px-3 py-2.5 font-semibold">Status</th>
+                <th class="px-3 py-2.5 font-semibold">Issued</th>
+                <th class="px-3 py-2.5 font-semibold text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-zinc-800">
+              <tr v-for="inv in filteredInvoices" :key="inv.id" class="hover:bg-white/[0.03]">
+                <td class="px-3 py-2.5 align-middle font-semibold text-sm">{{ inv.invoiceNumber }}</td>
+                <td class="px-3 py-2.5 align-middle text-gray-300 max-w-[10rem] truncate">{{ inv.customerName || '—' }}</td>
+                <td class="px-3 py-2.5 align-middle text-gray-400 max-w-[12rem] truncate">{{ docLinesLabel(inv) }}</td>
+                <td class="px-3 py-2.5 align-middle text-right tabular-nums font-medium">{{ formatMoney(inv.amount) }}</td>
+                <td class="px-3 py-2.5 align-middle text-right text-gray-400 tabular-nums whitespace-nowrap">
                   <template v-if="invoiceRemaining(inv) > 0.004 && invoicePaidAmount(inv) > 0.004">
-                    · {{ formatMoney(invoicePaidAmount(inv)) }} paid
-                    · {{ formatMoney(invoiceRemaining(inv)) }} due
+                    {{ formatMoney(invoicePaidAmount(inv)) }} / {{ formatMoney(invoiceRemaining(inv)) }}
                   </template>
-                  · {{ formatDay(inv.issuedAt) }}
-                  <span v-if="inv.emailStatus && inv.emailStatus !== 'pending'"> · email {{ inv.emailStatus }}</span>
-                </p>
-              </div>
-              <div class="flex flex-col gap-1 shrink-0 text-right">
-                <button type="button" class="text-xs font-semibold text-emerald-300 hover:text-emerald-200" @click="openInvoiceModal(inv)">
-                  Open / Email
-                </button>
-              </div>
-            </div>
-          </li>
-        </ul>
+                  <template v-else-if="invoicePaidAmount(inv) > 0.004">{{ formatMoney(invoicePaidAmount(inv)) }}</template>
+                  <template v-else>—</template>
+                </td>
+                <td class="px-3 py-2.5 align-middle">
+                  <div class="flex flex-col gap-0.5 items-start">
+                    <span class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full" :class="statusClass(inv.status)">
+                      {{ formatSalesStatus(inv.status) }}
+                    </span>
+                    <span v-if="inv.emailStatus && inv.emailStatus !== 'pending'" class="text-[10px] text-gray-500">
+                      email {{ inv.emailStatus }}
+                    </span>
+                  </div>
+                </td>
+                <td class="px-3 py-2.5 align-middle text-gray-400 whitespace-nowrap">{{ formatDay(inv.issuedAt) }}</td>
+                <td class="px-3 py-2.5 align-middle text-right">
+                  <button type="button" class="font-semibold text-emerald-300 hover:text-emerald-200" @click="openInvoiceModal(inv)">
+                    Open / Email
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <p v-if="!filteredInvoices.length" class="text-sm text-gray-500">No invoices yet. Save a sale to generate one.</p>
       </section>
 
@@ -2563,61 +2588,80 @@ onMounted(async () => {
           </div>
         </div>
 
-        <ul class="space-y-2">
-          <li
-            v-for="c in filteredClients"
-            :key="c.id"
-            class="card-item-bg rounded-2xl p-4 cursor-pointer hover:brightness-110 transition"
-            @click="openClientDetail(c)"
-          >
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0 space-y-1.5">
-                <div class="flex items-center gap-2 flex-wrap">
-                  <p class="text-sm font-semibold truncate">{{ c.name || 'Unnamed' }}</p>
-                  <span
-                    v-if="c.isReferral"
-                    class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300"
-                  >
-                    Referral
-                  </span>
+        <div v-if="filteredClients.length" class="card-item-bg rounded-2xl overflow-x-auto">
+          <table class="w-full min-w-[900px] text-left text-xs border-collapse">
+            <thead>
+              <tr class="border-b border-zinc-700/80 text-[10px] uppercase tracking-wide text-gray-500">
+                <th class="px-3 py-2.5 font-semibold">Name</th>
+                <th class="px-3 py-2.5 font-semibold">Company</th>
+                <th class="px-3 py-2.5 font-semibold">Contact</th>
+                <th class="px-3 py-2.5 font-semibold">Pipeline</th>
+                <th class="px-3 py-2.5 font-semibold">Stage</th>
+                <th class="px-3 py-2.5 font-semibold">Sample</th>
+                <th class="px-3 py-2.5 font-semibold">Meeting</th>
+                <th class="px-3 py-2.5 font-semibold">Owner</th>
+                <th class="px-3 py-2.5 font-semibold w-8"></th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-zinc-800">
+              <tr
+                v-for="c in filteredClients"
+                :key="c.id"
+                class="cursor-pointer hover:bg-white/[0.03] transition"
+                @click="openClientDetail(c)"
+              >
+                <td class="px-3 py-2.5 align-middle">
+                  <div class="flex items-center gap-1.5 flex-wrap min-w-0">
+                    <span class="font-semibold text-sm truncate">{{ c.name || 'Unnamed' }}</span>
+                    <span
+                      v-if="c.isReferral"
+                      class="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-300"
+                    >
+                      Referral
+                    </span>
+                  </div>
+                </td>
+                <td class="px-3 py-2.5 align-middle text-gray-400 max-w-[9rem] truncate">{{ c.company || '—' }}</td>
+                <td class="px-3 py-2.5 align-middle text-gray-400 max-w-[12rem]">
+                  <div class="truncate">{{ c.email || '—' }}</div>
+                  <div v-if="c.phone" class="truncate text-[10px] text-gray-500">{{ c.phone }}</div>
+                </td>
+                <td class="px-3 py-2.5 align-middle">
                   <span class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full" :class="statusClass(c.pipelineStatus)">
                     {{ pipelineStatusLabel(c.pipelineStatus) }}
                   </span>
-                </div>
-                <p class="text-xs text-gray-400 truncate">
-                  {{ c.company || '—' }}
-                  <template v-if="c.email"> · {{ c.email }}</template>
-                  <template v-if="c.phone"> · {{ c.phone }}</template>
-                </p>
-                <p v-if="c.location" class="text-[11px] text-gray-500 truncate">{{ c.location }}</p>
-                <div class="flex flex-wrap gap-1.5 pt-1">
-                  <span class="text-[10px] px-2 py-0.5 rounded-md border border-zinc-700 text-gray-300">
-                    Sample: {{ sampleCardStatusLabel(c.sampleCardStatus) }}
-                  </span>
-                  <span class="text-[10px] px-2 py-0.5 rounded-md border border-zinc-700 text-gray-300">
-                    Meeting: {{ clientRowSummary(c).meetingLabel }}
-                    <template v-if="clientRowSummary(c).meetingCount > 1"> ({{ clientRowSummary(c).meetingCount }})</template>
-                  </span>
-                  <span class="text-[10px] px-2 py-0.5 rounded-md border border-zinc-700 text-gray-300">
-                    {{ clientRowSummary(c).saleStageLabel }}
-                  </span>
-                  <span
-                    v-if="clientRowSummary(c).docsMissing"
-                    class="text-[10px] px-2 py-0.5 rounded-md border border-amber-700/60 text-amber-300"
-                    title="CRM stage has no matching quote or invoice in finance"
-                  >
-                    No documents
-                  </span>
-                </div>
-                <p class="text-[10px] text-gray-500 pt-0.5">
-                  Added by {{ clientAddedBy(c) }}
-                  <template v-if="c.ownerAgentId"> · Owner {{ agentName(c.ownerAgentId) }}</template>
-                </p>
-              </div>
-              <span class="material-symbols-outlined text-gray-500 shrink-0">chevron_right</span>
-            </div>
-          </li>
-        </ul>
+                </td>
+                <td class="px-3 py-2.5 align-middle">
+                  <div class="flex flex-col gap-0.5 items-start">
+                    <span class="text-gray-300">{{ clientRowSummary(c).saleStageLabel }}</span>
+                    <span
+                      v-if="clientRowSummary(c).docsMissing"
+                      class="text-[10px] px-1.5 py-0.5 rounded border border-amber-700/60 text-amber-300"
+                      title="CRM stage has no matching quote or invoice in finance"
+                    >
+                      No documents
+                    </span>
+                  </div>
+                </td>
+                <td class="px-3 py-2.5 align-middle text-gray-400 whitespace-nowrap">
+                  {{ sampleCardStatusLabel(c.sampleCardStatus) }}
+                </td>
+                <td class="px-3 py-2.5 align-middle text-gray-400 whitespace-nowrap">
+                  {{ clientRowSummary(c).meetingLabel }}
+                  <template v-if="clientRowSummary(c).meetingCount > 1">
+                    ({{ clientRowSummary(c).meetingCount }})
+                  </template>
+                </td>
+                <td class="px-3 py-2.5 align-middle text-gray-400 max-w-[8rem] truncate">
+                  {{ c.ownerAgentId ? agentName(c.ownerAgentId) : '—' }}
+                </td>
+                <td class="px-3 py-2.5 align-middle text-right">
+                  <span class="material-symbols-outlined text-gray-500 text-[18px]">chevron_right</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <p v-if="!filteredClients.length" class="text-sm text-gray-500 text-center py-8">
           No clients yet. Add a prospect or referral to get started.
         </p>
