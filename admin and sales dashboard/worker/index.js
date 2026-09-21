@@ -5631,10 +5631,10 @@ async function handleApi(request, env, url) {
         : beforeRow?.created_by_email || row.created_by_email
     }
     if (!elevated && gate.staff.agentId) {
+      // Sales agents cannot reassign ownership
       payload.owner_agent_id = beforeRow?.owner_agent_id || gate.staff.agentId
-    } else if (!payload.owner_agent_id && gate.staff.agentId) {
-      payload.owner_agent_id = gate.staff.agentId
     }
+    // Elevated staff: keep owner from body (including null = Unassigned)
     await upsertSalesRow(env, 'sales_clients', payload)
     const saved = await sb(env, 'sales_clients?id=eq.' + encodeURIComponent(row.id) + '&select=*')
     const savedRow = saved?.[0] || payload

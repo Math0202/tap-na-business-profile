@@ -1829,7 +1829,9 @@ async function submitClientForm() {
     const res = await saveClient({
       ...clientForm.value,
       name,
-      ownerAgentId: clientForm.value.ownerAgentId || myAgentId.value || '',
+      ownerAgentId: canManageSalesOrg()
+        ? clientForm.value.ownerAgentId || ''
+        : clientForm.value.ownerAgentId || myAgentId.value || '',
       ...creatorPatch
     })
     if (res && res.ok === false) {
@@ -2059,6 +2061,28 @@ async function quickUpdateClientCreator(agentId) {
     await openClientDetail(updated)
   }
   flash('Added by updated')
+}
+
+async function quickUpdateClientOwner(agentId) {
+  if (!activeClient.value || !canManageSalesOrg()) {
+    flash('Only admins can change the owner agent')
+    return
+  }
+  const res = await saveClient({
+    ...activeClient.value,
+    ownerAgentId: String(agentId || '').trim()
+  })
+  if (res && res.ok === false) {
+    flash(res.error || 'Saved locally — could not sync online')
+    return
+  }
+  await refresh()
+  const updated = clients.value.find((c) => c.id === activeClient.value.id)
+  if (updated) {
+    activeClient.value = updated
+    await openClientDetail(updated)
+  }
+  flash('Owner updated')
 }
 
 async function logoutStaff() {
@@ -4203,17 +4227,36 @@ onMounted(async () => {
               <template v-if="activeClient.phone"> · {{ activeClient.phone }}</template>
             </p>
             <p v-if="activeClient.location" class="text-[11px] text-gray-500 mt-0.5">{{ activeClient.location }}</p>
-            <p class="text-[11px] text-gray-500 mt-1">Added by {{ clientAddedBy(activeClient) }}</p>
-            <div v-if="canManageAgents" class="mt-2">
-              <label class="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Change added by</label>
-              <select
-                class="field-input w-full bg-zinc-950 text-xs max-w-xs"
-                :value="activeClient.createdByAgentId || ''"
-                @change="quickUpdateClientCreator($event.target.value)"
-              >
-                <option value="">Unknown / none</option>
-                <option v-for="a in agents" :key="'detail-creator-' + a.id" :value="a.id">{{ a.name }}</option>
-              </select>
+            <p class="text-[11px] text-gray-500 mt-1">
+              Added by {{ clientAddedBy(activeClient) }}
+              <template v-if="activeClient.ownerAgentId">
+                · Owner {{ agentName(activeClient.ownerAgentId) }}
+              </template>
+              <template v-else> · Owner Unassigned</template>
+            </p>
+            <div v-if="canManageAgents" class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-lg">
+              <div>
+                <label class="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Owner agent</label>
+                <select
+                  class="field-input w-full bg-zinc-950 text-xs"
+                  :value="activeClient.ownerAgentId || ''"
+                  @change="quickUpdateClientOwner($event.target.value)"
+                >
+                  <option value="">Unassigned</option>
+                  <option v-for="a in agents" :key="'detail-owner-' + a.id" :value="a.id">{{ a.name }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Added by</label>
+                <select
+                  class="field-input w-full bg-zinc-950 text-xs"
+                  :value="activeClient.createdByAgentId || ''"
+                  @change="quickUpdateClientCreator($event.target.value)"
+                >
+                  <option value="">Unknown / none</option>
+                  <option v-for="a in agents" :key="'detail-creator-' + a.id" :value="a.id">{{ a.name }}</option>
+                </select>
+              </div>
             </div>
           </div>
           <button type="button" class="text-gray-400" @click="showClientDetail = false">
