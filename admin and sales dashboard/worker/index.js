@@ -5610,16 +5610,27 @@ async function handleApi(request, env, url) {
     const row = salesClientToDb(body, { isNew: !beforeRow, staff: gate.staff })
     if (!row.id) return bad('Client id required')
     if (!row.name) return bad('Prospect name is required')
-    // Preserve creator fields on update; sales agents cannot reassign ownership
+    // Preserve creator on update unless elevated staff reassigns "Added by"
+    const elevated = isSalesElevated(gate.staff)
+    const reassignCreator =
+      elevated && beforeRow && Object.prototype.hasOwnProperty.call(body || {}, 'createdByAgentId')
     const payload = {
       ...row,
       created_at: beforeRow?.created_at || row.created_at || new Date().toISOString(),
-      created_by_agent_id: beforeRow?.created_by_agent_id || row.created_by_agent_id,
-      created_by_user_id: beforeRow?.created_by_user_id || row.created_by_user_id,
-      created_by_name: beforeRow?.created_by_name || row.created_by_name,
-      created_by_email: beforeRow?.created_by_email || row.created_by_email
+      created_by_agent_id: reassignCreator
+        ? row.created_by_agent_id || null
+        : beforeRow?.created_by_agent_id || row.created_by_agent_id,
+      created_by_user_id: reassignCreator
+        ? row.created_by_user_id || ''
+        : beforeRow?.created_by_user_id || row.created_by_user_id,
+      created_by_name: reassignCreator
+        ? row.created_by_name || ''
+        : beforeRow?.created_by_name || row.created_by_name,
+      created_by_email: reassignCreator
+        ? row.created_by_email || ''
+        : beforeRow?.created_by_email || row.created_by_email
     }
-    if (!isSalesElevated(gate.staff) && gate.staff.agentId) {
+    if (!elevated && gate.staff.agentId) {
       payload.owner_agent_id = beforeRow?.owner_agent_id || gate.staff.agentId
     } else if (!payload.owner_agent_id && gate.staff.agentId) {
       payload.owner_agent_id = gate.staff.agentId

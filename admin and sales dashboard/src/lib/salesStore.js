@@ -2712,6 +2712,7 @@ export function clientBelongsToAgent(client, agentId) {
 
 function upsertClientLocal(payload) {
   const list = listClients({ includeDeleted: true })
+  const replaceCreator = payload?.replaceCreator === true
   const next = normalizeClient({
     ...payload,
     id: payload.id || uid('scli'),
@@ -2724,10 +2725,18 @@ function upsertClientLocal(payload) {
       ...next,
       id: list[idx].id,
       createdAt: list[idx].createdAt,
-      createdByAgentId: list[idx].createdByAgentId || next.createdByAgentId,
-      createdByUserId: list[idx].createdByUserId || next.createdByUserId,
-      createdByName: list[idx].createdByName || next.createdByName,
-      createdByEmail: list[idx].createdByEmail || next.createdByEmail
+      createdByAgentId: replaceCreator
+        ? next.createdByAgentId || ''
+        : list[idx].createdByAgentId || next.createdByAgentId,
+      createdByUserId: replaceCreator
+        ? next.createdByUserId || ''
+        : list[idx].createdByUserId || next.createdByUserId,
+      createdByName: replaceCreator
+        ? next.createdByName || ''
+        : list[idx].createdByName || next.createdByName,
+      createdByEmail: replaceCreator
+        ? next.createdByEmail || ''
+        : list[idx].createdByEmail || next.createdByEmail
     }
   } else {
     list.unshift(next)

@@ -246,8 +246,22 @@ function emptyClient() {
     pipelineStatus: 'pending',
     saleStage: 'no_sale',
     ownerAgentId: '',
+    createdByAgentId: '',
     isReferral: false,
     referredByClientId: ''
+  }
+}
+
+/** Resolve creator name/email from an agent id for admin "Added by" edits. */
+function creatorFieldsFromAgentId(agentId) {
+  const aid = String(agentId || '').trim()
+  if (!aid) return { createdByAgentId: '', createdByName: '', createdByEmail: '' }
+  const a =
+    agents.value.find((x) => x.id === aid) || listAgents({ includeDeleted: true }).find((x) => x.id === aid)
+  return {
+    createdByAgentId: aid,
+    createdByName: a?.name || agentName(aid),
+    createdByEmail: a?.email || ''
   }
 }
 
@@ -1774,6 +1788,7 @@ function openEditClient(c) {
     pipelineStatus: c.pipelineStatus || 'pending',
     saleStage: c.saleStage || 'no_sale',
     ownerAgentId: c.ownerAgentId || '',
+    createdByAgentId: c.createdByAgentId || '',
     isReferral: !!c.isReferral,
     referredByClientId: c.referredByClientId || ''
   }
@@ -1800,13 +1815,22 @@ async function submitClientForm() {
   clientSaving.value = true
   try {
     const staff = getStaffUser()
+    const isEdit = !!editingClientId.value
+    const adminReassign = isEdit && canManageSalesOrg()
+    const creatorPatch = adminReassign
+      ? { ...creatorFieldsFromAgentId(clientForm.value.createdByAgentId), replaceCreator: true }
+      : isEdit
+        ? {}
+        : {
+            createdByAgentId: myAgentId.value || '',
+            createdByName: staff?.name || staff?.email || '',
+            createdByEmail: staff?.email || ''
+          }
     const res = await saveClient({
       ...clientForm.value,
       name,
       ownerAgentId: clientForm.value.ownerAgentId || myAgentId.value || '',
-      createdByAgentId: editingClientId.value ? undefined : myAgentId.value || '',
-      createdByName: editingClientId.value ? undefined : staff?.name || staff?.email || '',
-      createdByEmail: editingClientId.value ? undefined : staff?.email || ''
+      ...creatorPatch
     })
     if (res && res.ok === false) {
       flash(res.error || 'Saved locally — could not sync online')
@@ -1814,7 +1838,7 @@ async function submitClientForm() {
     }
     showClientForm.value = false
     await refresh()
-    flash(editingClientId.value ? 'Client updated' : 'Client added')
+    flash(isEdit ? 'Client updated' : 'Client added')
   } finally {
     clientSaving.value = false
   }
@@ -2012,6 +2036,29 @@ async function quickUpdateClientField(field, value) {
     await openClientDetail(updated)
   }
   flash('Updated')
+}
+
+async function quickUpdateClientCreator(agentId) {
+  if (!activeClient.value || !canManageSalesOrg()) {
+    flash('Only admins can change who added a client')
+    return
+  }
+  const res = await saveClient({
+    ...activeClient.value,
+    ...creatorFieldsFromAgentId(agentId),
+    replaceCreator: true
+  })
+  if (res && res.ok === false) {
+    flash(res.error || 'Saved locally — could not sync online')
+    return
+  }
+  await refresh()
+  const updated = clients.value.find((c) => c.id === activeClient.value.id)
+  if (updated) {
+    activeClient.value = updated
+    await openClientDetail(updated)
+  }
+  flash('Added by updated')
 }
 
 async function logoutStaff() {
@@ -4113,6 +4160,14 @@ onMounted(async () => {
             <option v-for="a in agents" :key="a.id" :value="a.id">{{ a.name }}</option>
           </select>
         </div>
+        <div v-if="canManageAgents && editingClientId">
+          <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Added by</label>
+          <select v-model="clientForm.createdByAgentId" class="field-input w-full bg-zinc-950 text-sm">
+            <option value="">Unknown / none</option>
+            <option v-for="a in agents" :key="'creator-' + a.id" :value="a.id">{{ a.name }}</option>
+          </select>
+          <p class="text-[10px] text-gray-500 mt-1">Shown on the Activity log “Client added” entry</p>
+        </div>
         <label class="flex items-center gap-2 text-sm">
           <input v-model="clientForm.isReferral" type="checkbox" class="rounded">
           This is a referral
@@ -4149,6 +4204,17 @@ onMounted(async () => {
             </p>
             <p v-if="activeClient.location" class="text-[11px] text-gray-500 mt-0.5">{{ activeClient.location }}</p>
             <p class="text-[11px] text-gray-500 mt-1">Added by {{ clientAddedBy(activeClient) }}</p>
+            <div v-if="canManageAgents" class="mt-2">
+              <label class="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Change added by</label>
+              <select
+                class="field-input w-full bg-zinc-950 text-xs max-w-xs"
+                :value="activeClient.createdByAgentId || ''"
+                @change="quickUpdateClientCreator($event.target.value)"
+              >
+                <option value="">Unknown / none</option>
+                <option v-for="a in agents" :key="'detail-creator-' + a.id" :value="a.id">{{ a.name }}</option>
+              </select>
+            </div>
           </div>
           <button type="button" class="text-gray-400" @click="showClientDetail = false">
             <span class="material-symbols-outlined">close</span>
