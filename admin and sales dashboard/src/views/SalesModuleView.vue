@@ -2678,7 +2678,7 @@ onMounted(async () => {
           <div class="flex gap-2">
             <button
               type="button"
-              class="px-3.5 py-2.5 rounded-full text-xs font-bold border border-[var(--border)] text-gray-200"
+              class="px-3.5 py-2.5 rounded-full text-xs font-bold bg-zinc-100 text-black hover:bg-white"
               @click="openNewClient({ asReferral: true })"
             >
               Add referral
@@ -4419,32 +4419,22 @@ onMounted(async () => {
           <button
             v-if="canEditCrmClient(activeClient)"
             type="button"
-            class="px-3 py-2 rounded-xl text-xs font-semibold border border-zinc-700 text-sky-300"
+            class="px-4 py-2.5 rounded-full text-xs font-bold bg-white text-black hover:bg-gray-100"
             @click="openEditClient(activeClient)"
           >
             Edit details
           </button>
-          <button type="button" class="px-3 py-2 rounded-xl text-xs font-semibold border border-zinc-700 text-emerald-300" @click="openAddMeeting">
+          <button
+            type="button"
+            class="px-4 py-2.5 rounded-full text-xs font-bold bg-emerald-500 text-black hover:bg-emerald-400"
+            @click="openAddMeeting"
+          >
             Log meeting
-          </button>
-          <button
-            type="button"
-            class="px-3 py-2 rounded-xl text-xs font-semibold border border-zinc-700 text-amber-300"
-            @click="openNewQuoteFromClient(activeClient)"
-          >
-            Create quote
-          </button>
-          <button
-            type="button"
-            class="px-3 py-2 rounded-xl text-xs font-semibold border border-zinc-700 text-violet-300"
-            @click="openNewSaleFromClient(activeClient)"
-          >
-            Create sale / invoice
           </button>
           <button
             v-if="canDeleteCrmClient(activeClient)"
             type="button"
-            class="px-3 py-2 rounded-xl text-xs font-semibold border border-zinc-700 text-red-400 ml-auto"
+            class="px-4 py-2.5 rounded-full text-xs font-bold bg-red-500/90 text-white hover:bg-red-500 ml-auto"
             @click="removeClient(activeClient)"
           >
             Remove
@@ -4453,10 +4443,35 @@ onMounted(async () => {
 
         <!-- Quotes & invoices -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div class="rounded-2xl border border-zinc-800 p-3 space-y-2">
-            <p class="text-[11px] font-bold uppercase tracking-wide text-gray-400">Quotes</p>
-            <div v-if="!clientQuotes.length" class="text-xs text-gray-500">No quotes</div>
-            <div v-for="q in clientQuotes" :key="q.id" class="text-xs flex justify-between gap-2">
+          <div class="rounded-2xl border border-zinc-800 p-3 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <p class="text-[11px] font-bold uppercase tracking-wide text-gray-400">Quotes</p>
+              <button
+                v-if="clientQuotes.length"
+                type="button"
+                class="px-3 py-1.5 rounded-full text-[11px] font-bold bg-white text-black hover:bg-gray-100 shrink-0"
+                @click="openNewQuoteFromClient(activeClient)"
+              >
+                Create quote
+              </button>
+            </div>
+            <div v-if="!clientQuotes.length" class="space-y-2 py-1">
+              <p class="text-xs text-gray-500">No quotes yet</p>
+              <button
+                type="button"
+                class="w-full px-4 py-2.5 rounded-full text-xs font-bold bg-white text-black hover:bg-gray-100"
+                @click="openNewQuoteFromClient(activeClient)"
+              >
+                Create quote
+              </button>
+            </div>
+            <button
+              v-for="q in clientQuotes"
+              :key="q.id"
+              type="button"
+              class="w-full text-left text-xs flex justify-between gap-2 rounded-xl px-2 py-2 -mx-0.5 border border-transparent hover:border-zinc-700 hover:bg-white/[0.04] transition"
+              @click="openEditQuote(q)"
+            >
               <span class="truncate">
                 {{ q.quoteNumber || q.id }}
                 <span v-if="q.agentId" class="text-gray-500"> · {{ agentName(q.agentId) }}</span>
@@ -4465,12 +4480,37 @@ onMounted(async () => {
                 <span class="text-gray-300 tabular-nums">{{ formatIssuanceAmount(q) }}</span>
                 <span class="ml-2" :class="statusClass(q.status)">{{ formatSalesStatus(q.status) }}</span>
               </span>
-            </div>
+            </button>
           </div>
-          <div class="rounded-2xl border border-zinc-800 p-3 space-y-2">
-            <p class="text-[11px] font-bold uppercase tracking-wide text-gray-400">Invoices</p>
-            <div v-if="!clientInvoices.length" class="text-xs text-gray-500">No invoices</div>
-            <div v-for="inv in clientInvoices" :key="inv.id" class="text-xs flex justify-between gap-2">
+          <div class="rounded-2xl border border-zinc-800 p-3 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <p class="text-[11px] font-bold uppercase tracking-wide text-gray-400">Invoices</p>
+              <button
+                v-if="clientInvoices.length"
+                type="button"
+                class="px-3 py-1.5 rounded-full text-[11px] font-bold bg-white text-black hover:bg-gray-100 shrink-0"
+                @click="openNewSaleFromClient(activeClient)"
+              >
+                Create invoice
+              </button>
+            </div>
+            <div v-if="!clientInvoices.length" class="space-y-2 py-1">
+              <p class="text-xs text-gray-500">No invoices yet</p>
+              <button
+                type="button"
+                class="w-full px-4 py-2.5 rounded-full text-xs font-bold bg-white text-black hover:bg-gray-100"
+                @click="openNewSaleFromClient(activeClient)"
+              >
+                Create invoice
+              </button>
+            </div>
+            <button
+              v-for="inv in clientInvoices"
+              :key="inv.id"
+              type="button"
+              class="w-full text-left text-xs flex justify-between gap-2 rounded-xl px-2 py-2 -mx-0.5 border border-transparent hover:border-zinc-700 hover:bg-white/[0.04] transition"
+              @click="openInvoiceModal(inv)"
+            >
               <span class="truncate">
                 {{ inv.invoiceNumber || inv.id }}
                 <span v-if="inv.agentId" class="text-gray-500"> · {{ agentName(inv.agentId) }}</span>
@@ -4479,7 +4519,7 @@ onMounted(async () => {
                 <span class="text-gray-300 tabular-nums">{{ formatIssuanceAmount(inv) }}</span>
                 <span class="ml-2" :class="statusClass(inv.status)">{{ formatSalesStatus(inv.status) }}</span>
               </span>
-            </div>
+            </button>
           </div>
         </div>
 
