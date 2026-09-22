@@ -238,6 +238,36 @@ const showMeetingForm = ref(false)
 /** After creating a quote/sale from CRM, reopen this client detail. */
 const reopenClientIdAfterDoc = ref('')
 
+/** Only one Sales dialog visible at a time. */
+function closeAllDialogs() {
+  showSaleForm.value = false
+  showQuoteForm.value = false
+  showProductForm.value = false
+  showCashForm.value = false
+  showAgentForm.value = false
+  showInvoice.value = false
+  showQuoteEmail.value = false
+  showCardsModal.value = false
+  showClientForm.value = false
+  showClientDetail.value = false
+  showMeetingForm.value = false
+}
+
+function openDialog(name) {
+  closeAllDialogs()
+  if (name === 'sale') showSaleForm.value = true
+  else if (name === 'quote') showQuoteForm.value = true
+  else if (name === 'product') showProductForm.value = true
+  else if (name === 'cash') showCashForm.value = true
+  else if (name === 'agent') showAgentForm.value = true
+  else if (name === 'invoice') showInvoice.value = true
+  else if (name === 'quoteEmail') showQuoteEmail.value = true
+  else if (name === 'cards') showCardsModal.value = true
+  else if (name === 'clientForm') showClientForm.value = true
+  else if (name === 'clientDetail') showClientDetail.value = true
+  else if (name === 'meeting') showMeetingForm.value = true
+}
+
 function emptyClient() {
   return {
     id: '',
@@ -856,13 +886,12 @@ function openNewSale() {
     const active = agents.value.find((a) => a.active)
     if (active) saleForm.value.agentId = active.id
   }
-  showSaleForm.value = true
+  openDialog('sale')
 }
 
 function openNewSaleFromClient(client) {
   if (!client?.id) return
   reopenClientIdAfterDoc.value = client.id
-  showClientDetail.value = false
   openNewSale()
   saleForm.value = {
     ...saleForm.value,
@@ -884,6 +913,7 @@ function openEditSale(s) {
   saleForm.value = {
     id: s.id,
     agentId: s.agentId,
+    clientId: s.clientId || '',
     customerName: s.customerName,
     customerPhone: s.customerPhone,
     customerEmail: s.customerEmail,
@@ -896,7 +926,7 @@ function openEditSale(s) {
     quoteId: s.quoteId || ''
   }
   resetSaleProductPicker(saleForm.value.lines)
-  showSaleForm.value = true
+  openDialog('sale')
 }
 
 function openInvoiceModal(invoice) {
@@ -906,7 +936,7 @@ function openInvoiceModal(invoice) {
   const remaining = invoiceRemaining(invoice)
   invoicePaymentAmount.value = remaining > 0.004 ? String(remaining) : ''
   invoicePaymentDate.value = new Date().toISOString().slice(0, 16)
-  showInvoice.value = true
+  openDialog('invoice')
 }
 
 function openInvoiceForSale(sale) {
@@ -939,7 +969,7 @@ async function refreshSaleCards(sale) {
 
 async function openCardsForSale(sale) {
   cardsSale.value = sale
-  showCardsModal.value = true
+  openDialog('cards')
   await refreshSaleCards(sale)
 }
 
@@ -1034,12 +1064,18 @@ async function submitSale(e) {
       })
     }
     await refresh()
-    await reopenCrmClientIfNeeded()
     if (!wasEdit && result.sale) {
       provisionCardsForSale(result.sale)
       flash(result.ok ? 'Sale recorded · invoice & card codes ready' : 'Sale saved (sync issue — retry refresh)')
-      if (result.invoice) openInvoiceModal(result.invoice)
+      if (result.invoice) {
+        // Prefer invoice dialog alone — reopen CRM after they close it via list
+        reopenClientIdAfterDoc.value = ''
+        openInvoiceModal(result.invoice)
+      } else {
+        await reopenCrmClientIfNeeded()
+      }
     } else {
+      await reopenCrmClientIfNeeded()
       flash(wasEdit ? (result.ok ? 'Sale updated' : 'Sale updated locally') : 'Sale recorded')
     }
   } finally {
@@ -1076,13 +1112,12 @@ function openNewQuote() {
   }
   salesListMode.value = 'quotes'
   tab.value = 'sales'
-  showQuoteForm.value = true
+  openDialog('quote')
 }
 
 function openNewQuoteFromClient(client) {
   if (!client?.id) return
   reopenClientIdAfterDoc.value = client.id
-  showClientDetail.value = false
   openNewQuote()
   quoteForm.value = {
     ...quoteForm.value,
@@ -1111,6 +1146,7 @@ function openEditQuote(q) {
   quoteForm.value = {
     id: q.id,
     agentId: q.agentId,
+    clientId: q.clientId || '',
     customerName: q.customerName,
     customerPhone: q.customerPhone,
     customerEmail: q.customerEmail,
@@ -1121,7 +1157,7 @@ function openEditQuote(q) {
     notes: q.notes
   }
   resetQuoteProductPicker(quoteForm.value.lines)
-  showQuoteForm.value = true
+  openDialog('quote')
 }
 
 function submitQuote(e) {
@@ -1209,7 +1245,7 @@ function openEditProduct(p) {
   }
   productVideoUrl.value = p.video && !String(p.video).startsWith('data:') ? p.video : ''
   productMediaFeedback.value = ''
-  showProductForm.value = true
+  openDialog('product')
 }
 
 function openNewProduct() {
@@ -1221,7 +1257,7 @@ function openNewProduct() {
   productForm.value = emptyProduct()
   productVideoUrl.value = ''
   productMediaFeedback.value = ''
-  showProductForm.value = true
+  openDialog('product')
 }
 
 const productImageInput = ref(null)
@@ -1470,7 +1506,7 @@ async function markInvoicePaid() {
 function openQuoteEmail(q) {
   activeQuote.value = q
   quoteEmailTo.value = q.customerEmail || ''
-  showQuoteEmail.value = true
+  openDialog('quoteEmail')
 }
 
 async function sendActiveQuote() {
@@ -1498,7 +1534,7 @@ function openNewCash() {
   if (isSalesScoped.value && myAgentId.value) {
     cashForm.value.agentId = myAgentId.value
   }
-  showCashForm.value = true
+  openDialog('cash')
 }
 
 function openEditCash(c) {
@@ -1514,7 +1550,7 @@ function openEditCash(c) {
     saleId: c.saleId || '',
     at: toDatetimeLocalValue(c.at)
   }
-  showCashForm.value = true
+  openDialog('cash')
 }
 
 async function submitCash(e) {
@@ -1584,7 +1620,7 @@ function openNewAgent() {
   if (!canManageAgents.value) return
   editingAgentId.value = ''
   agentForm.value = emptyAgent()
-  showAgentForm.value = true
+  openDialog('agent')
 }
 
 function openEditAgent(a) {
@@ -1604,7 +1640,7 @@ function openEditAgent(a) {
     loginEmail: a.loginEmail || a.email || '',
     loginPassword: ''
   }
-  showAgentForm.value = true
+  openDialog('agent')
 }
 
 async function submitAgent(e) {
@@ -1841,7 +1877,7 @@ function openNewClient({ asReferral = false } = {}) {
     ownerAgentId: myAgentId.value || '',
     isReferral: !!asReferral
   }
-  showClientForm.value = true
+  openDialog('clientForm')
 }
 
 function openEditClient(c) {
@@ -1866,7 +1902,7 @@ function openEditClient(c) {
     isReferral: !!c.isReferral,
     referredByClientId: c.referredByClientId || ''
   }
-  showClientForm.value = true
+  openDialog('clientForm')
 }
 
 async function submitClientForm() {
@@ -1941,7 +1977,7 @@ async function removeClient(c) {
 
 async function openClientDetail(c) {
   activeClient.value = c
-  showClientDetail.value = true
+  openDialog('clientDetail')
   clientDetailLoading.value = true
   const scope = { agentId: clientFinanceScope() }
   clientActivity.value = clientActivityLog(c.id, scope)
@@ -2054,11 +2090,11 @@ function openAddMeeting() {
     title: '',
     summary: ''
   }
-  showMeetingForm.value = true
+  openDialog('meeting')
 }
 
 async function submitMeeting() {
-  if (!activeClient.value) return
+  if (!activeClient.value?.id) return
   const staff = getStaffUser()
   const at = meetingForm.value.meetingAt
     ? new Date(meetingForm.value.meetingAt).toISOString()
