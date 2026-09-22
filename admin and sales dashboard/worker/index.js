@@ -938,6 +938,7 @@ function mapSalesClientRow(row) {
       sampleCardStatus: normalizeSampleCardStatus(row.sample_card_status),
       pipelineStatus: normalizePipelineStatus(row.pipeline_status),
       saleStage: normalizeSaleStage(row.sale_stage),
+      visited: row.visited === true,
       ownerAgentId: row.owner_agent_id || '',
       createdByAgentId: row.created_by_agent_id || '',
       createdByUserId: row.created_by_user_id || '',
@@ -969,6 +970,7 @@ function salesClientToDb(body, { isNew = false, staff = null } = {}) {
     sample_card_status: normalizeSampleCardStatus(body?.sampleCardStatus),
     pipeline_status: normalizePipelineStatus(body?.pipelineStatus),
     sale_stage: normalizeSaleStage(body?.saleStage),
+    visited: body?.visited === true,
     owner_agent_id: ownerAgentId,
     created_by_agent_id: createdByAgentId,
     created_by_user_id: isNew
@@ -1189,6 +1191,22 @@ function assertAgentAccess(staff, agentId) {
   if (isSalesElevated(staff)) return null
   if (!staff.agentId) return bad('Sales account is not linked to an agent', 403)
   if (agentId && agentId !== staff.agentId) return bad('Forbidden: other agent data', 403)
+  return null
+}
+
+/** Reject sales sessions linked to a missing/deleted agent (avoids empty CRM). */
+async function assertStaffAgentActive(env, staff) {
+  if (isSalesElevated(staff)) return null
+  const agentId = String(staff.agentId || '').trim()
+  if (!agentId) return bad('Sales account is not linked to an agent', 403)
+  const rows = await sb(
+    env,
+    'sales_agents?id=eq.' + encodeURIComponent(agentId) + '&select=id,deleted&limit=1'
+  )
+  const row = rows?.[0]
+  if (!row || row.deleted === true) {
+    return bad('Sales agent is deactivated. Ask an admin to relink your login.', 403)
+  }
   return null
 }
 
@@ -5017,6 +5035,8 @@ async function handleApi(request, env, url) {
   const isElevated = isSalesElevated(staff)
   const agentId = String(staff.agentId || '').trim()
   if (!isElevated && !agentId) return bad('Sales account is not linked to an agent', 403)
+  const agentActiveErr = await assertStaffAgentActive(env, staff)
+  if (agentActiveErr) return agentActiveErr
 
   // Agents see all teammates for CRM owner labels; finance rows stay scoped below
   const agentQ = isElevated
@@ -5026,9 +5046,7 @@ async function handleApi(request, env, url) {
     ? ''
     : 'deleted=eq.false&agent_id=eq.' + encodeURIComponent(agentId) + '&'
   // CRM contacts are shared across sales agents; finance docs remain agent-scoped
-  const clientsQ = isElevated
-    ? 'sales_clients?select=*&order=updated_at.desc&limit=3000'
-    : 'sales_clients?deleted=eq.false&select=*&order=updated_at.desc&limit=3000'
+  const clientsQ = 'sales_clients?deleted=eq.false&select=*&order=updated_at.desc&limit=3000'
   const [agents, orders, quotes, invoices, cash, clientsRaw, meetingsRaw, notesRaw, issuanceQuotes, issuanceInvoices] =
     await Promise.all([
       sb(env, agentQ),

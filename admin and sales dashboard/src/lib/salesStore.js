@@ -922,7 +922,8 @@ export async function refreshFinanceFromApi() {
       (data.orders && data.orders.length) ||
       (data.quotes && data.quotes.length) ||
       (data.invoices && data.invoices.length) ||
-      (data.cashflow && data.cashflow.length)
+      (data.cashflow && data.cashflow.length) ||
+      (data.clients && data.clients.length)
     )
 
     if (remoteEmpty) {
@@ -931,7 +932,8 @@ export async function refreshFinanceFromApi() {
         localBefore.orders.length ||
         localBefore.quotes.length ||
         localBefore.invoices.length ||
-        localBefore.cashflow.length
+        localBefore.cashflow.length ||
+        localBefore.clients.length
       if (hasLocal) {
         await pushAllLocalFinance()
         const again = await apiSalesFinance()
@@ -2634,6 +2636,7 @@ function normalizeClient(c) {
     sampleCardStatus: SAMPLE_CARD_STATUSES.includes(c.sampleCardStatus) ? c.sampleCardStatus : 'none',
     pipelineStatus: PIPELINE_STATUSES.includes(c.pipelineStatus) ? c.pipelineStatus : 'pending',
     saleStage: SALE_STAGES.includes(c.saleStage) ? c.saleStage : 'no_sale',
+    visited: c.visited === true,
     ownerAgentId: c.ownerAgentId || '',
     createdByAgentId: c.createdByAgentId || '',
     createdByUserId: c.createdByUserId || '',

@@ -64,6 +64,7 @@ import {
   formatSalesStatus,
   cashCategoryLabel,
   listClients,
+  getClient,
   saveClient,
   deleteClient,
   canDeleteCrmClient,
@@ -229,10 +230,13 @@ const crmSampleFilter = ref('all')
 const crmStageFilter = ref('all')
 const crmOwnerFilter = ref('all')
 const crmReferralFilter = ref('all')
+const crmVisitFilter = ref('all')
 const clientForm = ref(emptyClient())
 const noteDraft = ref('')
 const meetingForm = ref({ meetingAt: '', title: '', summary: '' })
 const showMeetingForm = ref(false)
+/** After creating a quote/sale from CRM, reopen this client detail. */
+const reopenClientIdAfterDoc = ref('')
 
 function emptyClient() {
   return {
@@ -245,6 +249,7 @@ function emptyClient() {
     sampleCardStatus: 'none',
     pipelineStatus: 'pending',
     saleStage: 'no_sale',
+    visited: false,
     ownerAgentId: '',
     createdByAgentId: '',
     isReferral: false,
@@ -269,6 +274,7 @@ function emptySale() {
   return {
     id: '',
     agentId: '',
+    clientId: '',
     customerName: '',
     customerPhone: '',
     customerEmail: '',
@@ -288,6 +294,7 @@ function emptyQuote() {
   return {
     id: '',
     agentId: '',
+    clientId: '',
     customerName: '',
     customerPhone: '',
     customerEmail: '',
@@ -852,6 +859,26 @@ function openNewSale() {
   showSaleForm.value = true
 }
 
+function openNewSaleFromClient(client) {
+  if (!client?.id) return
+  reopenClientIdAfterDoc.value = client.id
+  showClientDetail.value = false
+  openNewSale()
+  saleForm.value = {
+    ...saleForm.value,
+    clientId: client.id,
+    customerName: client.name || '',
+    customerEmail: client.email || '',
+    customerPhone: client.phone || '',
+    customerAddress: client.location || '',
+    agentId: isSalesScoped.value
+      ? myAgentId.value
+      : client.ownerAgentId || saleForm.value.agentId
+  }
+  tab.value = 'sales'
+  salesListMode.value = 'orders'
+}
+
 function openEditSale(s) {
   editingSaleId.value = s.id
   saleForm.value = {
@@ -987,6 +1014,7 @@ async function submitSale(e) {
     ...saleForm.value,
     lines,
     id: editingSaleId.value || undefined,
+    clientId: saleForm.value.clientId || undefined,
     agentId: isSalesScoped.value ? myAgentId.value : saleForm.value.agentId,
     soldAt: saleForm.value.soldAt
       ? new Date(saleForm.value.soldAt).toISOString()
@@ -999,7 +1027,14 @@ async function submitSale(e) {
       flash(result.error || 'Sale saved locally, but cloud sync failed')
     }
     showSaleForm.value = false
+    if (saleForm.value.clientId && !wasEdit) {
+      await saveClient({
+        id: saleForm.value.clientId,
+        saleStage: 'invoice'
+      })
+    }
     await refresh()
+    await reopenCrmClientIfNeeded()
     if (!wasEdit && result.sale) {
       provisionCardsForSale(result.sale)
       flash(result.ok ? 'Sale recorded · invoice & card codes ready' : 'Sale saved (sync issue — retry refresh)')
@@ -1044,6 +1079,33 @@ function openNewQuote() {
   showQuoteForm.value = true
 }
 
+function openNewQuoteFromClient(client) {
+  if (!client?.id) return
+  reopenClientIdAfterDoc.value = client.id
+  showClientDetail.value = false
+  openNewQuote()
+  quoteForm.value = {
+    ...quoteForm.value,
+    clientId: client.id,
+    customerName: client.name || '',
+    customerEmail: client.email || '',
+    customerPhone: client.phone || '',
+    customerAddress: client.location || '',
+    agentId: isSalesScoped.value
+      ? myAgentId.value
+      : client.ownerAgentId || quoteForm.value.agentId
+  }
+}
+
+async function reopenCrmClientIfNeeded() {
+  const id = String(reopenClientIdAfterDoc.value || '').trim()
+  reopenClientIdAfterDoc.value = ''
+  if (!id) return
+  tab.value = 'crm'
+  const c = clients.value.find((x) => x.id === id) || getClient(id)
+  if (c) await openClientDetail(c)
+}
+
 function openEditQuote(q) {
   editingQuoteId.value = q.id
   quoteForm.value = {
@@ -1073,18 +1135,27 @@ function submitQuote(e) {
     flash('Add at least one product with quantity')
     return
   }
+  const wasEdit = Boolean(editingQuoteId.value)
+  const clientId = String(quoteForm.value.clientId || '').trim()
   saveQuote({
     ...quoteForm.value,
     lines,
     id: editingQuoteId.value || undefined,
+    clientId: clientId || undefined,
     agentId: isSalesScoped.value ? myAgentId.value : quoteForm.value.agentId,
     validUntil: quoteForm.value.validUntil
       ? new Date(quoteForm.value.validUntil + 'T23:59:59').toISOString()
       : ''
   })
   showQuoteForm.value = false
-  refresh()
-  flash(editingQuoteId.value ? 'Quote updated' : 'Quote created')
+  ;(async () => {
+    if (clientId && !wasEdit) {
+      await saveClient({ id: clientId, saleStage: 'quote' })
+    }
+    await refresh()
+    await reopenCrmClientIfNeeded()
+    flash(wasEdit ? 'Quote updated' : 'Quote created')
+  })()
 }
 
 function removeQuote(id) {
@@ -1656,6 +1727,8 @@ const filteredClients = computed(() => {
   const list = clients.value.filter((c) => {
     if (crmPipelineFilter.value !== 'all' && c.pipelineStatus !== crmPipelineFilter.value) return false
     if (crmSampleFilter.value !== 'all' && c.sampleCardStatus !== crmSampleFilter.value) return false
+    if (crmVisitFilter.value === 'visited' && !c.visited) return false
+    if (crmVisitFilter.value === 'not_visited' && c.visited) return false
     if (crmStageFilter.value !== 'all') {
       // Prefer enriched saleStage from finance refresh (shared issuance); fall back to own docs
       const stage =
@@ -1787,6 +1860,7 @@ function openEditClient(c) {
     sampleCardStatus: c.sampleCardStatus || 'none',
     pipelineStatus: c.pipelineStatus || 'pending',
     saleStage: c.saleStage || 'no_sale',
+    visited: c.visited === true,
     ownerAgentId: c.ownerAgentId || '',
     createdByAgentId: c.createdByAgentId || '',
     isReferral: !!c.isReferral,
@@ -2624,7 +2698,7 @@ onMounted(async () => {
             <span class="material-symbols-outlined field-icon">search</span>
             <input v-model="crmQuery" type="search" class="field-input" placeholder="Search name, company, email, cell, owner…">
           </div>
-          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
             <select v-model="crmPipelineFilter" class="field-input bg-zinc-900 text-xs rounded-2xl">
               <option value="all">All pipeline</option>
               <option value="pending">Pending</option>
@@ -2643,6 +2717,11 @@ onMounted(async () => {
               <option value="accepted">Accepted</option>
               <option value="printed">Printed</option>
             </select>
+            <select v-model="crmVisitFilter" class="field-input bg-zinc-900 text-xs rounded-2xl">
+              <option value="all">All visits</option>
+              <option value="visited">Visited</option>
+              <option value="not_visited">Not visited</option>
+            </select>
             <select v-model="crmReferralFilter" class="field-input bg-zinc-900 text-xs rounded-2xl">
               <option value="all">All sources</option>
               <option value="direct">Direct</option>
@@ -2660,7 +2739,7 @@ onMounted(async () => {
         </div>
 
         <div v-if="filteredClients.length" class="card-item-bg rounded-2xl overflow-x-auto">
-          <table class="w-full min-w-[900px] text-left text-xs border-collapse">
+          <table class="w-full min-w-[1020px] text-left text-xs border-collapse">
             <thead>
               <tr class="border-b border-zinc-700/80 text-[10px] uppercase tracking-wide text-gray-500">
                 <th class="px-3 py-2.5 font-semibold">Name</th>
@@ -2669,6 +2748,7 @@ onMounted(async () => {
                 <th class="px-3 py-2.5 font-semibold">Pipeline</th>
                 <th class="px-3 py-2.5 font-semibold">Stage</th>
                 <th class="px-3 py-2.5 font-semibold">Sample</th>
+                <th class="px-3 py-2.5 font-semibold">Visited</th>
                 <th class="px-3 py-2.5 font-semibold">Meeting</th>
                 <th class="px-3 py-2.5 font-semibold">Owner</th>
                 <th class="px-3 py-2.5 font-semibold w-8"></th>
@@ -2716,6 +2796,14 @@ onMounted(async () => {
                 </td>
                 <td class="px-3 py-2.5 align-middle text-gray-400 whitespace-nowrap">
                   {{ sampleCardStatusLabel(c.sampleCardStatus) }}
+                </td>
+                <td class="px-3 py-2.5 align-middle whitespace-nowrap">
+                  <span
+                    class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
+                    :class="c.visited ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-500/15 text-gray-400'"
+                  >
+                    {{ c.visited ? 'Visited' : 'Not visited' }}
+                  </span>
                 </td>
                 <td class="px-3 py-2.5 align-middle text-gray-400 whitespace-nowrap">
                   {{ clientRowSummary(c).meetingLabel }}
@@ -4169,13 +4257,22 @@ onMounted(async () => {
             </select>
           </div>
         </div>
-        <div>
-          <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Sale stage</label>
-          <select v-model="clientForm.saleStage" class="field-input w-full bg-zinc-950 text-sm">
-            <option value="no_sale">No sale</option>
-            <option value="quote">Quote</option>
-            <option value="invoice">Invoice</option>
-          </select>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Sale stage</label>
+            <select v-model="clientForm.saleStage" class="field-input w-full bg-zinc-950 text-sm">
+              <option value="no_sale">No sale</option>
+              <option value="quote">Quote</option>
+              <option value="invoice">Invoice</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Visited</label>
+            <select v-model="clientForm.visited" class="field-input w-full bg-zinc-950 text-sm">
+              <option :value="false">Not visited</option>
+              <option :value="true">Visited</option>
+            </select>
+          </div>
         </div>
         <div v-if="!isSalesScoped">
           <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Owner agent</label>
@@ -4264,7 +4361,7 @@ onMounted(async () => {
           </button>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
           <div>
             <label class="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Sample card</label>
             <select
@@ -4304,6 +4401,18 @@ onMounted(async () => {
               <option value="invoice">Invoice</option>
             </select>
           </div>
+          <div>
+            <label class="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Visited</label>
+            <select
+              class="field-input w-full bg-zinc-950 text-xs"
+              :value="activeClient.visited ? 'yes' : 'no'"
+              :disabled="!canEditCrmClient(activeClient)"
+              @change="quickUpdateClientField('visited', $event.target.value === 'yes')"
+            >
+              <option value="no">Not visited</option>
+              <option value="yes">Visited</option>
+            </select>
+          </div>
         </div>
 
         <div class="flex flex-wrap gap-2">
@@ -4317,6 +4426,20 @@ onMounted(async () => {
           </button>
           <button type="button" class="px-3 py-2 rounded-xl text-xs font-semibold border border-zinc-700 text-emerald-300" @click="openAddMeeting">
             Log meeting
+          </button>
+          <button
+            type="button"
+            class="px-3 py-2 rounded-xl text-xs font-semibold border border-zinc-700 text-amber-300"
+            @click="openNewQuoteFromClient(activeClient)"
+          >
+            Create quote
+          </button>
+          <button
+            type="button"
+            class="px-3 py-2 rounded-xl text-xs font-semibold border border-zinc-700 text-violet-300"
+            @click="openNewSaleFromClient(activeClient)"
+          >
+            Create sale / invoice
           </button>
           <button
             v-if="canDeleteCrmClient(activeClient)"
