@@ -16,8 +16,9 @@ import {
   isStaffLoggedIn,
   staffLogin
 } from '../lib/staffAuth'
-import { resolvePostLoginPath, profileHomePath, staffHomePath } from '../lib/authRedirect'
+import { navigateAfterLogin, staffHomePath, profileHomePath } from '../lib/authRedirect'
 import { hydrateLinkedCardsFromApi } from '../lib/cardLinkStore'
+import { ADMIN_ORIGIN, isAdminHost, isAppHost, isLocalHost } from '../lib/hosts'
 
 const route = useRoute()
 const router = useRouter()
@@ -45,8 +46,28 @@ onMounted(() => {
   if (route.query.reset === '1') {
     resetMode.value = true
   }
+
+  // Staff must log in on admin.tapnam.com so the session lives there
+  const next = typeof route.query.next === 'string' ? route.query.next : ''
+  const staffIntent = next.startsWith('/admin') || route.path.startsWith('/admin')
+  if (staffIntent && isAppHost() && !isAdminHost() && !isLocalHost()) {
+    const q = new URLSearchParams()
+    if (next) q.set('next', next)
+    if (identifier.value) q.set('email', identifier.value)
+    const qs = q.toString()
+    window.location.replace(`${ADMIN_ORIGIN}/login${qs ? `?${qs}` : ''}`)
+    return
+  }
+
   if ((isLoggedIn() || isStaffLoggedIn()) && route.query.claimed !== '1') {
-    router.replace(currentHome())
+    if (isStaffLoggedIn()) navigateAfterLogin(router, 'staff', { next })
+    else {
+      const p = loadProfile()
+      navigateAfterLogin(router, 'profile', {
+        cardType: isTableBusiness(p) ? 'table' : 'personal',
+        next
+      })
+    }
   }
 })
 
@@ -141,7 +162,7 @@ async function onSubmit(e) {
     if (remote.ok && remote.data?.profile) {
       const p = remote.data.profile
       applyProfileSession(p, passwordHash, remote.data.token)
-      router.push(resolvePostLoginPath('profile', { cardType: p.cardType, next }))
+      navigateAfterLogin(router, 'profile', { cardType: p.cardType, next })
       return
     }
 
@@ -149,7 +170,7 @@ async function onSubmit(e) {
     if (id.includes('@') && pw) {
       const staff = await staffLogin(id, pw)
       if (staff.ok) {
-        router.push(resolvePostLoginPath('staff', { next }))
+        navigateAfterLogin(router, 'staff', { next })
         return
       }
     }
@@ -158,12 +179,10 @@ async function onSubmit(e) {
     const result = login(id, pw)
     if (result.ok) {
       const p = loadProfile()
-      router.push(
-        resolvePostLoginPath('profile', {
-          cardType: isTableBusiness(p) ? 'table' : 'personal',
-          next
-        })
-      )
+      navigateAfterLogin(router, 'profile', {
+        cardType: isTableBusiness(p) ? 'table' : 'personal',
+        next
+      })
       return
     }
 

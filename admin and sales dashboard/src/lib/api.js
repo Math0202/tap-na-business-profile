@@ -1,17 +1,24 @@
 /**
  * tap-na API client — talks to the Worker backend on tapnam.com.
- * Same-origin in production; falls back to https://tapnam.com in local dev.
- * All calls fail soft so the app keeps working offline (localStorage fallback).
+ * Same-origin only on the apex public site; admin.tapnam.com always uses https://tapnam.com.
  */
 
 import { getStaffAccessToken } from './staffAuth'
+import { isAdminHost, isLocalHost } from './hosts'
 
 const TOKEN_KEY = 'tapna.apiToken'
 
-export const API_BASE =
-  typeof window !== 'undefined' && /(^|\.)(tapnam\.com|redirct\.link)$/i.test(window.location.hostname)
-    ? ''
-    : 'https://tapnam.com'
+function resolveApiBase() {
+  if (typeof window === 'undefined') return 'https://tapnam.com'
+  const host = String(window.location.hostname || '').toLowerCase()
+  // Staff SPA on admin subdomain (and local/dev) must hit apex API
+  if (isAdminHost(host) || isLocalHost(host)) return 'https://tapnam.com'
+  // Public apex / legacy hosts stay same-origin
+  if (/(^|\.)(tapnam\.com|redirct\.link)$/i.test(host)) return ''
+  return 'https://tapnam.com'
+}
+
+export const API_BASE = resolveApiBase()
 
 export function getApiToken() {
   try {

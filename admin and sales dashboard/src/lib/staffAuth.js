@@ -3,12 +3,19 @@
  * Public storefront and /c/:serial pages do not use this.
  */
 
+import { isAdminHost, isLocalHost } from './hosts'
+
 const STAFF_KEY = 'tapna_staff_session'
 
-const API_BASE =
-  typeof window !== 'undefined' && /(^|\.)(tapnam\.com|redirct\.link)$/i.test(window.location.hostname)
-    ? ''
-    : 'https://tapnam.com'
+function resolveApiBase() {
+  if (typeof window === 'undefined') return 'https://tapnam.com'
+  const host = String(window.location.hostname || '').toLowerCase()
+  if (isAdminHost(host) || isLocalHost(host)) return 'https://tapnam.com'
+  if (/(^|\.)(tapnam\.com|redirct\.link)$/i.test(host)) return ''
+  return 'https://tapnam.com'
+}
+
+const API_BASE = resolveApiBase()
 
 function readSession() {
   try {

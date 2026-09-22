@@ -3257,8 +3257,8 @@ async function sendPasswordResetEmail(env, { email, name, password }) {
 async function sendSalesAgentCredentialsEmail(env, { email, name, password }) {
   const display = String(name || '').trim() || 'there'
   const loginEmail = String(email || '').trim().toLowerCase()
-  const loginUrl = 'https://tapnam.com/login?next=/admin/sales'
-  const salesUrl = 'https://tapnam.com/admin/sales'
+  const loginUrl = 'https://admin.tapnam.com/login?next=/admin/sales'
+  const salesUrl = 'https://admin.tapnam.com/admin/sales'
   const html = transactionalShell({
     title: 'Your sales agent login',
     intro: `Hi ${display}, your tap-na sales account is ready.`,

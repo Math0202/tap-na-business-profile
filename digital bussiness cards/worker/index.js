@@ -3257,8 +3257,8 @@ async function sendPasswordResetEmail(env, { email, name, password }) {
 async function sendSalesAgentCredentialsEmail(env, { email, name, password }) {
   const display = String(name || '').trim() || 'there'
   const loginEmail = String(email || '').trim().toLowerCase()
-  const loginUrl = 'https://tapnam.com/login?next=/admin/sales'
-  const salesUrl = 'https://tapnam.com/admin/sales'
+  const loginUrl = 'https://admin.tapnam.com/login?next=/admin/sales'
+  const salesUrl = 'https://admin.tapnam.com/admin/sales'
   const html = transactionalShell({
     title: 'Your sales agent login',
     intro: `Hi ${display}, your tap-na sales account is ready.`,
@@ -9092,6 +9092,29 @@ export default {
       next.protocol = 'https:'
       next.hostname = 'tapnam.com'
       return Response.redirect(next.toString(), 301)
+    }
+
+    // Staff UI lives on admin.tapnam.com — never serve /admin* from apex
+    const path = url.pathname
+    if (path === '/admin' || path.startsWith('/admin/')) {
+      const next = new URL(request.url)
+      next.protocol = 'https:'
+      next.hostname = 'admin.tapnam.com'
+      return Response.redirect(next.toString(), 302)
+    }
+    // Staff deep-link login must happen on admin host (localStorage session)
+    if (path === '/login' || path === '/admin/login' || path === '/shop/login') {
+      const nextParam = String(url.searchParams.get('next') || '')
+      if (path === '/admin/login' || nextParam.startsWith('/admin')) {
+        const next = new URL(request.url)
+        next.protocol = 'https:'
+        next.hostname = 'admin.tapnam.com'
+        next.pathname = '/login'
+        if (path === '/admin/login' && !nextParam) {
+          next.searchParams.set('next', '/admin')
+        }
+        return Response.redirect(next.toString(), 302)
+      }
     }
 
     if (url.pathname.startsWith('/api/')) {

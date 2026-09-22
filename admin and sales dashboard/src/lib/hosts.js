@@ -1,11 +1,13 @@
 /**
  * Public hosts for tap-na.
- * Everything lives on https://tapnam.com (no card-type subdomains).
- * Legacy redirct.link / cards.* hosts redirect to tapnam.com in the Worker.
+ * Public cards / shop stay on https://tapnam.com.
+ * Staff admin + sales live on https://admin.tapnam.com.
  */
 
 export const TABLE_ORIGIN = 'https://tapnam.com'
 export const PERSONAL_ORIGIN = 'https://tapnam.com'
+/** Staff dashboard (admin + sales) origin */
+export const ADMIN_ORIGIN = 'https://admin.tapnam.com'
 
 export const LEGACY_TABLE_ORIGIN = 'https://redirct.link'
 export const LEGACY_PERSONAL_ORIGIN = 'https://redirct.link'
@@ -18,11 +20,21 @@ export function isLocalHost(hostname = currentHostname()) {
   return hostname === 'localhost' || hostname === '127.0.0.1'
 }
 
+export function isAdminHost(hostname = currentHostname()) {
+  return String(hostname || '').toLowerCase() === 'admin.tapnam.com'
+}
+
 export function isAppHost(hostname = currentHostname()) {
   return /(^|\.)(tapnam\.com|redirct\.link)$/i.test(String(hostname || ''))
 }
 
-/** @deprecated Subdomains are no longer used — always false. */
+/** Absolute staff URL on the admin subdomain (path must start with /). */
+export function adminAppUrl(path = '/admin') {
+  const p = String(path || '/admin')
+  return ADMIN_ORIGIN + (p.startsWith('/') ? p : `/${p}`)
+}
+
+/** @deprecated Subdomains are no longer used for cards — always false. */
 export function isPersonalHost(_hostname = currentHostname()) {
   return false
 }
@@ -51,3 +63,4 @@ export function publicOriginForKind(_kind) {
 export function publicOriginForCardType(cardType) {
   return publicOriginForKind(cardType === 'personal' ? 'personal' : 'table')
 }
+
