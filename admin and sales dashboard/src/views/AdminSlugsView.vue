@@ -429,6 +429,22 @@ async function generateSlugs() {
       includeVcard,
       contacts
     })
+    if (includeVcard && !remote.ok) {
+      flash(remote.error || 'Could not save contact details — try again')
+      return
+    }
+    if (includeVcard && remote.ok) {
+      const remoteCards = Array.isArray(remote.data?.cards) ? remote.data.cards : []
+      const missingContact = remoteCards.findIndex((c) => !String(c.contactName || c.contact_name || '').trim())
+      if (!remoteCards.length || missingContact >= 0) {
+        flash(
+          missingContact >= 0
+            ? `Server did not save contact details for card ${missingContact + 1}`
+            : 'Server did not return cards with contact details'
+        )
+        return
+      }
+    }
     const batchId = remote.data?.batch?.id || intoId || ''
     const batchName =
       remote.data?.batch?.name ||
@@ -445,6 +461,9 @@ async function generateSlugs() {
         batchName,
         remoteCards: remote.data.cards
       })
+    } else if (includeVcard) {
+      flash(remote.error || 'Could not save contact details — try again')
+      return
     } else {
       created = provisionSlugs({
         count,
@@ -801,8 +820,12 @@ async function saveContactEdit({ clear = false } = {}) {
       contactEmail: contact.email,
       contactTitle: contact.title
     }
-    updateCard(serial, updated)
     const res = await apiUpdateCardContact(serial, contact)
+    if (!res.ok) {
+      flash(res.error || 'Could not save contact details — try again')
+      return
+    }
+    updateCard(serial, updated)
     const idx = allSlugs.value.findIndex((c) => c.serial === serial)
     if (idx >= 0) {
       allSlugs.value[idx] = {
@@ -811,11 +834,7 @@ async function saveContactEdit({ clear = false } = {}) {
       }
     }
     await refreshSlugQrs([idx >= 0 ? allSlugs.value[idx] : updated])
-    if (!res.ok) {
-      flash(`Saved locally (${res.error || 'offline'})`)
-    } else {
-      flash(clear ? 'Contact details cleared — QR is profile URL again' : 'Contact details saved — QR updated')
-    }
+    flash(clear ? 'Contact details cleared — QR is profile URL again' : 'Contact details saved — QR updated')
     if (clear) {
       contactEditForm.value = { name: '', company: '', phone: '', email: '', title: '' }
       await refreshContactEditPreview()
