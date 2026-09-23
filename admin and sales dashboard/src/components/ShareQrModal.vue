@@ -1,15 +1,24 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import QRCode from 'qrcode'
+import { buildShareVcardPayload } from '../lib/shareHelpers'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
   title: { type: String, default: 'Share Profile' },
-  copyText: { type: String, default: 'Scan this QR code to open this digital business card.' },
+  copyText: {
+    type: String,
+    default: 'Scan to save this contact (includes profile link).'
+  },
   shareText: { type: String, default: 'Check out this digital business card:' },
   shareUrl: { type: String, default: '' },
   fileBaseName: { type: String, default: 'Profile' },
-  copyLinkLabel: { type: String, default: 'Copy profile link' }
+  copyLinkLabel: { type: String, default: 'Copy profile link' },
+  contactName: { type: String, default: '' },
+  contactCompany: { type: String, default: '' },
+  contactPhone: { type: String, default: '' },
+  contactEmail: { type: String, default: '' },
+  contactTitle: { type: String, default: '' }
 })
 
 const emit = defineEmits(['close', 'share', 'copy', 'download'])
@@ -23,10 +32,34 @@ const url = computed(() => {
   return ''
 })
 
+const hasContact = computed(
+  () =>
+    !!(
+      props.contactName ||
+      props.contactCompany ||
+      props.contactPhone ||
+      props.contactEmail
+    )
+)
+
+const qrPayload = computed(() => {
+  if (!hasContact.value) return url.value
+  return (
+    buildShareVcardPayload({
+      name: props.contactName,
+      company: props.contactCompany,
+      phone: props.contactPhone,
+      email: props.contactEmail,
+      title: props.contactTitle,
+      profileUrl: url.value
+    }) || url.value
+  )
+})
+
 async function renderQr() {
-  if (!url.value) return
+  if (!qrPayload.value) return
   try {
-    qrDataUrl.value = await QRCode.toDataURL(url.value, {
+    qrDataUrl.value = await QRCode.toDataURL(qrPayload.value, {
       width: 200,
       margin: 1,
       color: { dark: '#121212', light: '#ffffff' },
@@ -38,7 +71,7 @@ async function renderQr() {
 }
 
 watch(
-  () => [props.open, url.value],
+  () => [props.open, qrPayload.value],
   ([isOpen]) => {
     if (isOpen) {
       copyLabel.value = props.copyLinkLabel
@@ -96,11 +129,13 @@ function openShareChannel(channel) {
       break
     case 'native':
       if (navigator.share) {
-        navigator.share({
-          title: props.fileBaseName + ' — Digital Business Card',
-          text: props.shareText,
-          url: url.value
-        }).catch(() => {})
+        navigator
+          .share({
+            title: props.fileBaseName + ' — Digital Business Card',
+            text: props.shareText,
+            url: url.value
+          })
+          .catch(() => {})
         return
       }
       copyLink()

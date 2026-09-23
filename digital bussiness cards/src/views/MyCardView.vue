@@ -131,7 +131,7 @@ const shareCopy = computed(() => {
   if (deleted.value) return 'Create a profile first, then share your QR code.'
   if (disabled.value) return 'This card is disabled. Enable it in Profile to share again.'
   const first = (profile.value.name || '').split(' ')[0] || 'this'
-  return `Scan this QR code to open ${first}'s digital business card.`
+  return `Scan to save ${first}'s contact (includes profile link).`
 })
 
 const shareSlug = computed(() => {
@@ -765,6 +765,11 @@ watch(() => route.path, () => {
       :share-text="shareText"
       :share-url="shareUrl"
       :file-base-name="profile.name || 'Profile'"
+      :contact-name="profile.name || ''"
+      :contact-company="profile.company || ''"
+      :contact-phone="profile.phone || ''"
+      :contact-email="profile.email || ''"
+      :contact-title="profile.title || ''"
       @close="shareOpen = false"
       @share="onShareChannel"
       @copy="onCopyLink"

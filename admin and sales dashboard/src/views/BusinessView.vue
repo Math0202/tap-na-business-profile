@@ -54,7 +54,7 @@ const actionsBlocked = computed(() => disabled.value || deleted.value)
 const shareCopy = computed(() => {
   if (deleted.value) return 'Create a venue profile first, then share your QR code.'
   if (disabled.value) return 'This venue is disabled. Enable it in Profile to share again.'
-  return 'Scan this QR code to open ' + name.value + '.'
+  return 'Scan to save ' + name.value + ' as a contact (includes profile link).'
 })
 
 const shareSlug = computed(() => {
@@ -481,6 +481,11 @@ onUnmounted(() => {
       :share-url="shareUrl"
       :file-base-name="venueName"
       copy-link-label="Copy venue link"
+      :contact-name="profile.name || venueName"
+      :contact-company="profile.company || venueName"
+      :contact-phone="profile.phone || ''"
+      :contact-email="profile.email || ''"
+      :contact-title="profile.title || ''"
       @close="shareOpen = false"
       @share="onShareChannel"
       @copy="onCopyLink"

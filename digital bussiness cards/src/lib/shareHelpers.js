@@ -99,6 +99,67 @@ export function downloadVcard(filename, lines) {
   URL.revokeObjectURL(link.href)
 }
 
+/** Escape text values for vCard 3.0 (RFC 6350 / 2426). */
+function escapeVcardValue(value) {
+  return String(value || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\r?\n/g, '\\n')
+}
+
+/**
+ * Compact vCard 3.0 for Share QR (no PHOTO — keeps QR scannable).
+ * Includes FN, ORG, TEL, EMAIL, and URL (profile share link).
+ */
+export function buildShareVcardPayload({
+  name = '',
+  company = '',
+  phone = '',
+  email = '',
+  profileUrl = '',
+  title = ''
+} = {}) {
+  const fullName = String(name || '').trim()
+  const parts = fullName.split(/\s+/).filter(Boolean)
+  const first = parts[0] || ''
+  const last = parts.slice(1).join(' ') || ''
+  const org = String(company || '').trim()
+  const tel = String(phone || '').trim()
+  const mail = String(email || '').trim()
+  const url = String(profileUrl || '').trim()
+  const jobTitle = String(title || '').trim()
+
+  if (!fullName && !org && !tel && !mail && !url) return ''
+
+  const lines = [
+    'BEGIN:VCARD',
+    'VERSION:3.0',
+    fullName ? `FN:${escapeVcardValue(fullName)}` : '',
+    fullName ? `N:${escapeVcardValue(last)};${escapeVcardValue(first)};;;` : '',
+    jobTitle ? `TITLE:${escapeVcardValue(jobTitle)}` : '',
+    org ? `ORG:${escapeVcardValue(org)}` : '',
+    tel ? `TEL;TYPE=CELL:${escapeVcardValue(tel)}` : '',
+    mail ? `EMAIL:${escapeVcardValue(mail)}` : '',
+    url ? `URL:${escapeVcardValue(url)}` : '',
+    'END:VCARD'
+  ]
+  return lines.filter(Boolean).join('\r\n')
+}
+
+/** Build Share QR vCard from a profile-like object + share URL. */
+export function buildShareVcardFromProfile(profile, shareUrl) {
+  const p = profile && typeof profile === 'object' ? profile : {}
+  return buildShareVcardPayload({
+    name: p.name || '',
+    company: p.company || '',
+    phone: p.phone || '',
+    email: p.email || '',
+    title: p.title || '',
+    profileUrl: shareUrl || ''
+  })
+}
+
 export function pageUrl() {
   return window.location.href.split('#')[0]
 }
