@@ -195,7 +195,12 @@ function normalizeCard(c) {
     deletedAt: c.deletedAt || '',
     deletedBy: c.deletedBy || '',
     batchId: String(c.batchId || c.batch_id || '').trim(),
-    batchName: String(c.batchName || c.batch_name || '').trim()
+    batchName: String(c.batchName || c.batch_name || '').trim(),
+    contactName: String(c.contactName || c.contact_name || '').trim(),
+    contactCompany: String(c.contactCompany || c.contact_company || '').trim(),
+    contactPhone: String(c.contactPhone || c.contact_phone || '').trim(),
+    contactEmail: String(c.contactEmail || c.contact_email || '').trim(),
+    contactTitle: String(c.contactTitle || c.contact_title || '').trim()
   }
 }
 
@@ -383,7 +388,12 @@ export function provisionSlugs({
         saleId,
         customerName,
         batchId: remote.batchId || batchId || '',
-        batchName: remote.batchName || batchName || ''
+        batchName: remote.batchName || batchName || '',
+        contactName: remote.contactName || remote.contact_name || '',
+        contactCompany: remote.contactCompany || remote.contact_company || '',
+        contactPhone: remote.contactPhone || remote.contact_phone || '',
+        contactEmail: remote.contactEmail || remote.contact_email || '',
+        contactTitle: remote.contactTitle || remote.contact_title || ''
       })
       created.push(card)
       list.unshift(card)

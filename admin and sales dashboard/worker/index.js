@@ -3724,8 +3724,46 @@ async function handleApi(request, env, url) {
         ? normalizePersonalType(body?.personalType || body?.personal_type || 'business')
         : ''
     const batchName = String(body?.name || body?.batchName || '').trim().slice(0, 80)
+    const existingBatchId = String(body?.batchId || body?.batch_id || '').trim()
+    const includeVcard = body?.includeVcard === true || body?.include_vcard === true
+    const rawContacts = Array.isArray(body?.contacts) ? body.contacts : []
+    const normalizeContact = (raw) => {
+      const c = raw && typeof raw === 'object' ? raw : {}
+      return {
+        name: String(c.name || c.contactName || c.contact_name || '').trim().slice(0, 160),
+        company: String(c.company || c.contactCompany || c.contact_company || '').trim().slice(0, 160),
+        phone: String(c.phone || c.contactPhone || c.contact_phone || '').trim().slice(0, 80),
+        email: String(c.email || c.contactEmail || c.contact_email || '').trim().toLowerCase().slice(0, 160),
+        title: String(c.title || c.contactTitle || c.contact_title || '').trim().slice(0, 120)
+      }
+    }
+    if (includeVcard) {
+      if (rawContacts.length !== count) {
+        return bad(`When including contact details, provide exactly ${count} contact row(s)`)
+      }
+      for (let i = 0; i < rawContacts.length; i++) {
+        const c = normalizeContact(rawContacts[i])
+        if (!c.name) return bad(`Contact name is required for card ${i + 1}`)
+      }
+    }
     let batch = null
-    if (batchName) {
+    if (existingBatchId) {
+      const rows = await sb(
+        env,
+        `card_batches?id=eq.${encodeURIComponent(existingBatchId)}&select=id,name,kind,personal_type,created_by,created_at`
+      )
+      const row = rows?.[0]
+      if (!row) return bad('Folder not found', 404)
+      batch = {
+        id: row.id,
+        name: row.name || '',
+        kind: row.kind === 'personal' ? 'personal' : 'table',
+        personalType:
+          row.kind === 'personal' ? normalizePersonalType(row.personal_type || '') : '',
+        createdBy: row.created_by || '',
+        createdAt: row.created_at || ''
+      }
+    } else if (batchName) {
       const batchId = uid('batch')
       const createdAt = new Date().toISOString()
       await sb(env, 'card_batches', {
@@ -3753,13 +3791,19 @@ async function handleApi(request, env, url) {
     for (let i = 0; i < count; i++) {
       const id = uid('card')
       const slug = await uniqueSlug(env)
+      const contact = includeVcard ? normalizeContact(rawContacts[i]) : normalizeContact({})
       const cardBody = {
         id,
         slug,
         kind,
         personal_type: personalType,
         product_id: body?.productId || '',
-        status: 'unlinked'
+        status: 'unlinked',
+        contact_name: contact.name,
+        contact_company: contact.company,
+        contact_phone: contact.phone,
+        contact_email: contact.email,
+        contact_title: contact.title
       }
       if (batch?.id) cardBody.batch_id = batch.id
       await sb(env, 'cards', {
@@ -3774,11 +3818,16 @@ async function handleApi(request, env, url) {
         personalType,
         batchId: batch?.id || '',
         batchName: batch?.name || '',
+        contactName: contact.name,
+        contactCompany: contact.company,
+        contactPhone: contact.phone,
+        contactEmail: contact.email,
+        contactTitle: contact.title,
         nfcUrl: cardPageUrl(slug, kind, url.origin),
         qrUrl: `${cardPageUrl(slug, kind, url.origin)}?via=qr`
       })
     }
-    return json({ ok: true, batch, cards: created })
+    return json({ ok: true, batch, cards: created, includeVcard: !!includeVcard })
   }
 
   const cardMatch = pathname.match(/^\/api\/cards\/([^/]+)$/)
@@ -5901,6 +5950,98 @@ async function handleApi(request, env, url) {
     return json({ ok: true, id, deleted: true })
   }
 
+  if (pathname === '/api/admin/card-batches' && method === 'POST') {
+    const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
+    if (gate.error) return gate.error
+    const body = await readJson(request)
+    const name = String(body?.name || '').trim().slice(0, 80)
+    if (!name) return bad('Folder name is required')
+    const kind = body?.kind === 'personal' ? 'personal' : 'table'
+    const personalType =
+      kind === 'personal'
+        ? normalizePersonalType(body?.personalType || body?.personal_type || 'business')
+        : ''
+    const batchId = uid('batch')
+    const createdAt = new Date().toISOString()
+    await sb(env, 'card_batches', {
+      method: 'POST',
+      body: {
+        id: batchId,
+        name,
+        kind,
+        personal_type: personalType,
+        created_by: gate.staff?.email || gate.staff?.id || '',
+        created_at: createdAt
+      },
+      prefer: 'return=minimal'
+    })
+    return json({
+      ok: true,
+      batch: {
+        id: batchId,
+        name,
+        kind,
+        personalType,
+        createdBy: gate.staff?.email || gate.staff?.id || '',
+        createdAt
+      }
+    })
+  }
+
+  if (pathname === '/api/admin/cards/move-batch' && method === 'POST') {
+    const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
+    if (gate.error) return gate.error
+    const body = await readJson(request)
+    const slugs = Array.isArray(body?.slugs)
+      ? [...new Set(body.slugs.map((s) => String(s || '').trim()).filter(Boolean))]
+      : []
+    if (!slugs.length) return bad('Select at least one card ID')
+    if (slugs.length > 500) return bad('Too many card IDs (max 500)')
+    const rawBatchId = body?.batchId === null || body?.batchId === ''
+      ? ''
+      : String(body?.batchId || body?.batch_id || '').trim()
+    let batch = null
+    if (rawBatchId) {
+      const rows = await sb(
+        env,
+        `card_batches?id=eq.${encodeURIComponent(rawBatchId)}&select=id,name,kind,personal_type,created_by,created_at`
+      )
+      const row = rows?.[0]
+      if (!row) return bad('Folder not found', 404)
+      batch = {
+        id: row.id,
+        name: row.name || '',
+        kind: row.kind === 'personal' ? 'personal' : 'table',
+        personalType:
+          row.kind === 'personal' ? normalizePersonalType(row.personal_type || '') : '',
+        createdBy: row.created_by || '',
+        createdAt: row.created_at || ''
+      }
+    }
+    let moved = 0
+    const failed = []
+    for (const slug of slugs) {
+      try {
+        const updated = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}`, {
+          method: 'PATCH',
+          body: { batch_id: batch?.id || null },
+          prefer: 'return=representation'
+        })
+        if (updated?.length) moved += 1
+        else failed.push(slug)
+      } catch {
+        failed.push(slug)
+      }
+    }
+    return json({
+      ok: true,
+      batch,
+      moved,
+      failedCount: failed.length,
+      failed
+    })
+  }
+
   const batchRenameMatch = pathname.match(/^\/api\/admin\/card-batches\/([^/]+)$/)
   if (batchRenameMatch && method === 'PATCH') {
     const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
@@ -5962,7 +6103,7 @@ async function handleApi(request, env, url) {
     if (gate.error) return gate.error
     const [profiles, cards, batches] = await Promise.all([
       sb(env, 'profiles?deleted=eq.false&select=id,card_type,name,title,company,email,phone,address,avatar,logo,disabled,created_at,updated_at&order=created_at.desc&limit=500'),
-      sb(env, 'cards?select=slug,kind,personal_type,product_id,status,profile_id,linked_at,created_at,deleted,deleted_at,deleted_by,batch_id&order=created_at.desc&limit=2000'),
+      sb(env, 'cards?select=slug,kind,personal_type,product_id,status,profile_id,linked_at,created_at,deleted,deleted_at,deleted_by,batch_id,contact_name,contact_company,contact_phone,contact_email,contact_title&order=created_at.desc&limit=2000'),
       sb(env, 'card_batches?select=id,name,kind,personal_type,created_by,created_at&order=created_at.desc&limit=500')
     ])
     const cardsByProfile = {}
@@ -6028,7 +6169,12 @@ async function handleApi(request, env, url) {
         deletedAt: c.deleted_at || '',
         deletedBy: c.deleted_by || '',
         batchId: c.batch_id || '',
-        batchName: c.batch_id ? batchNameById[c.batch_id] || '' : ''
+        batchName: c.batch_id ? batchNameById[c.batch_id] || '' : '',
+        contactName: c.contact_name || '',
+        contactCompany: c.contact_company || '',
+        contactPhone: c.contact_phone || '',
+        contactEmail: c.contact_email || '',
+        contactTitle: c.contact_title || ''
       }))
     })
   }

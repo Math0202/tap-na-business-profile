@@ -194,20 +194,54 @@ export function apiUpdateCardKind(slug, kind, { personalType } = {}) {
   })
 }
 
-/** Provision a batch of blank cards (admin). Optional `name` creates a named folder. */
+/** Provision a batch of blank cards (admin). Optional `name` or `batchId` places them in a folder.
+ * When `includeVcard` is true, `contacts` must have exactly `count` rows (name required each).
+ */
 export function apiProvisionCards({
   count = 1,
   kind = 'table',
   productId = '',
   personalType = '',
-  name = ''
+  name = '',
+  batchId = '',
+  includeVcard = false,
+  contacts = null
 } = {}) {
   const body = { count, kind, productId, personalType }
+  const existingBatchId = String(batchId || '').trim()
   const batchName = String(name || '').trim()
-  if (batchName) body.name = batchName
+  if (existingBatchId) body.batchId = existingBatchId
+  else if (batchName) body.name = batchName
+  if (includeVcard) {
+    body.includeVcard = true
+    body.contacts = Array.isArray(contacts) ? contacts : []
+  }
   return request('/api/cards/provision', {
     method: 'POST',
     body
+  })
+}
+
+/** Create an empty named slug folder / batch */
+export function apiCreateCardBatch({ name = '', kind = 'table', personalType = '' } = {}) {
+  return request('/api/admin/card-batches', {
+    method: 'POST',
+    body: {
+      name: String(name || '').trim(),
+      kind,
+      personalType
+    }
+  })
+}
+
+/** Move card IDs into a folder (`batchId`) or ungroup (`batchId: null` / `''`) */
+export function apiMoveCardsToBatch(slugs, batchId = null) {
+  return request('/api/admin/cards/move-batch', {
+    method: 'POST',
+    body: {
+      slugs: Array.isArray(slugs) ? slugs : [],
+      batchId: batchId == null || batchId === '' ? null : String(batchId)
+    }
   })
 }
 

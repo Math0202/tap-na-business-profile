@@ -201,7 +201,16 @@ export async function composeCardFront({ logoBw = null, layout, personalType } =
   return canvasToBlob(canvas)
 }
 
-export async function composeCardBack({ serial, kind, personalType } = {}) {
+export async function composeCardBack({
+  serial,
+  kind,
+  personalType,
+  contactName = '',
+  contactCompany = '',
+  contactPhone = '',
+  contactEmail = '',
+  contactTitle = ''
+} = {}) {
   const code = String(serial || '').trim()
   if (!code) throw new Error('Missing slug')
 
@@ -213,7 +222,18 @@ export async function composeCardBack({ serial, kind, personalType } = {}) {
   ctx.drawImage(tpl, 0, 0)
 
   const qrSize = Math.round(canvas.width * QR_ZONE.sizePct)
-  const qrBlob = await buildLabeledQrPng(code, { kind })
+  const qrBlob = await buildLabeledQrPng(
+    {
+      serial: code,
+      kind,
+      contactName,
+      contactCompany,
+      contactPhone,
+      contactEmail,
+      contactTitle
+    },
+    { kind }
+  )
   const qrUrl = URL.createObjectURL(qrBlob)
   try {
     const qrImg = await loadImage(qrUrl)
@@ -334,7 +354,12 @@ export async function downloadCardsZip(
     const backBlob = await composeCardBack({
       serial: slug,
       kind: list[i].kind,
-      personalType: variant
+      personalType: variant,
+      contactName: list[i].contactName || '',
+      contactCompany: list[i].contactCompany || '',
+      contactPhone: list[i].contactPhone || '',
+      contactEmail: list[i].contactEmail || '',
+      contactTitle: list[i].contactTitle || ''
     })
     zip.file(`${base}-back.png`, backBlob)
     onProgress?.(i + 1, list.length)
@@ -403,7 +428,12 @@ export async function downloadCardsPdf(
     const backBlob = await composeCardBack({
       serial: slug,
       kind: list[i].kind,
-      personalType: variant
+      personalType: variant,
+      contactName: list[i].contactName || '',
+      contactCompany: list[i].contactCompany || '',
+      contactPhone: list[i].contactPhone || '',
+      contactEmail: list[i].contactEmail || '',
+      contactTitle: list[i].contactTitle || ''
     })
     const backDataUrl = await blobToDataUrl(backBlob)
     doc.addImage(backDataUrl, 'PNG', 0, 0, wMm, hMm)

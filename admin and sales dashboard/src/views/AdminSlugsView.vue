@@ -28,9 +28,15 @@ import {
   apiBulkDeleteCards,
   apiRestoreCard,
   apiUpdateCardKind,
-  apiRenameCardBatch
+  apiRenameCardBatch,
+  apiCreateCardBatch,
+  apiMoveCardsToBatch
 } from '../lib/api'
-import { downloadSlugQrPng, downloadSlugsQrZip } from '../lib/qrExport'
+import {
+  downloadSlugQrPng,
+  downloadSlugsQrZip,
+  cardQrPayload
+} from '../lib/qrExport'
 import CardExportPreviewModal from '../components/CardExportPreviewModal.vue'
 import { CARD_ID_HINT, CARD_ID_LABEL } from '../lib/cardLabels'
 import QRCode from 'qrcode'
@@ -39,6 +45,7 @@ const query = ref('')
 const toast = ref('')
 const allSlugs = ref([])
 const allBatches = ref([])
+const allProfiles = ref([])
 const slugQrMap = ref({})
 const slugStatsSummary = ref({ total: 0, linked: 0, unlinked: 0, deleted: 0 })
 const slugFilter = ref('all') // all | linked | unlinked | deleted
@@ -46,11 +53,15 @@ const slugKindFilter = ref('all')
 const slugGenerating = ref(false)
 const slugExporting = ref(false)
 const slugDeleting = ref(false)
+const slugMoving = ref(false)
+const folderCreating = ref(false)
 const exportMenuOpen = ref(false)
+const moveMenuOpen = ref(false)
 const cardExportOpen = ref(false)
 const cardExportRows = ref([])
 const cardExportZipName = ref('')
-const slugForm = ref({ count: 10, kind: 'table', personalType: 'business', name: '' })
+const slugForm = ref({ count: 10, kind: 'table', personalType: 'business', name: '', includeVcard: false })
+const contactRows = ref([])
 const dateFrom = ref('')
 const dateTo = ref('')
 const selected = ref(new Set())
@@ -58,10 +69,30 @@ const selectMode = ref(false)
 const expandedFolders = ref(new Set())
 const renamingId = ref('')
 const renameDraft = ref('')
+const generateIntoBatchId = ref('')
 
 const UNGROUPED_KEY = '__ungrouped__'
 const kindOptions = computed(() => Object.values(CARD_KINDS))
 const personalTypeOptions = computed(() => Object.values(PERSONAL_TYPES))
+
+function emptyContactRow() {
+  return { name: '', company: '', phone: '', email: '', title: '' }
+}
+
+function syncContactRows(count) {
+  const n = Math.min(200, Math.max(0, Number(count) || 0))
+  const next = contactRows.value.slice(0, n)
+  while (next.length < n) next.push(emptyContactRow())
+  contactRows.value = next
+}
+
+watch(
+  () => [slugForm.value.count, slugForm.value.includeVcard],
+  ([count, include]) => {
+    if (include) syncContactRows(count)
+  },
+  { immediate: true }
+)
 
 function dayStamp(iso) {
   if (!iso) return ''
@@ -99,7 +130,7 @@ const filteredSlugs = computed(() => {
     if (from && (!created || created < from)) return false
     if (to && (!created || created > to)) return false
     if (!q) return true
-    return [c.serial, c.kind, c.productName, c.customerName, c.profileName, c.saleId, c.profileId, c.batchName]
+    return [c.serial, c.kind, c.productName, c.customerName, c.profileName, c.saleId, c.profileId, c.batchName, c.contactName, c.contactCompany, c.contactEmail, c.contactPhone]
       .join(' ')
       .toLowerCase()
       .includes(q)
@@ -126,6 +157,14 @@ function groupTypeLabel(group) {
   return `${kind} · ${personalTypeLabel(group.personalType)}`
 }
 
+const profilesById = computed(() =>
+  Object.fromEntries((allProfiles.value || []).map((p) => [p.id, p]))
+)
+
+const namedFolders = computed(() =>
+  [...(allBatches.value || [])].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+)
+
 const slugGroups = computed(() => {
   const metaById = Object.fromEntries((allBatches.value || []).map((b) => [b.id, b]))
   const buckets = new Map()
@@ -133,6 +172,10 @@ const slugGroups = computed(() => {
     const id = card.batchId || ''
     if (!buckets.has(id)) buckets.set(id, [])
     buckets.get(id).push(card)
+  }
+  // Keep empty folders visible even when no cards match filters.
+  for (const b of allBatches.value || []) {
+    if (b?.id && !buckets.has(b.id)) buckets.set(b.id, [])
   }
   const named = []
   let ungrouped = null
@@ -151,7 +194,7 @@ const slugGroups = computed(() => {
     const meta = metaById[id] || {}
     named.push({
       id,
-      name: meta.name || slugs[0]?.batchName || 'Untitled batch',
+      name: meta.name || slugs[0]?.batchName || 'Untitled folder',
       kind: meta.kind || slugs[0]?.kind || 'table',
       personalType: meta.personalType || slugs[0]?.personalType || '',
       createdAt: meta.createdAt || slugs[0]?.createdAt || '',
@@ -161,6 +204,10 @@ const slugGroups = computed(() => {
   named.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
   return ungrouped ? [...named, ungrouped] : named
 })
+
+function linkedInGroup(group) {
+  return (group?.slugs || []).filter((c) => c.profileId && !c.deleted)
+}
 
 function isFolderExpanded(id) {
   return expandedFolders.value.has(folderKey(id))
@@ -268,9 +315,15 @@ async function refresh() {
     deletedBy: c.deletedBy || '',
     batchId: c.batchId || local[c.slug]?.batchId || '',
     batchName: c.batchName || local[c.slug]?.batchName || '',
+    contactName: c.contactName || local[c.slug]?.contactName || '',
+    contactCompany: c.contactCompany || local[c.slug]?.contactCompany || '',
+    contactPhone: c.contactPhone || local[c.slug]?.contactPhone || '',
+    contactEmail: c.contactEmail || local[c.slug]?.contactEmail || '',
+    contactTitle: c.contactTitle || local[c.slug]?.contactTitle || '',
     status: c.deleted ? 'disabled' : (c.profileId ? 'linked' : 'unlinked')
   }))
   allBatches.value = Array.isArray(res.data.batches) ? res.data.batches : []
+  allProfiles.value = Array.isArray(res.data.profiles) ? res.data.profiles : []
   applyStats(allSlugs.value)
 }
 
@@ -284,11 +337,16 @@ async function refreshSlugQrs(cards = filteredSlugs.value.slice(0, 60)) {
   const map = { ...slugQrMap.value }
   await Promise.all(
     cards.map(async (c) => {
-      if (map[c.serial]) return
       try {
-        map[c.serial] = await QRCode.toDataURL(cardQrUrl(c.serial, undefined, { kind: c.kind }), {
+        const payload = cardQrPayload(c)
+        if (!payload) {
+          map[c.serial] = ''
+          return
+        }
+        map[c.serial] = await QRCode.toDataURL(payload, {
           width: 160,
           margin: 1,
+          errorCorrectionLevel: c.contactName ? 'M' : 'M',
           color: { dark: '#0a0a0a', light: '#ffffff' }
         })
       } catch {
@@ -312,19 +370,49 @@ function copyCardUrl(serial, via) {
 }
 
 async function generateSlugs() {
+  const intoId = String(generateIntoBatchId.value || '').trim()
   const name = String(slugForm.value.name || '').trim().slice(0, 80)
-  if (!name) {
-    flash('Name this batch first')
+  if (!intoId && !name) {
+    flash('Name this folder first, or pick an existing folder')
     return
   }
   const count = Math.min(200, Math.max(1, Number(slugForm.value.count) || 1))
   const kind = slugForm.value.kind === 'personal' ? 'personal' : 'table'
   const personalType = kind === 'personal' ? slugForm.value.personalType || 'business' : ''
+  const includeVcard = slugForm.value.includeVcard === true
+  let contacts = null
+  if (includeVcard) {
+    syncContactRows(count)
+    contacts = contactRows.value.slice(0, count).map((row) => ({
+      name: String(row.name || '').trim(),
+      company: String(row.company || '').trim(),
+      phone: String(row.phone || '').trim(),
+      email: String(row.email || '').trim(),
+      title: String(row.title || '').trim()
+    }))
+    const missing = contacts.findIndex((c) => !c.name)
+    if (missing >= 0) {
+      flash(`Enter a full name for card ${missing + 1}`)
+      return
+    }
+  }
   slugGenerating.value = true
   try {
-    const remote = await apiProvisionCards({ count, kind, personalType, name })
-    const batchId = remote.data?.batch?.id || ''
-    const batchName = remote.data?.batch?.name || name
+    const remote = await apiProvisionCards({
+      count,
+      kind,
+      personalType,
+      name: intoId ? '' : name,
+      batchId: intoId,
+      includeVcard,
+      contacts
+    })
+    const batchId = remote.data?.batch?.id || intoId || ''
+    const batchName =
+      remote.data?.batch?.name ||
+      name ||
+      namedFolders.value.find((b) => b.id === intoId)?.name ||
+      ''
     let created
     if (remote.ok && remote.data?.cards?.length) {
       created = provisionSlugs({
@@ -348,10 +436,83 @@ async function generateSlugs() {
     expandFolder(created[0]?.batchId || batchId)
     await refresh()
     await refreshSlugQrs(created)
-    flash(`${created.length} ${CARD_ID_LABEL.toLowerCase()}${created.length === 1 ? '' : 's'} in “${batchName}”`)
+    const vcardNote = includeVcard ? ' with contact QRs' : ''
+    flash(`${created.length} ${CARD_ID_LABEL.toLowerCase()}${created.length === 1 ? '' : 's'} in “${batchName}”${vcardNote}`)
+    if (includeVcard) {
+      slugForm.value.includeVcard = false
+      contactRows.value = []
+    }
   } finally {
     slugGenerating.value = false
   }
+}
+
+async function createEmptyFolder() {
+  const name = String(slugForm.value.name || '').trim().slice(0, 80)
+  if (!name) {
+    flash('Enter a folder name first')
+    return
+  }
+  const kind = slugForm.value.kind === 'personal' ? 'personal' : 'table'
+  const personalType = kind === 'personal' ? slugForm.value.personalType || 'business' : ''
+  folderCreating.value = true
+  try {
+    const res = await apiCreateCardBatch({ name, kind, personalType })
+    if (!res.ok || !res.data?.batch?.id) {
+      flash(res.error || 'Could not create folder')
+      return
+    }
+    allBatches.value = [res.data.batch, ...allBatches.value.filter((b) => b.id !== res.data.batch.id)]
+    expandFolder(res.data.batch.id)
+    generateIntoBatchId.value = res.data.batch.id
+    slugForm.value.name = ''
+    await refresh()
+    flash(`Folder “${res.data.batch.name}” created`)
+  } finally {
+    folderCreating.value = false
+  }
+}
+
+async function moveSelectedToFolder(batchId) {
+  const serials = [...selected.value]
+  if (!serials.length) {
+    flash(`Select at least one ${CARD_ID_LABEL.toLowerCase()} to move`)
+    return
+  }
+  moveMenuOpen.value = false
+  slugMoving.value = true
+  try {
+    const targetId = batchId == null || batchId === '' ? null : String(batchId)
+    const batchMeta = targetId ? namedFolders.value.find((b) => b.id === targetId) : null
+    const batchName = batchMeta?.name || ''
+    for (const serial of serials) {
+      updateCard(serial, { batchId: targetId || '', batchName })
+    }
+    const res = await apiMoveCardsToBatch(serials, targetId)
+    clearSelection()
+    selectMode.value = false
+    if (targetId) expandFolder(targetId)
+    await refresh()
+    if (res.ok) {
+      const failed = Number(res.data?.failedCount || 0)
+      const n = res.data?.moved || serials.length
+      const label = batchName || 'Ungrouped'
+      flash(failed ? `Moved ${n}; ${failed} failed` : `Moved ${n} to “${label}”`)
+    } else {
+      flash(`Moved locally (${res.error || 'offline'})`)
+    }
+  } finally {
+    slugMoving.value = false
+  }
+}
+
+function useFolderForGenerate(group) {
+  if (!group?.id) return
+  generateIntoBatchId.value = group.id
+  slugForm.value.name = group.name || ''
+  if (group.kind) slugForm.value.kind = group.kind
+  if (group.personalType) slugForm.value.personalType = group.personalType
+  flash(`New ${CARD_ID_LABEL.toLowerCase()}s will go into “${group.name}”`)
 }
 
 async function saveRename(group) {
@@ -495,10 +656,14 @@ function exportGroupCsv(group) {
   downloadCsv(group?.slugs || [], `tap-na-slugs-${safeFilePart(group?.name)}-${new Date().toISOString().slice(0, 10)}.csv`)
 }
 
-async function downloadOneSlugQr(serial) {
+async function downloadOneSlugQr(cardOrSerial) {
   try {
-    await downloadSlugQrPng(serial)
-    flash(`Downloaded ${serial}.png`)
+    const card =
+      typeof cardOrSerial === 'string'
+        ? allSlugs.value.find((c) => c.serial === cardOrSerial) || { serial: cardOrSerial }
+        : cardOrSerial
+    await downloadSlugQrPng(card)
+    flash(`Downloaded ${card.contactName ? card.contactName.split(/\s+/)[0] : card.serial}.png`)
   } catch (err) {
     flash(err?.message || 'QR download failed')
   }
@@ -622,7 +787,7 @@ watch(filteredSlugs, (rows) => {
           <div>
             <p class="text-sm font-semibold">Generate {{ CARD_ID_LABEL.toLowerCase() }}s</p>
             <p class="text-[11px] text-gray-500 mt-0.5">
-              Name the batch, then pick personal or table. For personal cards, choose the tier.
+              Name the folder, then pick personal or table. Optionally include contact details so each QR encodes a vCard.
             </p>
           </div>
           <div class="field-shell !rounded-2xl">
@@ -632,8 +797,14 @@ watch(filteredSlugs, (rows) => {
               maxlength="80"
               class="field-input"
               placeholder="Windhoek Aug 16 — 20 Professional"
-              aria-label="Batch name"
+              aria-label="Folder name"
             >
+          </div>
+          <div v-if="namedFolders.length" class="field-shell !rounded-2xl">
+            <select v-model="generateIntoBatchId" class="field-input" aria-label="Add into existing folder">
+              <option value="">New folder from name above</option>
+              <option v-for="b in namedFolders" :key="b.id" :value="b.id">Add into: {{ b.name }}</option>
+            </select>
           </div>
           <div class="flex flex-wrap gap-2">
             <button
@@ -663,6 +834,48 @@ watch(filteredSlugs, (rows) => {
               {{ t.label }}
             </button>
           </div>
+          <label class="flex items-start gap-3 cursor-pointer select-none">
+            <input
+              v-model="slugForm.includeVcard"
+              type="checkbox"
+              class="mt-1 rounded border-zinc-600 bg-transparent"
+            >
+            <span>
+              <span class="text-xs font-semibold text-gray-200">Include contact details (vCard) in each QR</span>
+              <span class="block text-[11px] text-gray-500 mt-0.5">
+                You’ll enter name, company, phone, and email for every card. Downloads use the first name as the label instead of the slug.
+              </span>
+            </span>
+          </label>
+          <div
+            v-if="slugForm.includeVcard"
+            class="max-h-80 overflow-y-auto space-y-3 rounded-2xl border border-[var(--border)] p-3"
+          >
+            <div
+              v-for="(row, idx) in contactRows"
+              :key="'contact-' + idx"
+              class="space-y-2 pb-3 border-b border-[var(--border)] last:border-0 last:pb-0"
+            >
+              <p class="text-[11px] font-semibold text-gray-400">Card {{ idx + 1 }}</p>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div class="field-shell !rounded-xl">
+                  <input v-model="row.name" type="text" class="field-input" placeholder="Full name *" :aria-label="`Full name card ${idx + 1}`">
+                </div>
+                <div class="field-shell !rounded-xl">
+                  <input v-model="row.company" type="text" class="field-input" placeholder="Company" :aria-label="`Company card ${idx + 1}`">
+                </div>
+                <div class="field-shell !rounded-xl">
+                  <input v-model="row.phone" type="tel" class="field-input" placeholder="Phone" :aria-label="`Phone card ${idx + 1}`">
+                </div>
+                <div class="field-shell !rounded-xl">
+                  <input v-model="row.email" type="email" class="field-input" placeholder="Email" :aria-label="`Email card ${idx + 1}`">
+                </div>
+                <div class="field-shell !rounded-xl sm:col-span-2">
+                  <input v-model="row.title" type="text" class="field-input" placeholder="Title (optional)" :aria-label="`Title card ${idx + 1}`">
+                </div>
+              </div>
+            </div>
+          </div>
           <div class="flex flex-col sm:flex-row gap-2">
             <div class="field-shell sm:w-28 !rounded-2xl">
               <input v-model="slugForm.count" type="number" min="1" max="200" class="field-input" :aria-label="`How many ${CARD_ID_LABEL.toLowerCase()}s`">
@@ -674,6 +887,14 @@ watch(filteredSlugs, (rows) => {
               @click="generateSlugs"
             >
               {{ slugGenerating ? 'Generating…' : 'Generate' }}
+            </button>
+            <button
+              type="button"
+              class="px-4 py-3 rounded-full text-xs font-semibold border border-[var(--border)] text-gray-200 shrink-0 disabled:opacity-50"
+              :disabled="folderCreating || slugGenerating"
+              @click="createEmptyFolder"
+            >
+              {{ folderCreating ? 'Creating…' : 'Create folder only' }}
             </button>
           </div>
         </div>
@@ -794,6 +1015,37 @@ watch(filteredSlugs, (rows) => {
             >
               {{ slugDeleting ? 'Deleting…' : `Delete selected (${selectedCount})` }}
             </button>
+            <div v-if="selectedCount" class="relative">
+              <button
+                type="button"
+                class="px-3 py-1.5 rounded-full text-[11px] font-semibold border border-[var(--border)] text-gray-200 disabled:opacity-50"
+                :disabled="slugMoving"
+                @click="moveMenuOpen = !moveMenuOpen"
+              >
+                {{ slugMoving ? 'Moving…' : 'Move to folder' }}
+              </button>
+              <div
+                v-if="moveMenuOpen"
+                class="absolute left-0 top-full mt-2 z-40 min-w-[220px] rounded-2xl border border-[var(--border)] bg-zinc-950 shadow-xl p-2 space-y-1 max-h-64 overflow-y-auto"
+              >
+                <button
+                  type="button"
+                  class="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-gray-200 hover:bg-white/10"
+                  @click="moveSelectedToFolder(null)"
+                >
+                  Ungrouped
+                </button>
+                <button
+                  v-for="b in namedFolders"
+                  :key="'move-' + b.id"
+                  type="button"
+                  class="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-gray-200 hover:bg-white/10"
+                  @click="moveSelectedToFolder(b.id)"
+                >
+                  {{ b.name }}
+                </button>
+              </div>
+            </div>
           </template>
         </div>
 
@@ -848,6 +1100,23 @@ watch(filteredSlugs, (rows) => {
                     >
                       Rename
                     </button>
+                    <button
+                      v-if="group.id"
+                      type="button"
+                      class="text-[11px] font-semibold text-sky-300 hover:text-sky-200"
+                      @click="useFolderForGenerate(group)"
+                    >
+                      Generate into
+                    </button>
+                    <button
+                      v-if="group.id && selectedCount"
+                      type="button"
+                      class="text-[11px] font-semibold text-emerald-300 hover:text-emerald-200 disabled:opacity-50"
+                      :disabled="slugMoving"
+                      @click="moveSelectedToFolder(group.id)"
+                    >
+                      Add selected
+                    </button>
                     <button type="button" class="text-[11px] font-semibold text-gray-300 hover:text-white" @click="selectAllInGroup(group)">
                       Select all
                     </button>
@@ -874,6 +1143,9 @@ watch(filteredSlugs, (rows) => {
               </div>
             </div>
             <ul v-if="isFolderExpanded(group.id)" class="space-y-2 p-2 pt-0">
+          <li v-if="!group.slugs.length" class="px-4 py-6 text-center text-[12px] text-gray-500">
+            Empty folder — generate into it or move selected {{ CARD_ID_LABEL.toLowerCase() }}s here.
+          </li>
           <li
             v-for="c in group.slugs"
             :key="c.serial"
@@ -950,6 +1222,10 @@ watch(filteredSlugs, (rows) => {
                   Linked {{ formatSlugDate(c.linkedAt) }}
                 </template>
               </p>
+              <p v-if="c.contactName" class="text-[11px] text-sky-300/90 mt-0.5">
+                Contact · {{ c.contactName }}
+                <template v-if="c.contactCompany"> · {{ c.contactCompany }}</template>
+              </p>
               <p v-if="c.profileName" class="text-[11px] text-gray-500 mt-0.5">→ {{ c.profileName }}</p>
               <p v-if="c.customerName" class="text-[11px] text-gray-500">{{ c.customerName }}</p>
               <div class="flex flex-wrap gap-x-3 gap-y-1 mt-2">
@@ -961,7 +1237,7 @@ watch(filteredSlugs, (rows) => {
                 >
                   {{ isSelected(c.serial) ? 'Selected' : 'Select' }}
                 </button>
-                <button type="button" class="text-[11px] font-semibold text-gray-300 hover:text-white" @click="downloadOneSlugQr(c.serial)">
+                <button type="button" class="text-[11px] font-semibold text-gray-300 hover:text-white" @click="downloadOneSlugQr(c)">
                   Download PNG
                 </button>
                 <button type="button" class="text-[11px] font-semibold text-gray-300 hover:text-white" @click="copyCardUrl(c.serial)">
