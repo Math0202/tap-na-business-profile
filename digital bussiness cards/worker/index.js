@@ -9307,27 +9307,22 @@ export default {
       return Response.redirect(next.toString(), 301)
     }
 
-    // Staff UI lives on admin.tapnam.com — never serve /admin* from apex
+    // Staff app UI lives on admin.tapnam.com — but /admin/login stays on apex so
+    // card owners can use the same login form; only confirmed staff are sent to admin.
     const path = url.pathname
+    if (path === '/admin/login') {
+      const next = new URL(request.url)
+      next.protocol = 'https:'
+      next.hostname = 'tapnam.com'
+      next.pathname = '/login'
+      if (!next.searchParams.get('next')) next.searchParams.set('next', '/admin')
+      return Response.redirect(next.toString(), 302)
+    }
     if (path === '/admin' || path.startsWith('/admin/')) {
       const next = new URL(request.url)
       next.protocol = 'https:'
       next.hostname = 'admin.tapnam.com'
       return Response.redirect(next.toString(), 302)
-    }
-    // Staff deep-link login must happen on admin host (localStorage session)
-    if (path === '/login' || path === '/admin/login' || path === '/shop/login') {
-      const nextParam = String(url.searchParams.get('next') || '')
-      if (path === '/admin/login' || nextParam.startsWith('/admin')) {
-        const next = new URL(request.url)
-        next.protocol = 'https:'
-        next.hostname = 'admin.tapnam.com'
-        next.pathname = '/login'
-        if (path === '/admin/login' && !nextParam) {
-          next.searchParams.set('next', '/admin')
-        }
-        return Response.redirect(next.toString(), 302)
-      }
     }
 
     if (url.pathname.startsWith('/api/')) {

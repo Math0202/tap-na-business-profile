@@ -16,8 +16,9 @@ export function staffHomePath() {
 }
 
 /**
- * Navigate after login — staff always end on admin.tapnam.com (except localhost).
- * Card owners on the admin host are bounced back to apex.
+ * Navigate after login.
+ * - Staff: after successful staffLogin, land on admin.tapnam.com (except localhost).
+ * - Profile / card owners: stay on (or return to) the public apex domain.
  */
 export function navigateAfterLogin(router, kind, opts = {}) {
   const path = resolvePostLoginPath(kind, opts)
@@ -37,7 +38,7 @@ export function navigateAfterLogin(router, kind, opts = {}) {
     window.location.assign(adminAppUrl(path))
     return
   }
-  // Profile / card owner
+  // Profile / card owner — never stay on the staff host
   if (isAdminHost()) {
     window.location.assign(TABLE_ORIGIN + path)
     return

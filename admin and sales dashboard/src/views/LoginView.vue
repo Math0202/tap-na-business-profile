@@ -18,7 +18,6 @@ import {
 } from '../lib/staffAuth'
 import { navigateAfterLogin, staffHomePath, profileHomePath } from '../lib/authRedirect'
 import { hydrateLinkedCardsFromApi } from '../lib/cardLinkStore'
-import { ADMIN_ORIGIN, isAdminHost, isAppHost, isLocalHost } from '../lib/hosts'
 
 const route = useRoute()
 const router = useRouter()
@@ -47,17 +46,9 @@ onMounted(() => {
     resetMode.value = true
   }
 
-  // Staff must log in on admin.tapnam.com so the session lives there
+  // Stay on this host until login succeeds. Profile owners remain on apex;
+  // staff are sent to admin.tapnam.com only after staffLogin confirms them.
   const next = typeof route.query.next === 'string' ? route.query.next : ''
-  const staffIntent = next.startsWith('/admin') || route.path.startsWith('/admin')
-  if (staffIntent && isAppHost() && !isAdminHost() && !isLocalHost()) {
-    const q = new URLSearchParams()
-    if (next) q.set('next', next)
-    if (identifier.value) q.set('email', identifier.value)
-    const qs = q.toString()
-    window.location.replace(`${ADMIN_ORIGIN}/login${qs ? `?${qs}` : ''}`)
-    return
-  }
 
   if ((isLoggedIn() || isStaffLoggedIn()) && route.query.claimed !== '1') {
     if (isStaffLoggedIn()) navigateAfterLogin(router, 'staff', { next })
