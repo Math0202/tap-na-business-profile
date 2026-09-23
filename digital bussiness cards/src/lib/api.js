@@ -194,6 +194,20 @@ export function apiUpdateCardKind(slug, kind, { personalType } = {}) {
   })
 }
 
+/** Update provisional contact details encoded in the CardTap QR vCard */
+export function apiUpdateCardContact(slug, contact = {}) {
+  return request(`/api/cards/${encodeURIComponent(slug)}`, {
+    method: 'PATCH',
+    body: {
+      contactName: String(contact.name ?? contact.contactName ?? '').trim(),
+      contactCompany: String(contact.company ?? contact.contactCompany ?? '').trim(),
+      contactPhone: String(contact.phone ?? contact.contactPhone ?? '').trim(),
+      contactEmail: String(contact.email ?? contact.contactEmail ?? '').trim(),
+      contactTitle: String(contact.title ?? contact.contactTitle ?? '').trim()
+    }
+  })
+}
+
 /** Provision a batch of blank cards (admin). Optional `name` or `batchId` places them in a folder.
  * When `includeVcard` is true, `contacts` must have exactly `count` rows (name required each).
  */

@@ -3965,42 +3965,98 @@ async function handleApi(request, env, url) {
 
   const kindMatch = pathname.match(/^\/api\/cards\/([^/]+)$/)
   if (kindMatch && method === 'PATCH') {
-    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
     if (gate.error) return gate.error
     const slug = decodeURIComponent(kindMatch[1])
     const body = await readJson(request)
-    const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&select=id,kind,profile_id`)
+    const cards = await sb(
+      env,
+      `cards?slug=eq.${encodeURIComponent(slug)}&select=id,kind,personal_type,profile_id,contact_name,contact_company,contact_phone,contact_email,contact_title`
+    )
     if (!cards?.length) return bad('Card not found', 404)
     const cardRow = cards[0]
-    const kind =
-      body?.kind !== undefined
-        ? body.kind === 'personal'
-          ? 'personal'
-          : 'table'
-        : cardRow.kind === 'personal'
-          ? 'personal'
-          : 'table'
-    const patch = { kind }
-    if (kind === 'personal') {
-      patch.personal_type = normalizePersonalType(
-        body?.personalType || body?.personal_type || 'business'
-      )
-    } else {
-      patch.personal_type = ''
+    const patch = {}
+
+    if (body?.kind !== undefined) {
+      const kind = body.kind === 'personal' ? 'personal' : 'table'
+      patch.kind = kind
+      if (kind === 'personal') {
+        patch.personal_type = normalizePersonalType(
+          body?.personalType || body?.personal_type || cardRow.personal_type || 'business'
+        )
+      } else {
+        patch.personal_type = ''
+      }
     }
+
+    const contactKeys = [
+      ['contactName', 'contact_name', 'name'],
+      ['contactCompany', 'contact_company', 'company'],
+      ['contactPhone', 'contact_phone', 'phone'],
+      ['contactEmail', 'contact_email', 'email'],
+      ['contactTitle', 'contact_title', 'title']
+    ]
+    let touchingContact = false
+    for (const [camel, snake, short] of contactKeys) {
+      if (body?.[camel] !== undefined || body?.[snake] !== undefined || body?.[short] !== undefined) {
+        touchingContact = true
+        break
+      }
+    }
+    if (touchingContact) {
+      const pick = (camel, snake, short, max) => {
+        const raw =
+          body?.[camel] !== undefined
+            ? body[camel]
+            : body?.[snake] !== undefined
+              ? body[snake]
+              : body?.[short]
+        return String(raw ?? '').trim().slice(0, max)
+      }
+      patch.contact_name = pick('contactName', 'contact_name', 'name', 160)
+      patch.contact_company = pick('contactCompany', 'contact_company', 'company', 160)
+      patch.contact_phone = pick('contactPhone', 'contact_phone', 'phone', 80)
+      patch.contact_email = pick('contactEmail', 'contact_email', 'email', 160).toLowerCase()
+      patch.contact_title = pick('contactTitle', 'contact_title', 'title', 120)
+    }
+
+    if (!Object.keys(patch).length) return bad('Nothing to update')
+
     await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}`, {
       method: 'PATCH',
       body: patch,
       prefer: 'return=minimal'
     })
-    if (kind === 'personal' && patch.personal_type) {
+    if (patch.kind === 'personal' && patch.personal_type) {
       await syncPersonalTypeAcrossDb(env, {
         profileId: cardRow.profile_id || '',
         cardId: cardRow.id,
         personalType: patch.personal_type
       })
     }
-    return json({ ok: true, slug, kind, personalType: patch.personal_type || '' })
+    const kindOut =
+      patch.kind || (cardRow.kind === 'personal' ? 'personal' : 'table')
+    const personalOut =
+      patch.personal_type !== undefined
+        ? patch.personal_type
+        : cardRow.kind === 'personal'
+          ? normalizePersonalType(cardRow.personal_type || 'business')
+          : ''
+    return json({
+      ok: true,
+      slug,
+      kind: kindOut,
+      personalType: personalOut || '',
+      contactName: patch.contact_name !== undefined ? patch.contact_name : cardRow.contact_name || '',
+      contactCompany:
+        patch.contact_company !== undefined ? patch.contact_company : cardRow.contact_company || '',
+      contactPhone:
+        patch.contact_phone !== undefined ? patch.contact_phone : cardRow.contact_phone || '',
+      contactEmail:
+        patch.contact_email !== undefined ? patch.contact_email : cardRow.contact_email || '',
+      contactTitle:
+        patch.contact_title !== undefined ? patch.contact_title : cardRow.contact_title || ''
+    })
   }
 
   if (pathname === '/api/cards/bulk-delete' && method === 'POST') {

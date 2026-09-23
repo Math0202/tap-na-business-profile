@@ -30,7 +30,8 @@ import {
   apiUpdateCardKind,
   apiRenameCardBatch,
   apiCreateCardBatch,
-  apiMoveCardsToBatch
+  apiMoveCardsToBatch,
+  apiUpdateCardContact
 } from '../lib/api'
 import {
   downloadSlugQrPng,
@@ -39,6 +40,7 @@ import {
 } from '../lib/qrExport'
 import CardExportPreviewModal from '../components/CardExportPreviewModal.vue'
 import { CARD_ID_HINT, CARD_ID_LABEL } from '../lib/cardLabels'
+import { profileShareUrl } from '../lib/shareHelpers'
 import QRCode from 'qrcode'
 
 const query = ref('')
@@ -70,6 +72,26 @@ const expandedFolders = ref(new Set())
 const renamingId = ref('')
 const renameDraft = ref('')
 const generateIntoBatchId = ref('')
+const contactEditOpen = ref(false)
+const contactEditSaving = ref(false)
+const contactEditSerial = ref('')
+const contactEditForm = ref({
+  name: '',
+  company: '',
+  phone: '',
+  email: '',
+  title: ''
+})
+const contactEditPreview = ref('')
+const contactEditKind = ref('table')
+
+const contactEditProfileUrl = computed(() => {
+  const serial = contactEditSerial.value
+  if (!serial) return ''
+  return profileShareUrl(serial, undefined, {
+    cardType: contactEditKind.value === 'table' ? 'table' : 'personal'
+  })
+})
 
 const UNGROUPED_KEY = '__ungrouped__'
 const kindOptions = computed(() => Object.values(CARD_KINDS))
@@ -669,6 +691,119 @@ async function downloadOneSlugQr(cardOrSerial) {
   }
 }
 
+function openContactEdit(card) {
+  if (!card?.serial || card.deleted) return
+  contactEditSerial.value = card.serial
+  contactEditKind.value = card.kind || 'table'
+  contactEditForm.value = {
+    name: card.contactName || '',
+    company: card.contactCompany || '',
+    phone: card.contactPhone || '',
+    email: card.contactEmail || '',
+    title: card.contactTitle || ''
+  }
+  contactEditOpen.value = true
+  refreshContactEditPreview()
+}
+
+function closeContactEdit() {
+  contactEditOpen.value = false
+  contactEditSerial.value = ''
+  contactEditPreview.value = ''
+  contactEditSaving.value = false
+}
+
+async function refreshContactEditPreview() {
+  const serial = contactEditSerial.value
+  if (!serial) {
+    contactEditPreview.value = ''
+    return
+  }
+  try {
+    const draft = {
+      serial,
+      kind: contactEditKind.value,
+      contactName: contactEditForm.value.name,
+      contactCompany: contactEditForm.value.company,
+      contactPhone: contactEditForm.value.phone,
+      contactEmail: contactEditForm.value.email,
+      contactTitle: contactEditForm.value.title
+    }
+    const payload = cardQrPayload(draft)
+    contactEditPreview.value = payload
+      ? await QRCode.toDataURL(payload, {
+          width: 220,
+          margin: 1,
+          errorCorrectionLevel: 'M',
+          color: { dark: '#0a0a0a', light: '#ffffff' }
+        })
+      : ''
+  } catch {
+    contactEditPreview.value = ''
+  }
+}
+
+watch(
+  contactEditForm,
+  () => {
+    if (contactEditOpen.value) refreshContactEditPreview()
+  },
+  { deep: true }
+)
+
+async function saveContactEdit({ clear = false } = {}) {
+  const serial = contactEditSerial.value
+  if (!serial) return
+  const contact = clear
+    ? { name: '', company: '', phone: '', email: '', title: '' }
+    : {
+        name: String(contactEditForm.value.name || '').trim(),
+        company: String(contactEditForm.value.company || '').trim(),
+        phone: String(contactEditForm.value.phone || '').trim(),
+        email: String(contactEditForm.value.email || '').trim(),
+        title: String(contactEditForm.value.title || '').trim()
+      }
+  if (!clear && !contact.name && (contact.company || contact.phone || contact.email || contact.title)) {
+    flash('Enter a full name, or clear all fields')
+    return
+  }
+  contactEditSaving.value = true
+  try {
+    const updated = {
+      serial,
+      kind: contactEditKind.value,
+      contactName: contact.name,
+      contactCompany: contact.company,
+      contactPhone: contact.phone,
+      contactEmail: contact.email,
+      contactTitle: contact.title
+    }
+    updateCard(serial, updated)
+    const res = await apiUpdateCardContact(serial, contact)
+    const idx = allSlugs.value.findIndex((c) => c.serial === serial)
+    if (idx >= 0) {
+      allSlugs.value[idx] = {
+        ...allSlugs.value[idx],
+        ...updated
+      }
+    }
+    await refreshSlugQrs([idx >= 0 ? allSlugs.value[idx] : updated])
+    if (!res.ok) {
+      flash(`Saved locally (${res.error || 'offline'})`)
+    } else {
+      flash(clear ? 'Contact details cleared — QR is profile URL again' : 'Contact details saved — QR updated')
+    }
+    if (clear) {
+      contactEditForm.value = { name: '', company: '', phone: '', email: '', title: '' }
+      await refreshContactEditPreview()
+    } else {
+      closeContactEdit()
+    }
+  } finally {
+    contactEditSaving.value = false
+  }
+}
+
 async function exportSlugsQrZip(rows, zipName) {
   const list = Array.isArray(rows) ? rows : exportRows.value
   if (!list.length) {
@@ -1167,18 +1302,27 @@ watch(filteredSlugs, (rows) => {
               :alt="kindLabel(c.kind)"
               class="w-14 h-14 rounded-lg object-contain bg-zinc-900/80 p-1 shrink-0 border border-zinc-700"
             >
-            <img
+            <button
               v-if="slugQrMap[c.serial]"
-              :src="slugQrMap[c.serial]"
-              :alt="c.serial"
-              class="w-16 h-16 rounded-lg bg-white p-1 shrink-0"
+              type="button"
+              class="shrink-0 rounded-lg bg-white p-1 ring-offset-2 ring-offset-zinc-950 hover:ring-2 hover:ring-sky-400/70 focus:outline-none focus:ring-2 focus:ring-sky-400"
+              :aria-label="`Edit contact details for ${c.serial}`"
+              title="Edit QR contact details"
+              @click="openContactEdit(c)"
             >
+              <img
+                :src="slugQrMap[c.serial]"
+                :alt="c.serial"
+                class="w-16 h-16 rounded-md pointer-events-none"
+              >
+            </button>
             <button
               v-else
               type="button"
-              class="w-16 h-16 rounded-lg bg-white/10 flex items-center justify-center shrink-0"
-              aria-label="Show QR"
-              @click="refreshSlugQrs([c])"
+              class="w-16 h-16 rounded-lg bg-white/10 flex items-center justify-center shrink-0 hover:bg-white/15"
+              :aria-label="`Edit contact details for ${c.serial}`"
+              title="Edit QR contact details"
+              @click="openContactEdit(c)"
             >
               <span class="material-symbols-outlined text-[22px]">qr_code_2</span>
             </button>
@@ -1226,6 +1370,7 @@ watch(filteredSlugs, (rows) => {
                 Contact · {{ c.contactName }}
                 <template v-if="c.contactCompany"> · {{ c.contactCompany }}</template>
               </p>
+              <p v-else class="text-[11px] text-gray-600 mt-0.5">Tap QR to add contact details</p>
               <p v-if="c.profileName" class="text-[11px] text-gray-500 mt-0.5">→ {{ c.profileName }}</p>
               <p v-if="c.customerName" class="text-[11px] text-gray-500">{{ c.customerName }}</p>
               <div class="flex flex-wrap gap-x-3 gap-y-1 mt-2">
@@ -1236,6 +1381,9 @@ watch(filteredSlugs, (rows) => {
                   @click="toggleSelect(c.serial)"
                 >
                   {{ isSelected(c.serial) ? 'Selected' : 'Select' }}
+                </button>
+                <button type="button" class="text-[11px] font-semibold text-sky-300 hover:text-sky-200" @click="openContactEdit(c)">
+                  Edit contact
                 </button>
                 <button type="button" class="text-[11px] font-semibold text-gray-300 hover:text-white" @click="downloadOneSlugQr(c)">
                   Download PNG
@@ -1288,6 +1436,90 @@ watch(filteredSlugs, (rows) => {
       @done="onCardExportDone"
       @error="flash"
     />
+
+    <div
+      v-if="contactEditOpen"
+      class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4 bg-black/70"
+      @click.self="closeContactEdit"
+    >
+      <div
+        class="w-full max-w-md rounded-3xl border border-[var(--border)] bg-zinc-950 shadow-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="contact-edit-title"
+      >
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h2 id="contact-edit-title" class="text-base font-bold">QR contact details</h2>
+            <p class="text-[11px] text-gray-500 mt-1 font-mono">{{ contactEditSerial }}</p>
+          </div>
+          <button type="button" class="text-gray-400 hover:text-white" aria-label="Close" @click="closeContactEdit">
+            <span class="material-symbols-outlined">close</span>
+          </button>
+        </div>
+        <p class="text-[12px] text-gray-400">
+          Saved details are encoded in the QR as a vCard (name, company, phone, email) plus the profile link below.
+        </p>
+        <div class="flex justify-center">
+          <img
+            v-if="contactEditPreview"
+            :src="contactEditPreview"
+            alt="QR preview"
+            class="w-40 h-40 rounded-2xl bg-white p-2"
+          >
+          <div
+            v-else
+            class="w-40 h-40 rounded-2xl bg-white/5 flex items-center justify-center text-gray-500 text-xs"
+          >
+            Preview
+          </div>
+        </div>
+        <div class="field-shell !rounded-2xl opacity-80">
+          <input
+            :value="contactEditProfileUrl"
+            type="text"
+            readonly
+            class="field-input text-[11px]"
+            aria-label="Profile link included in QR"
+          >
+        </div>
+        <div class="space-y-2">
+          <div class="field-shell !rounded-2xl">
+            <input v-model="contactEditForm.name" type="text" class="field-input" placeholder="Full name" aria-label="Full name">
+          </div>
+          <div class="field-shell !rounded-2xl">
+            <input v-model="contactEditForm.company" type="text" class="field-input" placeholder="Company" aria-label="Company">
+          </div>
+          <div class="field-shell !rounded-2xl">
+            <input v-model="contactEditForm.phone" type="tel" class="field-input" placeholder="Phone" aria-label="Phone">
+          </div>
+          <div class="field-shell !rounded-2xl">
+            <input v-model="contactEditForm.email" type="email" class="field-input" placeholder="Email" aria-label="Email">
+          </div>
+          <div class="field-shell !rounded-2xl">
+            <input v-model="contactEditForm.title" type="text" class="field-input" placeholder="Title (optional)" aria-label="Title">
+          </div>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-2">
+          <button
+            type="button"
+            class="flex-1 px-4 py-3 rounded-full text-xs font-bold bg-white text-black disabled:opacity-50"
+            :disabled="contactEditSaving"
+            @click="saveContactEdit()"
+          >
+            {{ contactEditSaving ? 'Saving…' : 'Save & update QR' }}
+          </button>
+          <button
+            type="button"
+            class="px-4 py-3 rounded-full text-xs font-semibold border border-[var(--border)] text-gray-300 disabled:opacity-50"
+            :disabled="contactEditSaving"
+            @click="saveContactEdit({ clear: true })"
+          >
+            Clear details
+          </button>
+        </div>
+      </div>
+    </div>
 
     <div
       v-if="exportMenuOpen"
