@@ -232,7 +232,7 @@ export async function composeCardBack({
       contactEmail,
       contactTitle
     },
-    { kind, forPrint: true }
+    { kind }
   )
   const qrUrl = URL.createObjectURL(qrBlob)
   try {

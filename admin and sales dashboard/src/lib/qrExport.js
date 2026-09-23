@@ -2,7 +2,7 @@
  * Build printable QR PNGs for admin Card IDs export / card backs.
  * - No contact details: encodes CardTap URL (?via=qr) on tapnam.com, centre label = slug
  * - With contact details: encodes vCard (name, company, phone, email, profile URL),
- *   no centre overlay (keeps dense vCards scannable when printed); filename/caption = first name
+ *   centre label = first name
  */
 
 import QRCode from 'qrcode'
@@ -13,7 +13,6 @@ import { publicOriginForCardType } from './hosts'
 
 const QR_SIZE = 512
 const PAD = 28
-const CAPTION_H = 64
 const FONT = '700 30px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
 
 export function firstNameFromFullName(fullName) {
@@ -86,9 +85,45 @@ function triggerDownload(blob, filename) {
   URL.revokeObjectURL(a.href)
 }
 
-function drawCenterLabel(ctx, label, canvasW, canvasH) {
-  const cx = canvasW / 2
-  const cy = canvasH / 2
+/**
+ * @param {string|{ serial?: string, slug?: string, kind?: string, contactName?: string }} cardOrSlug
+ * @returns {Promise<Blob>}
+ */
+export async function buildLabeledQrPng(cardOrSlug, { origin, kind } = {}) {
+  const card =
+    typeof cardOrSlug === 'string'
+      ? { serial: cardOrSlug, kind }
+      : { ...(cardOrSlug || {}), kind: cardOrSlug?.kind || kind }
+
+  const slug = String(card.serial || card.slug || '').trim()
+  if (!slug) throw new Error('Missing slug')
+
+  const payload = cardQrPayload(card, { origin })
+  if (!payload) throw new Error('Missing QR payload')
+
+  const label = cardQrLabel(card)
+
+  const qrDataUrl = await QRCode.toDataURL(payload, {
+    width: QR_SIZE,
+    margin: 2,
+    errorCorrectionLevel: 'H',
+    color: { dark: '#0a0a0a', light: '#ffffff' }
+  })
+
+  const canvas = document.createElement('canvas')
+  canvas.width = QR_SIZE + PAD * 2
+  canvas.height = QR_SIZE + PAD * 2
+  const ctx = canvas.getContext('2d')
+
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+  const img = await loadImage(qrDataUrl)
+  ctx.drawImage(img, PAD, PAD, QR_SIZE, QR_SIZE)
+
+  // Centre label: white rounded plate + first name (or slug) over the QR centre.
+  const cx = canvas.width / 2
+  const cy = canvas.height / 2
   ctx.font = FONT
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
@@ -111,64 +146,6 @@ function drawCenterLabel(ctx, label, canvasW, canvasH) {
 
   ctx.fillStyle = '#0a0a0a'
   ctx.fillText(label, cx, cy + 1, plateW - 20)
-}
-
-function drawCaption(ctx, label, canvasW, qrBottom) {
-  ctx.font = FONT
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillStyle = '#0a0a0a'
-  ctx.fillText(label, canvasW / 2, qrBottom + CAPTION_H / 2, canvasW - PAD * 2)
-}
-
-/**
- * @param {string|{ serial?: string, slug?: string, kind?: string, contactName?: string }} cardOrSlug
- * @param {{ origin?: string, kind?: string, forPrint?: boolean }} opts
- *   forPrint: true for physical card backs — never overlay text on vCard modules
- * @returns {Promise<Blob>}
- */
-export async function buildLabeledQrPng(cardOrSlug, { origin, kind, forPrint = false } = {}) {
-  const card =
-    typeof cardOrSlug === 'string'
-      ? { serial: cardOrSlug, kind }
-      : { ...(cardOrSlug || {}), kind: cardOrSlug?.kind || kind }
-
-  const slug = String(card.serial || card.slug || '').trim()
-  if (!slug) throw new Error('Missing slug')
-
-  const payload = cardQrPayload(card, { origin })
-  if (!payload) throw new Error('Missing QR payload')
-
-  const label = cardQrLabel(card)
-  const hasContact = cardHasContactDetails(card)
-  // URL QRs use H + centre slug plate. Contact vCards stay clean for print scanning.
-  const ec = hasContact ? 'M' : 'H'
-  const withCenterLabel = !hasContact
-  const withCaption = hasContact && !forPrint
-
-  const qrDataUrl = await QRCode.toDataURL(payload, {
-    width: QR_SIZE,
-    margin: 2,
-    errorCorrectionLevel: ec,
-    color: { dark: '#0a0a0a', light: '#ffffff' }
-  })
-
-  const canvas = document.createElement('canvas')
-  canvas.width = QR_SIZE + PAD * 2
-  canvas.height = QR_SIZE + PAD * 2 + (withCaption ? CAPTION_H : 0)
-  const ctx = canvas.getContext('2d')
-
-  ctx.fillStyle = '#ffffff'
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-  const img = await loadImage(qrDataUrl)
-  ctx.drawImage(img, PAD, PAD, QR_SIZE, QR_SIZE)
-
-  if (withCenterLabel) {
-    drawCenterLabel(ctx, label, canvas.width, QR_SIZE + PAD * 2)
-  } else if (withCaption) {
-    drawCaption(ctx, label, canvas.width, PAD + QR_SIZE)
-  }
 
   const blob = await new Promise((resolve, reject) => {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('PNG failed'))), 'image/png')
@@ -191,16 +168,17 @@ export async function downloadSlugQrPng(cardOrSlug, { kind } = {}) {
     typeof cardOrSlug === 'string'
       ? { serial: cardOrSlug, kind }
       : { ...(cardOrSlug || {}), kind: cardOrSlug?.kind || kind }
-  const blob = await buildLabeledQrPng(card, { kind: card.kind, forPrint: false })
+  const blob = await buildLabeledQrPng(card, { kind: card.kind })
   triggerDownload(blob, safeFileName(cardQrLabel(card)))
 }
 
 /**
  * Zip filtered cards as PNGs ready for print / sticker use.
  * Contact cards encode vCard + profile URL; blank cards encode CardTap URL.
+ * Centre label is always first name when set, otherwise the slug.
  * @param {Array<{ serial: string, kind?: string, contactName?: string }>} cards
  */
-export async function downloadSlugsQrZip(cards, { zipName, onProgress, forPrint = true } = {}) {
+export async function downloadSlugsQrZip(cards, { zipName, onProgress } = {}) {
   const list = (cards || []).filter((c) => c?.serial)
   if (!list.length) throw new Error('No slugs to export')
 
@@ -214,7 +192,7 @@ export async function downloadSlugsQrZip(cards, { zipName, onProgress, forPrint 
       name = safeFileName(`${cardQrLabel(card)}-${card.serial || i + 1}`)
     }
     used.add(name.toLowerCase())
-    const blob = await buildLabeledQrPng(card, { kind: card.kind, forPrint })
+    const blob = await buildLabeledQrPng(card, { kind: card.kind })
     zip.file(name, blob)
     onProgress?.(i + 1, list.length)
   }
