@@ -232,7 +232,7 @@ export async function composeCardBack({
       contactEmail,
       contactTitle
     },
-    { kind }
+    { kind, forPrint: true }
   )
   const qrUrl = URL.createObjectURL(qrBlob)
   try {
@@ -285,8 +285,26 @@ export async function paintFrontPreview(canvasEl, { logoBw, layout, personalType
   return { scale, cardW, cardH, logoRect: logoRectCss }
 }
 
-export async function paintBackPreview(canvasEl, { serial, kind, personalType } = {}) {
-  const blob = await composeCardBack({ serial, kind, personalType })
+export async function paintBackPreview(canvasEl, {
+  serial,
+  kind,
+  personalType,
+  contactName = '',
+  contactCompany = '',
+  contactPhone = '',
+  contactEmail = '',
+  contactTitle = ''
+} = {}) {
+  const blob = await composeCardBack({
+    serial,
+    kind,
+    personalType,
+    contactName,
+    contactCompany,
+    contactPhone,
+    contactEmail,
+    contactTitle
+  })
   const url = URL.createObjectURL(blob)
   try {
     const img = await loadImage(url)

@@ -39,7 +39,7 @@ import {
   cardQrPayload
 } from '../lib/qrExport'
 import CardExportPreviewModal from '../components/CardExportPreviewModal.vue'
-import { CARD_ID_HINT, CARD_ID_LABEL } from '../lib/cardLabels'
+import { CARD_ID_LABEL } from '../lib/cardLabels'
 import { profileShareUrl } from '../lib/shareHelpers'
 import QRCode from 'qrcode'
 
@@ -637,17 +637,40 @@ function downloadCsv(rows, filename) {
     flash(`No ${CARD_ID_LABEL.toLowerCase()}s to export`)
     return
   }
-  const header = ['batch', 'card_id', 'kind', 'status', 'nfc_url', 'qr_url', 'profile', 'sale_id', 'created_at']
+  const header = [
+    'batch',
+    'card_id',
+    'kind',
+    'status',
+    'qr_mode',
+    'contact_name',
+    'contact_company',
+    'contact_phone',
+    'contact_email',
+    'contact_title',
+    'nfc_url',
+    'profile_url',
+    'profile',
+    'sale_id',
+    'created_at'
+  ]
   const lines = [header.join(',')]
   for (const c of rows) {
+    const hasContact = Boolean(c.contactName || c.contactCompany || c.contactPhone || c.contactEmail)
     lines.push(
       [
         c.batchName || '',
         c.serial,
         c.kind,
         c.profileId ? 'linked' : 'unlinked',
+        hasContact ? 'vcard' : 'url',
+        c.contactName || '',
+        c.contactCompany || '',
+        c.contactPhone || '',
+        c.contactEmail || '',
+        c.contactTitle || '',
         cardPublicUrl(c.serial, undefined, { kind: c.kind }),
-        cardQrUrl(c.serial, undefined, { kind: c.kind }),
+        profileShareUrl(c.serial, undefined, { cardType: c.kind === 'table' ? 'table' : 'personal' }),
         c.profileName || '',
         c.saleId || '',
         c.createdAt || ''
@@ -894,7 +917,8 @@ watch(filteredSlugs, (rows) => {
         </RouterLink>
         <h1 class="text-2xl font-bold tracking-tight mt-1">{{ CARD_ID_LABEL }}s</h1>
         <p class="text-gray-400 text-sm mt-1">
-          Generate and manage NFC / QR card IDs. {{ CARD_ID_HINT }} Link them to profiles from setup or Link cards.
+          Generate, edit contact details, then export QR PNGs or printable card backs for production.
+          Contact QRs encode name, company, phone, email, and the public profile link on tapnam.com.
         </p>
       </header>
 
@@ -1060,7 +1084,7 @@ watch(filteredSlugs, (rows) => {
               v-if="exportMenuOpen"
               class="absolute right-0 top-full mt-2 z-40 min-w-[200px] rounded-2xl border border-[var(--border)] bg-zinc-950 shadow-xl p-2 space-y-1"
             >
-              <p class="px-3 pt-1 text-[10px] uppercase tracking-wide text-gray-500">Card IDs only</p>
+              <p class="px-3 pt-1 text-[10px] uppercase tracking-wide text-gray-500">For print</p>
               <button
                 type="button"
                 class="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-gray-200 hover:bg-white/10"
@@ -1076,6 +1100,9 @@ watch(filteredSlugs, (rows) => {
               >
                 Export QR ZIP
               </button>
+              <p class="px-3 pb-1 text-[10px] text-gray-600 leading-snug">
+                Contact cards → vCard + profile link. Blank cards → CardTap URL.
+              </p>
               <div class="border-t border-[var(--border)] my-1" />
               <p class="px-3 pt-1 text-[10px] uppercase tracking-wide text-gray-500">Cards</p>
               <button

@@ -56,10 +56,16 @@ async function redraw() {
     drawHandles()
   }
   if (backCanvas.value && sampleCard.value) {
+    const c = sampleCard.value
     await paintBackPreview(backCanvas.value, {
-      serial: sampleCard.value.serial,
-      kind: sampleCard.value.kind,
-      personalType: sampleCard.value
+      serial: c.serial,
+      kind: c.kind,
+      personalType: c,
+      contactName: c.contactName || '',
+      contactCompany: c.contactCompany || '',
+      contactPhone: c.contactPhone || '',
+      contactEmail: c.contactEmail || '',
+      contactTitle: c.contactTitle || ''
     })
   }
 }

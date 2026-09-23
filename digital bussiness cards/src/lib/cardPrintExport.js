@@ -232,7 +232,7 @@ export async function composeCardBack({
       contactEmail,
       contactTitle
     },
-    { kind }
+    { kind, forPrint: true }
   )
   const qrUrl = URL.createObjectURL(qrBlob)
   try {
@@ -285,8 +285,26 @@ export async function paintFrontPreview(canvasEl, { logoBw, layout, personalType
   return { scale, cardW, cardH, logoRect: logoRectCss }
 }
 
-export async function paintBackPreview(canvasEl, { serial, kind, personalType } = {}) {
-  const blob = await composeCardBack({ serial, kind, personalType })
+export async function paintBackPreview(canvasEl, {
+  serial,
+  kind,
+  personalType,
+  contactName = '',
+  contactCompany = '',
+  contactPhone = '',
+  contactEmail = '',
+  contactTitle = ''
+} = {}) {
+  const blob = await composeCardBack({
+    serial,
+    kind,
+    personalType,
+    contactName,
+    contactCompany,
+    contactPhone,
+    contactEmail,
+    contactTitle
+  })
   const url = URL.createObjectURL(blob)
   try {
     const img = await loadImage(url)
@@ -428,12 +446,7 @@ export async function downloadCardsPdf(
     const backBlob = await composeCardBack({
       serial: slug,
       kind: list[i].kind,
-      personalType: variant,
-      contactName: list[i].contactName || '',
-      contactCompany: list[i].contactCompany || '',
-      contactPhone: list[i].contactPhone || '',
-      contactEmail: list[i].contactEmail || '',
-      contactTitle: list[i].contactTitle || ''
+      personalType: variant
     })
     const backDataUrl = await blobToDataUrl(backBlob)
     doc.addImage(backDataUrl, 'PNG', 0, 0, wMm, hMm)
