@@ -2488,11 +2488,16 @@ function isDeliverableEmail(value) {
 }
 
 function defaultEmailFrom(env) {
-  return String(env.EMAIL_FROM || env.RESEND_FROM || 'tap-na <welcome@mail.tapnam.com>').trim()
+  return String(env.EMAIL_FROM || env.RESEND_FROM || 'tap-na <welcome@tapnam.com>').trim()
+}
+
+/** Alerts only (sign-in notices) — keep transactional mail on tapnam.com */
+function alertEmailFrom(env) {
+  return String(env.EMAIL_ALERT_FROM || 'tap-na <welcome@mail.tapnam.com>').trim()
 }
 
 function defaultEmailReplyTo(env) {
-  return String(env.EMAIL_REPLY_TO || '').trim()
+  return String(env.EMAIL_REPLY_TO || 'welcome@tapnam.com').trim()
 }
 
 /** Parse "Name <addr@domain>" or plain address into CF Email Sending shapes. */
@@ -3174,6 +3179,8 @@ async function sendLoginAlertEmail(env, { email, name }) {
   const text = `New sign-in to tap-na\n\nHi ${display},\nSomeone signed in at ${when} UTC.\nIf this was not you, change your password.`
   return sendCloudflareEmail(env, {
     to,
+    from: alertEmailFrom(env),
+    replyTo: defaultEmailReplyTo(env) || 'welcome@tapnam.com',
     subject: 'tap-na sign-in alert',
     html,
     text
@@ -8938,7 +8945,11 @@ async function handleApi(request, env, url) {
     const html = String(body?.html || '')
     const text = String(body?.text || '')
     const fromDefault = defaultEmailFrom(env)
-    const from = String(body?.from || fromDefault).trim() || fromDefault
+    let from = String(body?.from || fromDefault).trim() || fromDefault
+    // Invoices/quotes/staff mail always use apex; mail.tapnam.com is alerts-only
+    if (/@mail\.tapnam\.com\b/i.test(from)) from = fromDefault
+    const replyTo =
+      String(body?.replyTo || body?.reply_to || '').trim() || defaultEmailReplyTo(env)
 
     if (!toList.length) return bad('to is required')
     if (!subject) return bad('subject is required')
@@ -8951,7 +8962,7 @@ async function handleApi(request, env, url) {
         subject,
         html,
         text,
-        replyTo: body?.replyTo || body?.reply_to || '',
+        replyTo,
         attachments: Array.isArray(body?.attachments) ? body.attachments : []
       })
       return json({

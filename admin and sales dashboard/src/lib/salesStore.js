@@ -128,8 +128,8 @@ export const COMPANY = {
   address: 'Erf: 62, Hosea Kutako Drive, Windhoek North',
   currency: 'NAD',
   fromName: 'tap-na',
-  /** Cloudflare Email Sending (tapnam.com) */
-  mailFrom: 'tap-na <welcome@mail.tapnam.com>'
+  /** Cloudflare Email Sending — invoices/quotes use apex (alerts use mail.tapnam.com) */
+  mailFrom: 'tap-na <welcome@tapnam.com>'
 }
 
 /** Bank details for EFT on quotes and unpaid invoices */
@@ -1588,7 +1588,7 @@ function escapeHtml(value) {
 function companyFromAddress() {
   return (
     COMPANY.mailFrom ||
-    `${COMPANY.fromName || COMPANY.name} <welcome@mail.tapnam.com>`
+    `${COMPANY.fromName || COMPANY.name} <welcome@tapnam.com>`
   )
 }
 
