@@ -2775,16 +2775,15 @@ onMounted(async () => {
         </div>
 
         <div v-if="filteredClients.length" class="card-item-bg rounded-2xl overflow-x-auto">
-          <table class="w-full min-w-[1020px] text-left text-xs border-collapse">
+          <table class="w-full min-w-[920px] text-left text-xs border-collapse">
             <thead>
               <tr class="border-b border-zinc-700/80 text-[10px] uppercase tracking-wide text-gray-500">
                 <th class="px-3 py-2.5 font-semibold">Name</th>
                 <th class="px-3 py-2.5 font-semibold">Company</th>
-                <th class="px-3 py-2.5 font-semibold">Contact</th>
+                <th class="px-3 py-2.5 font-semibold">Visited</th>
                 <th class="px-3 py-2.5 font-semibold">Pipeline</th>
                 <th class="px-3 py-2.5 font-semibold">Stage</th>
                 <th class="px-3 py-2.5 font-semibold">Sample</th>
-                <th class="px-3 py-2.5 font-semibold">Visited</th>
                 <th class="px-3 py-2.5 font-semibold">Meeting</th>
                 <th class="px-3 py-2.5 font-semibold">Owner</th>
                 <th class="px-3 py-2.5 font-semibold w-8"></th>
@@ -2809,9 +2808,13 @@ onMounted(async () => {
                   </div>
                 </td>
                 <td class="px-3 py-2.5 align-middle text-gray-400 max-w-[9rem] truncate">{{ c.company || '—' }}</td>
-                <td class="px-3 py-2.5 align-middle text-gray-400 max-w-[12rem]">
-                  <div class="truncate">{{ c.email || '—' }}</div>
-                  <div v-if="c.phone" class="truncate text-[10px] text-gray-500">{{ c.phone }}</div>
+                <td class="px-3 py-2.5 align-middle whitespace-nowrap">
+                  <span
+                    class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
+                    :class="c.visited ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-500/15 text-gray-400'"
+                  >
+                    {{ c.visited ? 'Visited' : 'Not visited' }}
+                  </span>
                 </td>
                 <td class="px-3 py-2.5 align-middle">
                   <span class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full" :class="statusClass(c.pipelineStatus)">
@@ -2832,14 +2835,6 @@ onMounted(async () => {
                 </td>
                 <td class="px-3 py-2.5 align-middle text-gray-400 whitespace-nowrap">
                   {{ sampleCardStatusLabel(c.sampleCardStatus) }}
-                </td>
-                <td class="px-3 py-2.5 align-middle whitespace-nowrap">
-                  <span
-                    class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
-                    :class="c.visited ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-500/15 text-gray-400'"
-                  >
-                    {{ c.visited ? 'Visited' : 'Not visited' }}
-                  </span>
                 </td>
                 <td class="px-3 py-2.5 align-middle text-gray-400 whitespace-nowrap">
                   {{ clientRowSummary(c).meetingLabel }}
