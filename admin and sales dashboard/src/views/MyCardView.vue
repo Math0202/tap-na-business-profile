@@ -40,6 +40,10 @@ const bookOpen = ref(false)
 const connectOpen = ref(false)
 const saveProfileOpen = ref(false)
 const saveProfileHint = ref('')
+const installingProfile = ref(false)
+const savingContact = ref(false)
+const saveContactOpen = ref(false)
+const saveContactHint = ref('')
 const shareModal = ref(null)
 const videoEl = ref(null)
 const embedSrc = ref('')
@@ -239,9 +243,6 @@ function refresh() {
 }
 
 function syncVisitorAppInstall() {
-  // #region agent log
-  fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'B,D',location:'MyCardView.vue:syncVisitorAppInstall',message:'sync install prep',data:{isVisitor:isVisitor.value,shareSlug:String(shareSlug.value||''),actionsBlocked:actionsBlocked.value,path:typeof location!=='undefined'?location.pathname:''},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   if (!isVisitor.value || !shareSlug.value) return
   prepareProfileAppInstall({
     slug: shareSlug.value,
@@ -276,40 +277,38 @@ function openShare() {
 }
 
 async function saveProfileApp() {
-  // #region agent log
-  fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'post-fix',hypothesisId:'C,D',location:'MyCardView.vue:saveProfileApp:click',message:'Save profile clicked',data:{actionsBlocked:actionsBlocked.value,shareSlug:String(shareSlug.value||''),isVisitor:isVisitor.value,canInstall:canInstallProfileApp(),android:isAndroidDevice()},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-  if (actionsBlocked.value || !shareSlug.value) return
+  if (actionsBlocked.value || !shareSlug.value || installingProfile.value) return
   trackClick(LOCAL_ID, 'save_profile_app', 'Save profile')
   logRemote('click:save_profile_app')
+  installingProfile.value = true
+  try {
+    // Prefer immediate native prompt when Chrome already offered install (keeps user gesture).
+    if (!canInstallProfileApp()) {
+      await prepareProfileAppInstall({
+        slug: shareSlug.value,
+        avatar: avatar.value,
+        name: name.value,
+        company: profile.value.company || ''
+      }).catch(() => {})
+    }
 
-  // Prefer immediate native prompt when Chrome already offered install (keeps user gesture).
-  if (!canInstallProfileApp()) {
-    await prepareProfileAppInstall({
-      slug: shareSlug.value,
-      avatar: avatar.value,
-      name: name.value,
-      company: profile.value.company || ''
-    }).catch(() => {})
-  }
-
-  const res = await promptProfileAppInstall({
-    timeoutMs: isAndroidDevice() ? 4000 : 1500
-  })
-  // #region agent log
-  fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'post-fix',hypothesisId:'C',location:'MyCardView.vue:saveProfileApp:result',message:'Save profile result',data:{res},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-  if (!res.ok) {
-    saveProfileHint.value = res.error || 'Could not prepare install.'
-    saveProfileOpen.value = true
-    return
-  }
-  // Native Android/Chrome Install dialog handled the action — no custom copy.
-  if (res.method === 'install' || res.method === 'unavailable') return
-  if (res.isIos) {
-    saveProfileHint.value =
-      'Tap Share in Safari, then choose “Add to Home Screen”. This profile’s photo will be the app icon.'
-    saveProfileOpen.value = true
+    const res = await promptProfileAppInstall({
+      timeoutMs: isAndroidDevice() ? 4000 : 1500
+    })
+    if (!res.ok) {
+      saveProfileHint.value = res.error || 'Could not prepare install.'
+      saveProfileOpen.value = true
+      return
+    }
+    // Native Android/Chrome Install dialog handled the action — no custom copy.
+    if (res.method === 'install' || res.method === 'unavailable') return
+    if (res.isIos) {
+      saveProfileHint.value =
+        'Tap Share in Safari, then choose “Add to Home Screen”. This profile’s photo will be the app icon.'
+      saveProfileOpen.value = true
+    }
+  } finally {
+    installingProfile.value = false
   }
 }
 
@@ -318,34 +317,44 @@ async function saveContact() {
     router.push('/profile')
     return
   }
+  if (savingContact.value) return
   trackClick(LOCAL_ID, 'save_contact', 'Save contact')
   logRemote('click:save_contact')
-  const parts = profile.value.name.trim().split(/\s+/)
-  const first = parts[0] || ''
-  const last = parts.slice(1).join(' ') || ''
-  const photo = await vcardPhotoLine(profile.value.avatar)
-  const websiteRaw = String(profile.value.website || '').trim()
-  const contactUrl = websiteRaw
-    ? resolveSocialUrl('website', websiteRaw)
-    : shareUrl.value
-  const bioText = String(profile.value.bio || '').trim()
-  const noteLine = bioText
-    ? 'NOTE:' + bioText.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n')
-    : 'NOTE:Digital business card'
-  downloadVcard(profile.value.name.replace(/\s+/g, '_') + '.vcf', [
-    'BEGIN:VCARD',
-    'VERSION:3.0',
-    'FN:' + profile.value.name,
-    'N:' + last + ';' + first + ';;;',
-    'TITLE:' + (profile.value.title || ''),
-    'ORG:' + (profile.value.company || ''),
-    profile.value.phone ? 'TEL;TYPE=CELL:' + profile.value.phone : '',
-    profile.value.email ? 'EMAIL:' + profile.value.email : '',
-    contactUrl ? 'URL:' + contactUrl : '',
-    photo,
-    noteLine,
-    'END:VCARD'
-  ])
+  savingContact.value = true
+  try {
+    const parts = profile.value.name.trim().split(/\s+/)
+    const first = parts[0] || ''
+    const last = parts.slice(1).join(' ') || ''
+    const photo = await vcardPhotoLine(profile.value.avatar)
+    const websiteRaw = String(profile.value.website || '').trim()
+    const contactUrl = websiteRaw
+      ? resolveSocialUrl('website', websiteRaw)
+      : shareUrl.value
+    const bioText = String(profile.value.bio || '').trim()
+    const noteLine = bioText
+      ? 'NOTE:' + bioText.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n')
+      : 'NOTE:Digital business card'
+    downloadVcard(profile.value.name.replace(/\s+/g, '_') + '.vcf', [
+      'BEGIN:VCARD',
+      'VERSION:3.0',
+      'FN:' + profile.value.name,
+      'N:' + last + ';' + first + ';;;',
+      'TITLE:' + (profile.value.title || ''),
+      'ORG:' + (profile.value.company || ''),
+      profile.value.phone ? 'TEL;TYPE=CELL:' + profile.value.phone : '',
+      profile.value.email ? 'EMAIL:' + profile.value.email : '',
+      contactUrl ? 'URL:' + contactUrl : '',
+      photo,
+      noteLine,
+      'END:VCARD'
+    ])
+    saveContactHint.value = isAndroidDevice()
+      ? 'Contact file ready. Open it and tap Save to add this person to your phone book.'
+      : 'Contact file downloaded. Open the file to add this person to your phone book.'
+    saveContactOpen.value = true
+  } finally {
+    savingContact.value = false
+  }
 }
 
 function openVideo() {
@@ -503,12 +512,15 @@ watch(() => route.path, () => {
                   type="button"
                   :aria-label="isAndroidDevice() ? 'Install' : 'Save profile'"
                   class="inline-flex items-center gap-1 h-9 px-3 rounded-full bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold border border-zinc-700 transition-colors"
-                  :class="{ 'opacity-40 pointer-events-none': actionsBlocked }"
-                  :disabled="actionsBlocked"
+                  :class="{ 'opacity-40 pointer-events-none': actionsBlocked || installingProfile }"
+                  :disabled="actionsBlocked || installingProfile"
                   @click="saveProfileApp"
                 >
-                  <span class="material-symbols-outlined text-[16px]">{{ isAndroidDevice() ? 'install_mobile' : 'download' }}</span>
-                  {{ isAndroidDevice() ? 'Install' : 'Save profile' }}
+                  <span
+                    class="material-symbols-outlined text-[16px]"
+                    :class="{ 'animate-spin': installingProfile }"
+                  >{{ installingProfile ? 'progress_activity' : (isAndroidDevice() ? 'install_mobile' : 'download') }}</span>
+                  {{ installingProfile ? 'Installing…' : (isAndroidDevice() ? 'Install' : 'Save profile') }}
                 </button>
                 <button
                   v-else
@@ -723,12 +735,15 @@ watch(() => route.path, () => {
           <button
             type="button"
             class="w-full py-4 rounded-full bg-white text-black font-bold text-lg hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
-            :class="{ 'opacity-40 pointer-events-none': actionsBlocked }"
-            :disabled="actionsBlocked"
+            :class="{ 'opacity-40 pointer-events-none': actionsBlocked || savingContact }"
+            :disabled="actionsBlocked || savingContact"
             @click="saveContact"
           >
-            <span class="material-symbols-outlined">person_add</span>
-            Save to Phone Book
+            <span
+              class="material-symbols-outlined"
+              :class="{ 'animate-spin': savingContact }"
+            >{{ savingContact ? 'progress_activity' : 'person_add' }}</span>
+            {{ savingContact ? 'Preparing contact…' : 'Save to Phone Book' }}
           </button>
           <button
             v-if="showBooking"
@@ -814,6 +829,36 @@ watch(() => route.path, () => {
             type="button"
             class="w-full mt-4 py-3 rounded-full bg-white text-black font-bold text-sm hover:bg-gray-200 transition-colors"
             @click="saveProfileOpen = false"
+          >
+            Got it
+          </button>
+        </div>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div
+        v-if="saveContactOpen"
+        class="app-dialog-overlay fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4"
+      >
+        <div class="absolute inset-0 bg-black/70" @click="saveContactOpen = false" />
+        <div class="relative w-full max-w-md card-item-bg rounded-3xl p-5 shadow-2xl">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-bold">Save to phone book</h2>
+            <button
+              type="button"
+              aria-label="Close"
+              class="w-9 h-9 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center"
+              @click="saveContactOpen = false"
+            >
+              <span class="material-symbols-outlined text-[20px]">close</span>
+            </button>
+          </div>
+          <p class="text-sm text-gray-300">{{ saveContactHint }}</p>
+          <button
+            type="button"
+            class="w-full mt-4 py-3 rounded-full bg-white text-black font-bold text-sm hover:bg-gray-200 transition-colors"
+            @click="saveContactOpen = false"
           >
             Got it
           </button>
