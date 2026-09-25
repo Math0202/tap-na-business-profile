@@ -3,6 +3,7 @@
  */
 
 import { PERSONAL_CARD_IMAGES } from './teamRoles'
+import { TABLE_ORIGIN } from './hosts'
 import { buddyPaymentUrl } from './buddyPayment'
 import { canManageSalesOrg, isStaffSales, staffAgentId } from './staffAuth'
 
@@ -288,11 +289,8 @@ export function resolveProductImage(productId) {
   const isData = raw.startsWith('data:')
   let absolute = raw
   if (!isData && !/^https?:\/\//i.test(raw)) {
-    const origin =
-      typeof window !== 'undefined' && window.location?.origin
-        ? window.location.origin
-        : 'https://tapnam.com'
-    absolute = origin + (raw.startsWith('/') ? raw : '/' + raw)
+    // Always pin static assets to the public apex (admin host may lack CORS for canvas/PDF).
+    absolute = TABLE_ORIGIN + (raw.startsWith('/') ? raw : `/${raw}`)
   }
   return { src: raw, absolute, isData }
 }

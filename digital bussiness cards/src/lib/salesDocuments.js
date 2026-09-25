@@ -17,6 +17,7 @@ import {
   bankingReferenceAdvice
 } from './salesStore'
 import { buddyPaymentUrl } from './buddyPayment'
+import { TABLE_ORIGIN } from './hosts'
 
 const LOGO_SRC = '/images/tap-na_logo.png'
 
@@ -33,6 +34,36 @@ function formatDay(iso) {
   }
 }
 
+/**
+ * Prefer a canvas-safe URL. tapnam.com /images assets have no CORS headers, so loading
+ * https://tapnam.com/... from admin.tapnam.com taints (or fails) the canvas used for PDFs.
+ * Same-origin relative /images/... paths work on both hosts.
+ */
+function canvasFriendlyImageUrl(src) {
+  const raw = String(src || '').trim()
+  if (!raw) return ''
+  if (raw.startsWith('data:')) return raw
+  try {
+    const base =
+      typeof window !== 'undefined' && window.location?.origin
+        ? window.location.origin
+        : TABLE_ORIGIN
+    const u = new URL(raw, base)
+    const host = u.hostname.toLowerCase()
+    const isTapAssetHost =
+      host === 'tapnam.com' ||
+      host === 'www.tapnam.com' ||
+      host === 'admin.tapnam.com' ||
+      (typeof window !== 'undefined' && host === String(window.location.hostname || '').toLowerCase())
+    if (u.pathname.startsWith('/images/') && isTapAssetHost) {
+      return u.pathname + u.search
+    }
+    return u.href
+  } catch {
+    return raw
+  }
+}
+
 function loadImageAsDataUrl(src) {
   return new Promise((resolve) => {
     if (!src) {
@@ -43,8 +74,10 @@ function loadImageAsDataUrl(src) {
       resolve(src)
       return
     }
+    const url = canvasFriendlyImageUrl(src)
     const img = new Image()
-    img.crossOrigin = 'anonymous'
+    const absoluteCrossOrigin = /^https?:\/\//i.test(url)
+    if (absoluteCrossOrigin) img.crossOrigin = 'anonymous'
     img.onload = () => {
       try {
         const canvas = document.createElement('canvas')
@@ -62,7 +95,7 @@ function loadImageAsDataUrl(src) {
       }
     }
     img.onerror = () => resolve('')
-    img.src = src
+    img.src = url
   })
 }
 
@@ -386,7 +419,7 @@ async function loadLineImages(doc) {
   const urls = await Promise.all(
     ids.map(async (id) => {
       const resolved = resolveProductImage(id)
-      return loadImageAsDataUrl(resolved.src || resolved.absolute)
+      return loadImageAsDataUrl(resolved.absolute || resolved.src)
     })
   )
   return urls.filter(Boolean)
@@ -394,7 +427,7 @@ async function loadLineImages(doc) {
 
 export async function prepareDocumentMedia(productId) {
   const resolved = resolveProductImage(productId)
-  const dataUrl = await loadImageAsDataUrl(resolved.src || resolved.absolute)
+  const dataUrl = await loadImageAsDataUrl(resolved.absolute || resolved.src)
   const parts = dataUrlParts(dataUrl)
   return {
     resolved,
