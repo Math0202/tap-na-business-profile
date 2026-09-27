@@ -520,9 +520,6 @@ const salesHiddenByAgentFilter = computed(
     sales.value.length > 0
 )
 
-/** Dashboard preview: admin sees every agent’s sales; sales sees own only (already scoped in refresh). */
-const overviewSales = computed(() => sales.value.slice(0, 12))
-
 const totalCommission = computed(() =>
   Number(stats.value?.commissions) ||
   sales.value
@@ -2096,73 +2093,6 @@ onMounted(async () => {
           :cash="cash"
           :pending-amount="stats.pendingAmount"
         />
-
-        <div>
-          <div class="flex items-center justify-between gap-3 mb-3">
-            <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-400">
-              {{ isSalesScoped ? 'Your sales' : 'All sales transactions' }}
-            </h2>
-            <button
-              type="button"
-              class="text-xs font-semibold text-gray-300 hover:text-white"
-              @click="tab = 'sales'; salesListMode = 'orders'"
-            >
-              View all
-            </button>
-          </div>
-          <ul v-if="overviewSales.length" class="space-y-2">
-            <li
-              v-for="s in overviewSales"
-              :key="s.id"
-              class="card-item-bg rounded-2xl p-4"
-            >
-              <div class="flex items-start justify-between gap-3">
-                <div class="flex items-start gap-3 min-w-0">
-                  <img
-                    v-if="productThumbFor(s.productId || s.lines?.[0]?.productId)"
-                    :src="productThumbFor(s.productId || s.lines?.[0]?.productId)"
-                    alt=""
-                    class="w-12 h-12 rounded-lg object-contain bg-zinc-900/80 p-0.5 shrink-0 border border-zinc-700"
-                  >
-                  <div class="min-w-0">
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <p class="text-sm font-semibold truncate">{{ s.customerName }}</p>
-                    <span
-                      class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
-                      :class="statusClass(s.status)"
-                    >
-                      {{ s.status }}
-                    </span>
-                  </div>
-                  <p class="text-xs text-gray-400 mt-0.5">
-                    {{ docLinesLabel(s) }}
-                    <span v-if="!isSalesScoped"> · {{ agentName(s.agentId) }}</span>
-                  </p>
-                  <p class="text-[11px] text-gray-500 mt-1">
-                    {{ formatMoney(s.amount) }}
-                    <span v-if="saleAmountPending(s) > 0.004" class="text-amber-400">
-                      · {{ formatMoney(saleAmountPending(s)) }} due
-                    </span>
-                    · commission {{ formatMoney(s.commission) }}
-                    · sold {{ formatDate(s.soldAt) }}
-                    <span v-if="saleLastPaymentAt(s.id)" class="text-emerald-400/90">
-                      · paid {{ formatDate(saleLastPaymentAt(s.id)) }}
-                    </span>
-                  </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  class="text-xs font-semibold text-gray-300 hover:text-white shrink-0"
-                  @click="openEditSale(s)"
-                >
-                  Open
-                </button>
-              </div>
-            </li>
-          </ul>
-          <p v-else class="text-sm text-gray-500">No sales recorded yet.</p>
-        </div>
 
         <div v-if="!isSalesScoped || agentRows.length">
           <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-400 mb-3">
