@@ -1034,6 +1034,59 @@ function salesClientMeetingToDb(body, { isNew = false, staff = null } = {}) {
   }
 }
 
+function mapSalesClientTodoRow(row) {
+  return withDeletedFields(
+    {
+      id: row.id,
+      clientId: row.client_id || '',
+      ownerAgentId: row.owner_agent_id || '',
+      title: row.title || '',
+      dueAt: row.due_at || '',
+      status: row.status === 'done' ? 'done' : 'open',
+      kind: row.kind || 'manual',
+      doneAt: row.done_at || '',
+      createdByAgentId: row.created_by_agent_id || '',
+      createdByUserId: row.created_by_user_id || '',
+      createdByName: row.created_by_name || '',
+      createdByEmail: row.created_by_email || '',
+      createdAt: row.created_at || '',
+      updatedAt: row.updated_at || ''
+    },
+    row
+  )
+}
+
+function salesClientTodoToDb(body, { isNew = false, staff = null } = {}) {
+  const id = String(body?.id || '').trim() || (isNew ? uid('sctd') : '')
+  const clientId = String(body?.clientId || '').trim()
+  const status = body?.status === 'done' ? 'done' : 'open'
+  const kind = ['visit_1', 'visit_2', 'quote', 'manual'].includes(body?.kind) ? body.kind : 'manual'
+  return {
+    id,
+    client_id: clientId,
+    owner_agent_id: String(body?.ownerAgentId || '').trim() || null,
+    title: String(body?.title || '').trim().slice(0, 160),
+    due_at: body?.dueAt || new Date().toISOString(),
+    status,
+    kind,
+    done_at: status === 'done' ? body?.doneAt || new Date().toISOString() : null,
+    created_by_agent_id:
+      String(body?.createdByAgentId || '').trim() ||
+      (isNew ? String(staff?.agentId || '').trim() || null : null),
+    created_by_user_id: isNew
+      ? String(staff?.id || body?.createdByUserId || '').trim()
+      : String(body?.createdByUserId || '').trim(),
+    created_by_name: isNew
+      ? String(staff?.name || body?.createdByName || '').trim()
+      : String(body?.createdByName || '').trim(),
+    created_by_email: isNew
+      ? String(staff?.email || body?.createdByEmail || '').trim().toLowerCase()
+      : String(body?.createdByEmail || '').trim().toLowerCase(),
+    updated_at: new Date().toISOString(),
+    ...(isNew ? { created_at: body?.createdAt || new Date().toISOString() } : {})
+  }
+}
+
 function mapSalesClientNoteRow(row) {
   return withDeletedFields(
     {
@@ -5159,7 +5212,7 @@ async function handleApi(request, env, url) {
     : 'deleted=eq.false&agent_id=eq.' + encodeURIComponent(agentId) + '&'
   // CRM contacts are shared across sales agents; finance docs remain agent-scoped
   const clientsQ = 'sales_clients?deleted=eq.false&select=*&order=updated_at.desc&limit=3000'
-  const [agents, orders, quotes, invoices, cash, clientsRaw, meetingsRaw, notesRaw, issuanceQuotes, issuanceInvoices] =
+  const [agents, orders, quotes, invoices, cash, clientsRaw, meetingsRaw, notesRaw, todosRaw, issuanceQuotes, issuanceInvoices] =
     await Promise.all([
       sb(env, agentQ),
       sb(env, 'sales_orders?' + scope + 'select=*&order=sold_at.desc&limit=2000'),
@@ -5169,6 +5222,7 @@ async function handleApi(request, env, url) {
       sb(env, clientsQ),
       sb(env, 'sales_client_meetings?deleted=eq.false&select=*&order=meeting_at.desc&limit=5000'),
       sb(env, 'sales_client_notes?deleted=eq.false&select=*&order=created_at.desc&limit=8000'),
+      sb(env, 'sales_client_todos?deleted=eq.false&select=*&order=due_at.asc&limit=8000'),
       // Lightweight issuance (no amounts) so CRM stage badges reflect any agent’s docs
       sb(env, 'sales_quotes?deleted=eq.false&select=client_id&limit=5000'),
       sb(env, 'sales_invoices?deleted=eq.false&select=client_id&limit=5000')
@@ -5182,6 +5236,13 @@ async function handleApi(request, env, url) {
   )
   let meetings = meetingsRaw || []
   let notes = notesRaw || []
+  let todos = todosRaw || []
+  if (!isElevated) {
+    const ownIds = new Set(
+      (clients || []).filter((c) => clientBelongsToAgent(c, agentId)).map((c) => c.id)
+    )
+    todos = todos.filter((t) => ownIds.has(t.client_id))
+  }
   let cashflow = (cash || []).map(mapSalesCashRow)
   if (!isElevated) {
     const orderIds = new Set((orders || []).map((o) => o.id))
@@ -5210,7 +5271,8 @@ async function handleApi(request, env, url) {
     cashflow,
     clients: mappedClients,
     clientMeetings: meetings.map(mapSalesClientMeetingRow),
-    clientNotes: notes.map(mapSalesClientNoteRow)
+    clientNotes: notes.map(mapSalesClientNoteRow),
+    clientTodos: todos.map(mapSalesClientTodoRow)
   })
   }
 
@@ -5705,19 +5767,28 @@ async function handleApi(request, env, url) {
     const q = includeDeleted
       ? 'sales_clients?select=*&order=updated_at.desc&limit=3000'
       : 'sales_clients?deleted=eq.false&select=*&order=updated_at.desc&limit=3000'
-    const [clientsRaw, meetingsRaw, notesRaw] = await Promise.all([
+    const [clientsRaw, meetingsRaw, notesRaw, todosRaw] = await Promise.all([
       sb(env, q),
       sb(env, 'sales_client_meetings?deleted=eq.false&select=*&order=meeting_at.desc&limit=5000'),
-      sb(env, 'sales_client_notes?deleted=eq.false&select=*&order=created_at.desc&limit=8000')
+      sb(env, 'sales_client_notes?deleted=eq.false&select=*&order=created_at.desc&limit=8000'),
+      sb(env, 'sales_client_todos?deleted=eq.false&select=*&order=due_at.asc&limit=8000')
     ])
     const clients = clientsRaw || []
     const meetings = meetingsRaw || []
     const notes = notesRaw || []
+    let todos = todosRaw || []
+    if (!elevated) {
+      const ownIds = new Set(
+        clients.filter((c) => clientBelongsToAgent(c, agentId)).map((c) => c.id)
+      )
+      todos = todos.filter((t) => ownIds.has(t.client_id))
+    }
     return json({
       ok: true,
       clients: clients.map(mapSalesClientRow),
       meetings: meetings.map(mapSalesClientMeetingRow),
-      notes: notes.map(mapSalesClientNoteRow)
+      notes: notes.map(mapSalesClientNoteRow),
+      todos: todos.map(mapSalesClientTodoRow)
     })
   }
 
@@ -5782,9 +5853,10 @@ async function handleApi(request, env, url) {
     if (denied) return denied
     const email = String(client.email || '').trim().toLowerCase()
     const phone = String(client.phone || '').trim()
-    const [meetings, notes, quotesById, invoicesById, ordersById] = await Promise.all([
+    const [meetings, notes, todosRaw, quotesById, invoicesById, ordersById] = await Promise.all([
       sb(env, `sales_client_meetings?client_id=eq.${encodeURIComponent(id)}&deleted=eq.false&select=*&order=meeting_at.desc&limit=500`),
       sb(env, `sales_client_notes?client_id=eq.${encodeURIComponent(id)}&deleted=eq.false&select=*&order=created_at.desc&limit=800`),
+      sb(env, `sales_client_todos?client_id=eq.${encodeURIComponent(id)}&deleted=eq.false&select=*&order=due_at.asc&limit=500`),
       sb(env, `sales_quotes?client_id=eq.${encodeURIComponent(id)}&deleted=eq.false&select=*&order=created_at.desc&limit=200`),
       sb(env, `sales_invoices?client_id=eq.${encodeURIComponent(id)}&deleted=eq.false&select=*&order=issued_at.desc&limit=200`),
       sb(env, `sales_orders?client_id=eq.${encodeURIComponent(id)}&deleted=eq.false&select=*&order=sold_at.desc&limit=200`)
@@ -5828,6 +5900,10 @@ async function handleApi(request, env, url) {
       client: mapSalesClientRow(client),
       meetings: (meetings || []).map(mapSalesClientMeetingRow),
       notes: (notes || []).map(mapSalesClientNoteRow),
+      todos: (isSalesElevated(gate.staff) || clientBelongsToAgent(client, gate.staff.agentId)
+        ? todosRaw || []
+        : []
+      ).map(mapSalesClientTodoRow),
       quotes: quotes.map((r) => redactFinanceMappedForViewer(mapSalesQuoteRow(r), gate.staff)),
       invoices: invoices.map((r) => redactFinanceMappedForViewer(mapSalesInvoiceRow(r), gate.staff)),
       orders: orders.map((r) => redactFinanceMappedForViewer(mapSalesOrderRow(r), gate.staff))
@@ -5935,6 +6011,44 @@ async function handleApi(request, env, url) {
       extra: { updated_at: new Date().toISOString() }
     })
     return json({ ok: true, id, deleted: true })
+  }
+
+  if (pathname === '/api/sales/client-todos' && method === 'PUT') {
+    const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
+    if (gate.error) return gate.error
+    const body = await readJson(request)
+    const existingId = String(body?.id || '').trim()
+    const existing = existingId
+      ? await sb(env, 'sales_client_todos?id=eq.' + encodeURIComponent(existingId) + '&select=*')
+      : []
+    const beforeRow = existing?.[0] || null
+    const row = salesClientTodoToDb(body, { isNew: !beforeRow, staff: gate.staff })
+    if (!row.id) return bad('Todo id required')
+    if (!row.client_id) return bad('Client is required')
+    if (!row.title) return bad('Todo title is required')
+    const clients = await sb(env, 'sales_clients?id=eq.' + encodeURIComponent(row.client_id) + '&select=*')
+    const clientRow = clients?.[0]
+    if (!clientRow || clientRow.deleted === true) return bad('Client not found', 404)
+    const denied = assertClientAccess(gate.staff, clientRow)
+    if (denied) return denied
+    const payload = {
+      ...row,
+      created_at: beforeRow?.created_at || row.created_at || new Date().toISOString(),
+      created_by_agent_id: beforeRow?.created_by_agent_id || row.created_by_agent_id,
+      created_by_user_id: beforeRow?.created_by_user_id || row.created_by_user_id,
+      created_by_name: beforeRow?.created_by_name || row.created_by_name,
+      created_by_email: beforeRow?.created_by_email || row.created_by_email,
+      kind: beforeRow?.kind || row.kind,
+      owner_agent_id:
+        beforeRow?.owner_agent_id ||
+        row.owner_agent_id ||
+        clientRow.owner_agent_id ||
+        clientRow.created_by_agent_id ||
+        null
+    }
+    await upsertSalesRow(env, 'sales_client_todos', payload)
+    const saved = await sb(env, 'sales_client_todos?id=eq.' + encodeURIComponent(row.id) + '&select=*')
+    return json({ ok: true, todo: mapSalesClientTodoRow(saved?.[0] || payload) })
   }
 
   if (pathname === '/api/sales/client-notes' && method === 'PUT') {

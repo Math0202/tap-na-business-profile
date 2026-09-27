@@ -16,6 +16,7 @@ const CASH_KEY = 'tapna_sales_cashflow'
 const CLIENTS_KEY = 'tapna_sales_clients'
 const CLIENT_MEETINGS_KEY = 'tapna_sales_client_meetings'
 const CLIENT_NOTES_KEY = 'tapna_sales_client_notes'
+const CLIENT_TODOS_KEY = 'tapna_sales_client_todos'
 
 /** No seeded catalog — products live in Supabase `sales_products`. */
 export const DEFAULT_PRODUCTS = []
@@ -919,7 +920,8 @@ async function pushMissingFinance(remote) {
     apiUpsertSalesCash,
     apiUpsertSalesClient,
     apiUpsertSalesClientMeeting,
-    apiUpsertSalesClientNote
+    apiUpsertSalesClientNote,
+    apiUpsertSalesClientTodo
   } = await import('./api.js')
   const remoteAgentIds = new Set((remote.agents || []).map((a) => a.id))
   const remoteOrderIds = new Set((remote.orders || []).map((o) => o.id))
@@ -929,6 +931,7 @@ async function pushMissingFinance(remote) {
   const remoteClientIds = new Set((remote.clients || []).map((c) => c.id))
   const remoteMeetingIds = new Set((remote.clientMeetings || []).map((m) => m.id))
   const remoteNoteIds = new Set((remote.clientNotes || []).map((n) => n.id))
+  const remoteTodoIds = new Set((remote.clientTodos || []).map((t) => t.id))
 
   for (const a of listAgents()) {
     if (!remoteAgentIds.has(a.id)) await apiUpsertSalesAgent(a)
@@ -959,6 +962,9 @@ async function pushMissingFinance(remote) {
   for (const n of listClientNotes({ includeDeleted: false })) {
     if (!remoteNoteIds.has(n.id)) await apiUpsertSalesClientNote(n)
   }
+  for (const t of listClientTodos({ includeDeleted: false })) {
+    if (!remoteTodoIds.has(t.id)) await apiUpsertSalesClientTodo(t)
+  }
 }
 
 /** Pull agents/orders/quotes/invoices/cash from Worker (admin = all agents). */
@@ -987,7 +993,8 @@ export async function refreshFinanceFromApi() {
       cashflow: listCashFlow({ includeDeleted: true }),
       clients: listClients({ includeDeleted: true }),
       clientMeetings: listClientMeetings({ includeDeleted: true }),
-      clientNotes: listClientNotes({ includeDeleted: true })
+      clientNotes: listClientNotes({ includeDeleted: true }),
+      clientTodos: listClientTodos({ includeDeleted: true })
     }
 
     const remoteEmpty = !(
@@ -1055,14 +1062,17 @@ export async function refreshFinanceFromApi() {
       normalizeClientMeeting
     )
     let mergedNotes = mergeById(localBefore.clientNotes, data.clientNotes || [], normalizeClientNote)
-    // Keep meetings/notes for all visible CRM clients
+    let mergedTodos = mergeById(localBefore.clientTodos, data.clientTodos || [], normalizeClientTodo)
+    // Keep meetings/notes/todos for all visible CRM clients
     if (salesAgentScoped) {
       mergedMeetings = mergedMeetings.filter((m) => !m.clientId || allowedClientIds.has(m.clientId))
       mergedNotes = mergedNotes.filter((n) => !n.clientId || allowedClientIds.has(n.clientId))
+      mergedTodos = mergedTodos.filter((t) => !t.clientId || allowedClientIds.has(t.clientId))
     }
     writeJson(CLIENTS_KEY, mergedClients)
     writeJson(CLIENT_MEETINGS_KEY, mergedMeetings)
     writeJson(CLIENT_NOTES_KEY, mergedNotes)
+    writeJson(CLIENT_TODOS_KEY, mergedTodos)
 
     const keptAgents = collapseDuplicateAgents(mergedAgents, data.agents || [], [
       mergedOrders,
@@ -1071,7 +1081,8 @@ export async function refreshFinanceFromApi() {
       prunedCash,
       mergedClients,
       mergedMeetings,
-      mergedNotes
+      mergedNotes,
+      mergedTodos
     ])
     writeJson(AGENTS_KEY, keptAgents)
     writeJson(SALES_KEY, mergedOrders)
@@ -1081,6 +1092,7 @@ export async function refreshFinanceFromApi() {
     writeJson(CLIENTS_KEY, mergedClients)
     writeJson(CLIENT_MEETINGS_KEY, mergedMeetings)
     writeJson(CLIENT_NOTES_KEY, mergedNotes)
+    writeJson(CLIENT_TODOS_KEY, mergedTodos)
 
     // Upload anything that still only exists on this device (finance + CRM)
     await pushMissingFinance({
@@ -1091,10 +1103,12 @@ export async function refreshFinanceFromApi() {
       cashflow: data.cashflow || [],
       clients: data.clients || [],
       clientMeetings: data.clientMeetings || [],
-      clientNotes: data.clientNotes || []
+      clientNotes: data.clientNotes || [],
+      clientTodos: data.clientTodos || []
     })
 
     await reconcileFinanceFromCash({ sync: true })
+    sweepClosedClientTodos()
 
     // Link legacy quotes/sales (missing clientId) into CRM for this device's visible docs
     await backfillDocumentClientIds(salesAgentScoped ? scopedAgentId : '')
@@ -1428,6 +1442,7 @@ export function saveQuote(payload) {
   if (idx >= 0) list[idx] = { ...list[idx], ...next, id: list[idx].id, createdAt: list[idx].createdAt, quoteNumber: list[idx].quoteNumber }
   else list.unshift(next)
   writeJson(QUOTES_KEY, list)
+  if (clientId) noteQuoteSavedForClient(clientId)
   syncFinanceQuiet(async () => {
     const { apiUpsertSalesQuote } = await import('./api.js')
     await apiUpsertSalesQuote(next)
@@ -1559,6 +1574,7 @@ export function createInvoiceFromSale(sale) {
   })
   list.unshift(invoice)
   writeJson(INVOICES_KEY, list)
+  notePaidInvoice(invoice, '')
   syncFinanceQuiet(async () => {
     const { apiUpsertSalesInvoice } = await import('./api.js')
     await apiUpsertSalesInvoice(invoice)
@@ -1570,6 +1586,7 @@ export function updateInvoice(payload) {
   const list = listInvoices()
   const next = normalizeInvoice(payload)
   const idx = list.findIndex((inv) => inv.id === next.id)
+  const previousStatus = idx >= 0 ? list[idx].status : ''
   if (idx < 0) {
     list.unshift(next)
   } else {
@@ -1577,6 +1594,7 @@ export function updateInvoice(payload) {
   }
   writeJson(INVOICES_KEY, list)
   const saved = list[idx >= 0 ? idx : 0]
+  notePaidInvoice(saved, previousStatus)
   syncFinanceQuiet(async () => {
     const { apiUpsertSalesInvoice } = await import('./api.js')
     await apiUpsertSalesInvoice(saved)
@@ -2474,6 +2492,7 @@ function updateInvoiceLocal(next) {
   const list = listInvoices({ includeDeleted: true })
   const idx = list.findIndex((inv) => inv.id === next.id)
   if (idx < 0) return null
+  const previousStatus = list[idx].status
   const merged = normalizeInvoice({
     ...list[idx],
     ...next,
@@ -2483,6 +2502,7 @@ function updateInvoiceLocal(next) {
   })
   list[idx] = merged
   writeJson(INVOICES_KEY, list)
+  notePaidInvoice(merged, previousStatus)
   return merged
 }
 
@@ -2780,6 +2800,258 @@ function normalizeClientNote(n) {
   }
 }
 
+function normalizeClientTodo(t) {
+  const kind = ['visit_1', 'visit_2', 'quote', 'manual'].includes(t.kind) ? t.kind : 'manual'
+  return {
+    id: t.id || uid('sctd'),
+    clientId: t.clientId || '',
+    ownerAgentId: t.ownerAgentId || '',
+    title: t.title || '',
+    dueAt: t.dueAt || new Date().toISOString(),
+    status: t.status === 'done' ? 'done' : 'open',
+    kind,
+    doneAt: t.doneAt || '',
+    createdByAgentId: t.createdByAgentId || '',
+    createdByUserId: t.createdByUserId || '',
+    createdByName: t.createdByName || '',
+    createdByEmail: t.createdByEmail || '',
+    deleted: t.deleted === true,
+    deletedAt: t.deletedAt || '',
+    deletedBy: t.deletedBy || '',
+    createdAt: t.createdAt || new Date().toISOString(),
+    updatedAt: t.updatedAt || t.createdAt || new Date().toISOString()
+  }
+}
+
+function todoDayKey(iso) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return y + '-' + m + '-' + day
+}
+
+export function todoIsDueOrOverdue(iso, now = new Date()) {
+  const key = todoDayKey(iso)
+  if (!key) return false
+  return key <= todoDayKey(now.toISOString())
+}
+
+export function formatTodoDue(iso) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString()
+}
+
+function addDaysFromNow(days) {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  d.setHours(9, 0, 0, 0)
+  return d.toISOString()
+}
+
+export function listClientTodos({ clientId = '', includeDeleted = false, agentId = '' } = {}) {
+  ensureSeeded()
+  let list = readJson(CLIENT_TODOS_KEY, []).map(normalizeClientTodo)
+  if (!includeDeleted) list = list.filter((t) => !t.deleted)
+  if (clientId) list = list.filter((t) => t.clientId === clientId)
+  const aid = String(agentId || '').trim()
+  if (aid) {
+    list = list.filter((t) => {
+      const client = getClient(t.clientId)
+      return client ? clientBelongsToAgent(client, aid) : t.ownerAgentId === aid
+    })
+  }
+  return list.sort((a, b) => String(a.dueAt).localeCompare(String(b.dueAt)))
+}
+
+function syncClientTodo(todo) {
+  syncFinanceQuiet(async () => {
+    const { apiUpsertSalesClientTodo } = await import('./api.js')
+    await apiUpsertSalesClientTodo(todo)
+  })
+}
+
+function upsertClientTodoLocal(payload) {
+  const list = listClientTodos({ includeDeleted: true })
+  const next = normalizeClientTodo({
+    ...payload,
+    id: payload.id || uid('sctd'),
+    updatedAt: new Date().toISOString()
+  })
+  const idx = list.findIndex((t) => t.id === next.id)
+  if (idx >= 0) {
+    list[idx] = {
+      ...list[idx],
+      ...next,
+      id: list[idx].id,
+      createdAt: list[idx].createdAt,
+      kind: list[idx].kind || next.kind
+    }
+  } else {
+    list.unshift(next)
+  }
+  writeJson(CLIENT_TODOS_KEY, list)
+  const saved = idx >= 0 ? list[idx] : next
+  syncClientTodo(saved)
+  return saved
+}
+
+export async function saveClientTodo(payload) {
+  const title = String(payload?.title || '').trim()
+  const clientId = String(payload?.clientId || '').trim()
+  if (!clientId) return { ok: false, error: 'Client is required' }
+  if (!title) return { ok: false, error: 'Todo title is required' }
+  const client = getClient(clientId)
+  const existing = payload.id
+    ? listClientTodos({ includeDeleted: true }).find((t) => t.id === payload.id)
+    : null
+  const saved = upsertClientTodoLocal({
+    ...existing,
+    ...payload,
+    title,
+    clientId,
+    ownerAgentId:
+      payload.ownerAgentId || existing?.ownerAgentId || client?.ownerAgentId || client?.createdByAgentId || '',
+    kind: existing?.kind || payload.kind || 'manual',
+    status: payload.status === 'done' ? 'done' : existing?.status || 'open',
+    dueAt: payload.dueAt || existing?.dueAt || addDaysFromNow(0)
+  })
+  return { ok: true, todo: saved }
+}
+
+export async function completeClientTodo(id) {
+  const existing = listClientTodos({ includeDeleted: true }).find((t) => t.id === id)
+  if (!existing || existing.deleted) return { ok: false, error: 'Todo not found' }
+  if (existing.status === 'done') return { ok: true, todo: existing }
+  const saved = upsertClientTodoLocal({
+    ...existing,
+    status: 'done',
+    doneAt: new Date().toISOString()
+  })
+  return { ok: true, todo: saved }
+}
+
+function docMatchesClient(client, doc) {
+  if (!client || !doc || doc.deleted) return false
+  if (String(doc.clientId || '') && String(doc.clientId) === String(client.id)) return true
+  const email = String(client.email || '').trim().toLowerCase()
+  return !!(email && String(doc.customerEmail || '').trim().toLowerCase() === email)
+}
+
+function clientBlocksVisitTodos(client) {
+  if (!client) return true
+  if (client.pipelineStatus === 'closed_sold') return true
+  if (client.hasIssuedQuote || client.hasIssuedInvoice) return true
+  if (client.saleStage === 'quote' || client.saleStage === 'invoice') return true
+  if (listQuotes({ includeDeleted: false }).some((q) => docMatchesClient(client, q))) return true
+  if (listInvoices({ includeDeleted: false }).some((inv) => docMatchesClient(client, inv))) return true
+  return false
+}
+
+function clientHasPaidInvoice(client) {
+  return listInvoices({ includeDeleted: false }).some(
+    (inv) => inv.status === 'paid' && docMatchesClient(client, inv)
+  )
+}
+
+function ensureVisitFollowUps(client) {
+  if (!client?.id || client.visited !== true) return
+  if (clientBlocksVisitTodos(client)) return
+  const existing = listClientTodos({ clientId: client.id, includeDeleted: true }).filter((t) => !t.deleted)
+  const ownerAgentId = client.ownerAgentId || client.createdByAgentId || ''
+  if (!existing.some((t) => t.kind === 'visit_1')) {
+    upsertClientTodoLocal({
+      clientId: client.id,
+      ownerAgentId,
+      title: 'Follow up 1',
+      dueAt: addDaysFromNow(3),
+      status: 'open',
+      kind: 'visit_1'
+    })
+  }
+  if (!existing.some((t) => t.kind === 'visit_2')) {
+    upsertClientTodoLocal({
+      clientId: client.id,
+      ownerAgentId,
+      title: 'Follow up 2',
+      dueAt: addDaysFromNow(7),
+      status: 'open',
+      kind: 'visit_2'
+    })
+  }
+}
+
+function closeAutoFollowUps(clientId) {
+  const open = listClientTodos({ clientId }).filter(
+    (t) => t.status === 'open' && (t.kind === 'visit_1' || t.kind === 'visit_2' || t.kind === 'quote')
+  )
+  for (const todo of open) {
+    upsertClientTodoLocal({ ...todo, status: 'done', doneAt: new Date().toISOString() })
+  }
+}
+
+function onQuoteSavedForClient(clientId) {
+  const id = String(clientId || '').trim()
+  if (!id) return
+  const client = getClient(id)
+  const open = listClientTodos({ clientId: id }).filter(
+    (t) => t.status === 'open' && (t.kind === 'visit_1' || t.kind === 'visit_2')
+  )
+  for (const todo of open) {
+    upsertClientTodoLocal({ ...todo, status: 'done', doneAt: new Date().toISOString() })
+  }
+  const hasOpenQuote = listClientTodos({ clientId: id }).some((t) => t.status === 'open' && t.kind === 'quote')
+  if (hasOpenQuote) return
+  if (client?.pipelineStatus === 'closed_sold' || (client && clientHasPaidInvoice(client))) return
+  upsertClientTodoLocal({
+    clientId: id,
+    ownerAgentId: client?.ownerAgentId || client?.createdByAgentId || '',
+    title: 'Follow up the quote',
+    dueAt: addDaysFromNow(3),
+    status: 'open',
+    kind: 'quote'
+  })
+}
+
+export function applyClientTodoRules(previous, client) {
+  if (!client?.id) return
+  if (client.visited === true && previous?.visited !== true) ensureVisitFollowUps(client)
+  if (client.pipelineStatus === 'closed_sold' && previous?.pipelineStatus !== 'closed_sold') {
+    closeAutoFollowUps(client.id)
+  }
+}
+
+export function noteQuoteSavedForClient(clientId) {
+  onQuoteSavedForClient(clientId)
+}
+
+export function notePaidInvoice(invoice, previousStatus) {
+  if (!invoice || invoice.deleted || invoice.status !== 'paid') return
+  if (previousStatus === 'paid') return
+  const client =
+    (invoice.clientId && getClient(invoice.clientId)) ||
+    listClients().find((c) => docMatchesClient(c, invoice))
+  if (client?.id) closeAutoFollowUps(client.id)
+}
+
+export function sweepClosedClientTodos() {
+  for (const client of listClients()) {
+    if (client.pipelineStatus === 'closed_sold' || clientHasPaidInvoice(client)) {
+      closeAutoFollowUps(client.id)
+    }
+  }
+}
+
+export function nextOpenClientTodo(clientId) {
+  return listClientTodos({ clientId }).find((t) => t.status === 'open') || null
+}
+
+export function listDueClientTodos({ agentId = '' } = {}) {
+  return listClientTodos({ agentId }).filter((t) => t.status === 'open' && todoIsDueOrOverdue(t.dueAt))
+}
+
 export function listClients({ includeDeleted = false } = {}) {
   ensureSeeded()
   let list = readJson(CLIENTS_KEY, []).map(normalizeClient)
@@ -2991,17 +3263,24 @@ export function ensureCrmClientFromCustomer({
 
 /** Persist CRM client locally and await cloud upsert (source of truth). */
 export async function saveClient(payload) {
+  const previous = payload?.id ? getClient(payload.id) : null
   const saved = upsertClientLocal(payload)
   try {
     const { apiUpsertSalesClient } = await import('./api.js')
     const res = await apiUpsertSalesClient(saved)
-    if (!res.ok) return { ok: false, error: res.error || 'Could not save client online', client: saved }
+    if (!res.ok) {
+      applyClientTodoRules(previous, saved)
+      return { ok: false, error: res.error || 'Could not save client online', client: saved }
+    }
     if (res.data?.client) {
       const cloud = upsertClientLocal(res.data.client)
+      applyClientTodoRules(previous, cloud)
       return { ok: true, client: cloud }
     }
+    applyClientTodoRules(previous, saved)
     return { ok: true, client: saved }
   } catch (e) {
+    applyClientTodoRules(previous, saved)
     return { ok: false, error: e?.message || 'Could not save client online', client: saved }
   }
 }
@@ -3226,6 +3505,7 @@ export function clearSalesData() {
   writeJson(CLIENTS_KEY, [])
   writeJson(CLIENT_MEETINGS_KEY, [])
   writeJson(CLIENT_NOTES_KEY, [])
+  writeJson(CLIENT_TODOS_KEY, [])
   // Keep products — they live in Supabase; only clear local sales ops data
   localStorage.setItem(DATA_VERSION_KEY, DATA_VERSION)
 }

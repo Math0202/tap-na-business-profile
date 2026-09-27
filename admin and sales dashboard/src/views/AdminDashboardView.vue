@@ -29,7 +29,8 @@ import {
 import { personalTypeLabel, memberStatusLabel, PERSONAL_TYPES } from '../lib/teamRoles'
 import { CARD_ID_LABEL, CARD_ID_HINT } from '../lib/cardLabels'
 import { cardImageSrc } from '../lib/cardLinkStore'
-import { purgeLocalDeletedRecords } from '../lib/salesStore'
+import { purgeLocalDeletedRecords, formatTodoDue, todoIsDueOrOverdue } from '../lib/salesStore'
+import { canManageSalesOrg } from '../lib/staffAuth'
 import ActivityCharts from '../components/ActivityCharts.vue'
 
 const route = useRoute()
@@ -37,6 +38,7 @@ const router = useRouter()
 
 const loading = ref(true)
 const loadError = ref('')
+const dueFollowUps = ref([])
 const profiles = ref([])
 const cards = ref([])
 const query = ref('')
@@ -131,12 +133,27 @@ async function refresh() {
   loadError.value = ''
   try {
     if (panel.value === 'profiles') {
-      const res = await apiAdminOverview()
+      const [res, finRes] = await Promise.all([apiAdminOverview(), apiSalesFinance()])
       if (res.ok && res.data?.ok) {
         profiles.value = res.data.profiles || []
         cards.value = res.data.cards || []
       } else {
         loadError.value = res.error || 'Could not load live data'
+      }
+      if (canManageSalesOrg() && finRes.ok) {
+        const data = finRes.data || {}
+        const names = new Map((data.clients || []).map((c) => [c.id, c.name || 'Client']))
+        const agents = new Map((data.agents || []).map((a) => [a.id, a.name || '']))
+        dueFollowUps.value = (data.clientTodos || [])
+          .filter((t) => t.status !== 'done' && !t.deleted && todoIsDueOrOverdue(t.dueAt))
+          .map((t) => ({
+            ...t,
+            clientName: names.get(t.clientId) || 'Client',
+            agentName: agents.get(t.ownerAgentId) || ''
+          }))
+          .sort((a, b) => String(a.dueAt).localeCompare(String(b.dueAt)))
+      } else if (!canManageSalesOrg()) {
+        dueFollowUps.value = []
       }
     } else if (panel.value === 'teams') {
       teamsLoading.value = true
@@ -261,6 +278,15 @@ async function refresh() {
     }
   } catch (err) {
     loadError.value = err?.message || 'Could not load data'
+  }
+  try {
+    await refreshFinanceFromApi()
+    const names = new Map(listClients().map((c) => [c.id, c.name || 'Client']))
+    dueFollowUps.value = listClientTodos()
+      .filter((t) => t.status === 'open' && todoIsDueOrOverdue(t.dueAt))
+      .map((t) => ({ ...t, clientName: names.get(t.clientId) || 'Client' }))
+  } catch {
+    dueFollowUps.value = []
   }
   loading.value = false
 }
@@ -836,6 +862,23 @@ onMounted(() => {
           </button>
         </div>
       </header>
+
+      <div class="card-item-bg rounded-2xl p-4 space-y-3 mb-6">
+        <p class="text-[11px] uppercase tracking-wide text-gray-500">Follow-ups due</p>
+        <p v-if="!dueFollowUps.length" class="text-sm text-gray-500">Nothing due today.</p>
+        <ul v-else class="space-y-2">
+          <li v-for="todo in dueFollowUps" :key="todo.id">
+            <RouterLink
+              class="block text-inherit no-underline"
+              :to="{ path: '/admin/sales', query: { tab: 'crm', client: todo.clientId } }"
+            >
+              <span class="text-sm font-semibold">{{ todo.title }}</span>
+              <span class="text-sm text-gray-400"> · {{ todo.clientName }}</span>
+              <span class="block text-xs text-amber-300 mt-0.5">{{ formatTodoDue(todo.dueAt) }}</span>
+            </RouterLink>
+          </li>
+        </ul>
+      </div>
 
       <!-- Dashboard panels -->
       <div class="flex gap-2 overflow-x-auto pb-1 mb-6">

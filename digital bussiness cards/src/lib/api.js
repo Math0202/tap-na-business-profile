@@ -487,6 +487,10 @@ export function apiDeleteSalesClientMeeting(id) {
   })
 }
 
+export function apiUpsertSalesClientTodo(todo) {
+  return request('/api/sales/client-todos', { method: 'PUT', body: todo, timeoutMs: 12000 })
+}
+
 export function apiUpsertSalesClientNote(note) {
   return request('/api/sales/client-notes', { method: 'PUT', body: note, timeoutMs: 12000 })
 }

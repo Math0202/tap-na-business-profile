@@ -74,6 +74,12 @@ import {
   listClientNotes,
   saveClientNote,
   deleteClientNote,
+  listClientTodos,
+  saveClientTodo,
+  completeClientTodo,
+  formatTodoDue,
+  todoIsDueOrOverdue,
+  getClient,
   clientCrmSummary,
   clientActivityLog,
   sampleCardStatusLabel,
@@ -120,6 +126,8 @@ const products = ref([])
 const invoices = ref([])
 const cash = ref([])
 const clients = ref([])
+const todos = ref([])
+const todoDraft = ref({ title: '', due: '' })
 const showDeleted = ref(false)
 const stats = ref(getSalesStats())
 const query = ref('')
@@ -131,6 +139,50 @@ const canManageProducts = computed(() => canManageSalesOrg())
 /** Sales agents only see their own data; admins and managers see every agent. */
 const isSalesScoped = computed(() => isStaffSales() && !canManageSalesOrg())
 const myAgentId = computed(() => staffAgentId())
+const crmDueCount = computed(() =>
+  todos.value.filter((t) => t.status === 'open' && todoIsDueOrOverdue(t.dueAt)).length
+)
+const crmTabLabel = computed(() => (crmDueCount.value ? `CRM · ${crmDueCount.value} due` : 'CRM'))
+const dueTodos = computed(() =>
+  todos.value
+    .filter((t) => t.status === 'open' && todoIsDueOrOverdue(t.dueAt))
+    .map((t) => ({
+      ...t,
+      clientName: clients.value.find((c) => c.id === t.clientId)?.name || 'Client'
+    }))
+)
+function reloadTodos() {
+  todos.value = listClientTodos({
+    agentId: isSalesScoped.value ? myAgentId.value : ''
+  })
+}
+function nextFollowUpLabel(clientId) {
+  const next = todos.value.find((t) => t.clientId === clientId && t.status === 'open')
+  return next ? formatTodoDue(next.dueAt) : ''
+}
+function clientTodoList(clientId) {
+  const rows = todos.value.filter((t) => t.clientId === clientId)
+  return [...rows.filter((t) => t.status === 'open'), ...rows.filter((t) => t.status === 'done')]
+}
+function todoDateValue(iso) {
+  const dt = new Date(iso)
+  if (Number.isNaN(dt.getTime())) return ''
+  const y = dt.getFullYear()
+  const m = String(dt.getMonth() + 1).padStart(2, '0')
+  const d = String(dt.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+function dueIsoFromInput(value) {
+  const [y, m, d] = String(value || '').split('-').map(Number)
+  if (!y || !m || !d) return ''
+  return new Date(y, m - 1, d, 12, 0, 0, 0).toISOString()
+}
+function openDueTodo(todo) {
+  const client = clients.value.find((c) => c.id === todo.clientId) || getClient(todo.clientId)
+  if (!client) return
+  tab.value = 'crm'
+  openClientDetail(client)
+}
 /** Full agent roster for CRM owner filter (finance refresh stores all agents). */
 const crmOwnerAgents = computed(() => listAgents().filter((a) => !a.deleted))
 const staffLabel = computed(() => {
@@ -146,7 +198,7 @@ const salesTabs = computed(() => {
     { id: 'overview', label: 'Overview', icon: 'dashboard' },
     { id: 'sales', label: 'Sales', icon: 'receipt_long' },
     { id: 'invoices', label: 'Invoices', icon: 'request_quote' },
-    { id: 'crm', label: 'CRM', icon: 'contacts' }
+    { id: 'crm', label: crmTabLabel.value, icon: 'contacts' }
   ]
   if (canManageProducts.value) {
     tabs.push({ id: 'products', label: 'Products', icon: 'inventory_2' })
@@ -419,6 +471,8 @@ async function refresh() {
     }
     // Agents see all CRM clients; Quotes/Invoices amounts stay private via detail API + local finance scope
     clients.value = listClients({ includeDeleted: false })
+    reloadTodos()
+    reloadTodos()
   } else {
     const visible = (list) => (includeDeleted ? list : list.filter((x) => !x.deleted))
     agents.value = visible(allAgents)
@@ -434,6 +488,8 @@ async function refresh() {
     products.value = visible(products.value)
     stats.value = getSalesStats()
     clients.value = listClients({ includeDeleted: false })
+    reloadTodos()
+    reloadTodos()
   }
 
   return { productsOk, financeOk }
@@ -1933,6 +1989,51 @@ async function removeClientNote(noteId) {
   flash('Note deleted')
 }
 
+async function addClientTodo() {
+  if (!activeClient.value) return
+  const title = todoDraft.value.title.trim()
+  const dueAt = dueIsoFromInput(todoDraft.value.due)
+  if (!title || !dueAt) {
+    flash('Add a title and a date')
+    return
+  }
+  const res = await saveClientTodo({
+    clientId: activeClient.value.id,
+    ownerAgentId: activeClient.value.ownerAgentId || '',
+    title,
+    dueAt,
+    kind: 'manual',
+    status: 'open'
+  })
+  if (res && res.ok === false) {
+    flash(res.error || 'Could not save todo')
+    return
+  }
+  todoDraft.value = { title: '', due: '' }
+  reloadTodos()
+  flash('Todo added')
+}
+
+async function markClientTodoDone(todo) {
+  const res = await completeClientTodo(todo.id)
+  if (res && res.ok === false) {
+    flash(res.error || 'Could not update todo')
+    return
+  }
+  reloadTodos()
+}
+
+async function rescheduleClientTodo(todo, value) {
+  const dueAt = dueIsoFromInput(value)
+  if (!dueAt) return
+  const res = await saveClientTodo({ ...todo, dueAt, status: todo.status })
+  if (res && res.ok === false) {
+    flash(res.error || 'Could not update todo')
+    return
+  }
+  reloadTodos()
+}
+
 function openAddMeeting() {
   meetingForm.value = {
     meetingAt: new Date().toISOString().slice(0, 16),
@@ -2002,6 +2103,12 @@ onMounted(async () => {
     salesListMode.value = 'quotes'
   }
   const sync = await refresh()
+  const openId = String(route.query.client || '')
+  if (openId) {
+    tab.value = 'crm'
+    const client = clients.value.find((c) => c.id === openId) || getClient(openId)
+    if (client) await openClientDetail(client)
+  }
   if (!sync?.financeOk) {
     flash('Could not sync sales data — check you are logged in')
   }
@@ -2086,6 +2193,20 @@ onMounted(async () => {
             <p class="text-[11px] uppercase tracking-wide text-gray-500">Active agents</p>
             <p class="text-xl font-bold mt-1">{{ stats.agentsActive }} / {{ stats.agentsTotal }}</p>
           </div>
+        </div>
+
+        <div class="card-item-bg rounded-2xl p-4 space-y-3">
+          <p class="text-[11px] uppercase tracking-wide text-gray-500">Follow-ups due</p>
+          <p v-if="!dueTodos.length" class="text-sm text-gray-500">Nothing due today.</p>
+          <ul v-else class="space-y-2">
+            <li v-for="todo in dueTodos" :key="todo.id">
+              <button type="button" class="w-full text-left" @click="openDueTodo(todo)">
+                <span class="text-sm font-semibold">{{ todo.title }}</span>
+                <span class="text-sm text-gray-400"> · {{ todo.clientName }}</span>
+                <span class="block text-xs text-amber-300 mt-0.5">{{ formatTodoDue(todo.dueAt) }}</span>
+              </button>
+            </li>
+          </ul>
         </div>
 
         <SalesPerformanceCharts
@@ -2506,6 +2627,9 @@ onMounted(async () => {
                   </span>
                   <span class="text-[10px] px-2 py-0.5 rounded-md border border-zinc-700 text-gray-300">
                     {{ clientRowSummary(c).saleStageLabel }}
+                  </span>
+                  <span class="text-[10px] px-2 py-0.5 rounded-md border border-zinc-700 text-gray-300">
+                    Next follow-up: {{ nextFollowUpLabel(c.id) }}
                   </span>
                 </div>
                 <p class="text-[10px] text-gray-500 pt-0.5">
@@ -4118,6 +4242,54 @@ onMounted(async () => {
           >
             Save note
           </button>
+        </div>
+
+        <div class="rounded-2xl border border-zinc-800 p-3 space-y-3">
+          <p class="text-[11px] font-bold uppercase tracking-wide text-gray-400">Follow-ups</p>
+          <div v-if="!clientTodoList(activeClient.id).length" class="text-xs text-gray-500">No follow-ups yet</div>
+          <div
+            v-for="t in clientTodoList(activeClient.id)"
+            :key="t.id"
+            class="flex flex-wrap items-center gap-2 text-xs"
+          >
+            <span class="font-semibold" :class="t.status === 'done' ? 'text-gray-500 line-through' : ''">{{ t.title }}</span>
+            <input
+              type="date"
+              class="bg-transparent border border-zinc-700 rounded-lg px-2 py-1 text-xs"
+              :value="todoDateValue(t.dueAt)"
+              :disabled="t.status === 'done'"
+              @change="rescheduleClientTodo(t, $event.target.value)"
+            />
+            <button
+              v-if="t.status === 'open'"
+              type="button"
+              class="px-2.5 py-1 rounded-full bg-emerald-500 text-black font-bold"
+              @click="markClientTodoDone(t)"
+            >
+              Done
+            </button>
+            <span v-else class="text-[10px] uppercase tracking-wide text-gray-500">Done</span>
+          </div>
+          <div class="flex flex-wrap gap-2 pt-1">
+            <input
+              v-model="todoDraft.title"
+              type="text"
+              placeholder="Todo title"
+              class="flex-1 min-w-[8rem] bg-transparent border border-zinc-700 rounded-lg px-2 py-1.5 text-xs"
+            />
+            <input
+              v-model="todoDraft.due"
+              type="date"
+              class="bg-transparent border border-zinc-700 rounded-lg px-2 py-1.5 text-xs"
+            />
+            <button
+              type="button"
+              class="px-3 py-1.5 rounded-full bg-white text-black text-xs font-bold"
+              @click="addClientTodo"
+            >
+              Add
+            </button>
+          </div>
         </div>
 
         <!-- Activity log -->
