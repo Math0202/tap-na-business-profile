@@ -804,6 +804,81 @@ async function syncFinanceQuiet(fn) {
   }
 }
 
+function agentMatchKey(agent) {
+  const name = String(agent?.name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+  const email = String(agent?.email || agent?.loginEmail || '')
+    .trim()
+    .toLowerCase()
+  return name + '|' + email
+}
+
+const PREFERRED_AGENT_IDS = new Set([
+  'ag-mt2ofn37esu5',
+  'ag-mu3zjvpmuabg',
+  'ag-msamuseiwjm2',
+  'ag-mufno50xcoj2'
+])
+
+/** One row per name+email. Deals on the copies move onto the kept agent. */
+function collapseDuplicateAgents(agents, _remoteAgents, buckets) {
+  const lists = buckets || []
+  const score = new Map()
+  const add = (id) => {
+    const key = String(id || '').trim()
+    if (!key) return
+    score.set(key, (score.get(key) || 0) + 1)
+  }
+  for (const list of lists) {
+    for (const row of list || []) {
+      add(row.agentId)
+      add(row.ownerAgentId)
+      add(row.createdByAgentId)
+    }
+  }
+  const groups = new Map()
+  for (const agent of agents || []) {
+    if (!agent?.id || agent.deleted) continue
+    const key = agentMatchKey(agent)
+    if (!key || key === '|') continue
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(agent)
+  }
+  const idMap = new Map()
+  for (const group of groups.values()) {
+    if (group.length < 2) continue
+    const ranked = group.slice().sort((a, b) => {
+      const byScore = (score.get(b.id) || 0) - (score.get(a.id) || 0)
+      if (byScore) return byScore
+      const byPreferred = (PREFERRED_AGENT_IDS.has(b.id) ? 1 : 0) - (PREFERRED_AGENT_IDS.has(a.id) ? 1 : 0)
+      if (byPreferred) return byPreferred
+      const byAuth = (b.authUserId ? 1 : 0) - (a.authUserId ? 1 : 0)
+      if (byAuth) return byAuth
+      return String(a.createdAt || '').localeCompare(String(b.createdAt || ''))
+    })
+    const keepId = ranked[0].id
+    for (const other of group) {
+      if (other.id !== keepId) idMap.set(other.id, keepId)
+    }
+  }
+  const remap = (id) => (id && idMap.has(id) ? idMap.get(id) : id)
+  for (const list of lists) {
+    for (const row of list || []) {
+      if (row.agentId) row.agentId = remap(row.agentId)
+      if (row.ownerAgentId) row.ownerAgentId = remap(row.ownerAgentId)
+      if (row.createdByAgentId) row.createdByAgentId = remap(row.createdByAgentId)
+    }
+  }
+  const remoteIds = new Set((_remoteAgents || []).map((agent) => agent?.id).filter(Boolean))
+  return (agents || []).filter((agent) => {
+    if (!agent?.id || idMap.has(agent.id)) return false
+    if (!remoteIds.size || remoteIds.has(agent.id)) return true
+    return (score.get(agent.id) || 0) > 0
+  })
+}
+
 function mergeById(localList, remoteList, normalize) {
   const map = new Map()
   for (const item of localList || []) {
@@ -985,6 +1060,24 @@ export async function refreshFinanceFromApi() {
       mergedMeetings = mergedMeetings.filter((m) => !m.clientId || allowedClientIds.has(m.clientId))
       mergedNotes = mergedNotes.filter((n) => !n.clientId || allowedClientIds.has(n.clientId))
     }
+    writeJson(CLIENTS_KEY, mergedClients)
+    writeJson(CLIENT_MEETINGS_KEY, mergedMeetings)
+    writeJson(CLIENT_NOTES_KEY, mergedNotes)
+
+    const keptAgents = collapseDuplicateAgents(mergedAgents, data.agents || [], [
+      mergedOrders,
+      mergedQuotes,
+      mergedInvoices,
+      prunedCash,
+      mergedClients,
+      mergedMeetings,
+      mergedNotes
+    ])
+    writeJson(AGENTS_KEY, keptAgents)
+    writeJson(SALES_KEY, mergedOrders)
+    writeJson(QUOTES_KEY, mergedQuotes)
+    writeJson(INVOICES_KEY, mergedInvoices)
+    writeJson(CASH_KEY, prunedCash)
     writeJson(CLIENTS_KEY, mergedClients)
     writeJson(CLIENT_MEETINGS_KEY, mergedMeetings)
     writeJson(CLIENT_NOTES_KEY, mergedNotes)
