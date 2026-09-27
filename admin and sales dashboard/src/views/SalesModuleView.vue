@@ -2712,16 +2712,13 @@ onMounted(async () => {
         </div>
 
         <div v-if="filteredClients.length" class="card-item-bg rounded-2xl overflow-x-auto">
-          <table class="w-full min-w-[920px] text-left text-xs border-collapse">
+          <table class="w-full min-w-[640px] text-left text-xs border-collapse">
             <thead>
               <tr class="border-b border-zinc-700/80 text-[10px] uppercase tracking-wide text-gray-500">
                 <th class="px-3 py-2.5 font-semibold">Name</th>
-                <th class="px-3 py-2.5 font-semibold">Company</th>
                 <th class="px-3 py-2.5 font-semibold">Visited</th>
-                <th class="px-3 py-2.5 font-semibold">Pipeline</th>
                 <th class="px-3 py-2.5 font-semibold">Stage</th>
-                <th class="px-3 py-2.5 font-semibold">Sample</th>
-                <th class="px-3 py-2.5 font-semibold">Meeting</th>
+                <th class="px-3 py-2.5 font-semibold">Pipeline</th>
                 <th class="px-3 py-2.5 font-semibold">Owner</th>
                 <th class="px-3 py-2.5 font-semibold w-8"></th>
               </tr>
@@ -2744,7 +2741,6 @@ onMounted(async () => {
                     </span>
                   </div>
                 </td>
-                <td class="px-3 py-2.5 align-middle text-gray-400 max-w-[9rem] truncate">{{ c.company || '—' }}</td>
                 <td class="px-3 py-2.5 align-middle whitespace-nowrap">
                   <span
                     v-if="isDirectCrmClient(c)"
@@ -2754,11 +2750,6 @@ onMounted(async () => {
                     {{ c.visited ? 'Visited' : 'Not visited' }}
                   </span>
                   <span v-else class="text-gray-600">—</span>
-                </td>
-                <td class="px-3 py-2.5 align-middle">
-                  <span class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full" :class="statusClass(c.pipelineStatus)">
-                    {{ pipelineStatusLabel(c.pipelineStatus) }}
-                  </span>
                 </td>
                 <td class="px-3 py-2.5 align-middle">
                   <div class="flex flex-col gap-0.5 items-start">
@@ -2772,14 +2763,10 @@ onMounted(async () => {
                     </span>
                   </div>
                 </td>
-                <td class="px-3 py-2.5 align-middle text-gray-400 whitespace-nowrap">
-                  {{ sampleCardStatusLabel(c.sampleCardStatus) }}
-                </td>
-                <td class="px-3 py-2.5 align-middle text-gray-400 whitespace-nowrap">
-                  {{ clientRowSummary(c).meetingLabel }}
-                  <template v-if="clientRowSummary(c).meetingCount > 1">
-                    ({{ clientRowSummary(c).meetingCount }})
-                  </template>
+                <td class="px-3 py-2.5 align-middle">
+                  <span class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full" :class="statusClass(c.pipelineStatus)">
+                    {{ pipelineStatusLabel(c.pipelineStatus) }}
+                  </span>
                 </td>
                 <td class="px-3 py-2.5 align-middle text-gray-400 max-w-[8rem] truncate">
                   {{ c.ownerAgentId ? agentName(c.ownerAgentId) : '—' }}
