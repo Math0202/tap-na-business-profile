@@ -4630,9 +4630,10 @@ onMounted(async () => {
             class="flex flex-wrap items-center gap-2 text-xs"
           >
             <span class="font-semibold" :class="t.status === 'done' ? 'text-gray-500 line-through' : ''">{{ t.title }}</span>
+            <span class="text-gray-300">Due {{ formatTodoDue(t.dueAt) }}</span>
             <input
               type="date"
-              class="bg-transparent border border-zinc-700 rounded-lg px-2 py-1 text-xs"
+              class="bg-zinc-950 text-gray-100 border border-zinc-600 rounded-lg px-2 py-1 text-xs [color-scheme:dark]"
               :value="todoDateValue(t.dueAt)"
               :disabled="t.status === 'done'"
               @change="rescheduleClientTodo(t, $event.target.value)"
@@ -4657,7 +4658,7 @@ onMounted(async () => {
             <input
               v-model="todoDraft.due"
               type="date"
-              class="bg-transparent border border-zinc-700 rounded-lg px-2 py-1.5 text-xs"
+              class="bg-zinc-950 text-gray-100 border border-zinc-600 rounded-lg px-2 py-1.5 text-xs [color-scheme:dark]"
             />
             <button
               type="button"

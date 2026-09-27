@@ -1109,6 +1109,7 @@ export async function refreshFinanceFromApi() {
 
     await reconcileFinanceFromCash({ sync: true })
     sweepClosedClientTodos()
+    sweepMissingVisitFollowUps()
 
     // Link legacy quotes/sales (missing clientId) into CRM for this device's visible docs
     await backfillDocumentClientIds(salesAgentScoped ? scopedAgentId : '')
@@ -2841,13 +2842,25 @@ export function todoIsDueOrOverdue(iso, now = new Date()) {
 export function formatTodoDue(iso) {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleDateString()
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 function addDaysFromNow(days) {
   const d = new Date()
   d.setDate(d.getDate() + days)
   d.setHours(9, 0, 0, 0)
+  return d.toISOString()
+}
+
+function addWorkingDaysFromNow(days) {
+  const d = new Date()
+  d.setHours(9, 0, 0, 0)
+  let left = days
+  while (left > 0) {
+    d.setDate(d.getDate() + 1)
+    const weekday = d.getDay()
+    if (weekday !== 0 && weekday !== 6) left -= 1
+  }
   return d.toISOString()
 }
 
@@ -2976,7 +2989,7 @@ function ensureVisitFollowUps(client) {
       clientId: client.id,
       ownerAgentId,
       title: 'Follow up 2',
-      dueAt: addDaysFromNow(7),
+      dueAt: addWorkingDaysFromNow(7),
       status: 'open',
       kind: 'visit_2'
     })
@@ -3041,6 +3054,12 @@ export function sweepClosedClientTodos() {
     if (client.pipelineStatus === 'closed_sold' || clientHasPaidInvoice(client)) {
       closeAutoFollowUps(client.id)
     }
+  }
+}
+
+function sweepMissingVisitFollowUps() {
+  for (const client of listClients()) {
+    if (client.visited === true) ensureVisitFollowUps(client)
   }
 }
 
