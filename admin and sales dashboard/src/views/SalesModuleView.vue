@@ -4,6 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import BrandMark from '../components/BrandMark.vue'
 import AdminBottomNav from '../components/AdminBottomNav.vue'
 import SalesPerformanceCharts from '../components/SalesPerformanceCharts.vue'
+import AgentPerformancePanel from '../components/AgentPerformancePanel.vue'
 import {
   listAgents,
   saveAgent,
@@ -755,6 +756,11 @@ const agentRows = computed(() =>
     perf: agentPerformance(a.id)
   }))
 )
+
+const performanceMeetings = computed(() => {
+  clients.value
+  return listClientMeetings({ includeDeleted: false })
+})
 
 const openQuotes = computed(() =>
   quotes.value.filter((q) => q.status === 'draft' || q.status === 'sent' || q.status === 'accepted')
@@ -2369,40 +2375,17 @@ onMounted(async () => {
           <p v-else class="text-sm text-gray-500">No sales recorded yet.</p>
         </div>
 
-        <div v-if="!isSalesScoped || agentRows.length">
-          <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-400 mb-3">
-            {{ isSalesScoped ? 'Your performance' : 'Agent performance' }}
-          </h2>
-          <ul class="space-y-2">
-            <li
-              v-for="a in agentRows"
-              :key="a.id"
-              class="card-item-bg rounded-2xl p-4 flex items-center gap-3"
-            >
-              <div class="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shrink-0 font-bold text-sm">
-                {{ (a.name || '?').slice(0, 1) }}
-              </div>
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-2 flex-wrap">
-                  <p class="text-sm font-semibold truncate">{{ a.name }}</p>
-                  <span
-                    class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
-                    :class="a.active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-500/20 text-gray-400'"
-                  >
-                    {{ a.active ? 'Active' : 'Inactive' }}
-                  </span>
-                </div>
-                <p class="text-xs text-gray-400 mt-0.5">
-                  {{ a.region || 'No region' }} · {{ a.commissionRate }}% commission
-                </p>
-                <p class="text-[11px] text-gray-500 mt-1">
-                  {{ a.perf.salesCount }} sales · {{ formatMoney(a.perf.revenue) }} ·
-                  earned {{ formatMoney(a.perf.commission) }}
-                </p>
-              </div>
-            </li>
-          </ul>
-        </div>
+        <AgentPerformancePanel
+          :clients="clients"
+          :quotes="quotes"
+          :invoices="invoices"
+          :meetings="performanceMeetings"
+          :agents="agents"
+          :sales-scoped="isSalesScoped"
+          :locked-agent-id="myAgentId"
+          :can-filter="canManageAgents"
+          @open-client="openClientDetail"
+        />
 
         <div class="flex flex-wrap gap-2">
           <button type="button" class="px-4 py-2.5 rounded-full text-xs font-bold bg-white text-black" @click="tab = 'sales'; salesListMode = 'orders'; openNewSale()">
