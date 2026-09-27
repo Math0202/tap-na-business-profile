@@ -5222,7 +5222,7 @@ async function handleApi(request, env, url) {
       sb(env, clientsQ),
       sb(env, 'sales_client_meetings?deleted=eq.false&select=*&order=meeting_at.desc&limit=5000'),
       sb(env, 'sales_client_notes?deleted=eq.false&select=*&order=created_at.desc&limit=8000'),
-      sb(env, 'sales_client_todos?deleted=eq.false&select=*&order=due_at.asc&limit=8000'),
+      sb(env, 'sales_client_todos?select=*&order=due_at.asc&limit=8000'),
       // Lightweight issuance (no amounts) so CRM stage badges reflect any agent’s docs
       sb(env, 'sales_quotes?deleted=eq.false&select=client_id&limit=5000'),
       sb(env, 'sales_invoices?deleted=eq.false&select=client_id&limit=5000')
@@ -5771,7 +5771,7 @@ async function handleApi(request, env, url) {
       sb(env, q),
       sb(env, 'sales_client_meetings?deleted=eq.false&select=*&order=meeting_at.desc&limit=5000'),
       sb(env, 'sales_client_notes?deleted=eq.false&select=*&order=created_at.desc&limit=8000'),
-      sb(env, 'sales_client_todos?deleted=eq.false&select=*&order=due_at.asc&limit=8000')
+      sb(env, 'sales_client_todos?select=*&order=due_at.asc&limit=8000')
     ])
     const clients = clientsRaw || []
     const meetings = meetingsRaw || []
@@ -6049,6 +6049,28 @@ async function handleApi(request, env, url) {
     await upsertSalesRow(env, 'sales_client_todos', payload)
     const saved = await sb(env, 'sales_client_todos?id=eq.' + encodeURIComponent(row.id) + '&select=*')
     return json({ ok: true, todo: mapSalesClientTodoRow(saved?.[0] || payload) })
+  }
+
+  const salesTodoMatch = pathname.match(/^\/api\/sales\/client-todos\/([^/]+)$/)
+  if (salesTodoMatch && method === 'DELETE') {
+    const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
+    if (gate.error) return gate.error
+    const id = decodeURIComponent(salesTodoMatch[1])
+    const existing = await sb(env, 'sales_client_todos?id=eq.' + encodeURIComponent(id) + '&select=*')
+    if (!existing?.[0]) return bad('Todo not found', 404)
+    const clients = await sb(
+      env,
+      'sales_clients?id=eq.' + encodeURIComponent(existing[0].client_id || '') + '&select=*'
+    )
+    const denied = assertClientAccess(gate.staff, clients?.[0])
+    if (denied) return denied
+    await softDeleteRow(env, {
+      table: 'sales_client_todos',
+      id,
+      actor: gate.staff.email || gate.staff.id || 'staff',
+      extra: { updated_at: new Date().toISOString() }
+    })
+    return json({ ok: true, id, deleted: true })
   }
 
   if (pathname === '/api/sales/client-notes' && method === 'PUT') {

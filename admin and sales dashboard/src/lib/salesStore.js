@@ -2946,6 +2946,20 @@ export async function completeClientTodo(id) {
   return { ok: true, todo: saved }
 }
 
+export async function deleteClientTodo(id) {
+  const existing = listClientTodos({ includeDeleted: true }).find((t) => t.id === id)
+  if (!existing || existing.deleted) return { ok: false, error: 'Todo not found' }
+  markLocalDeleted(CLIENT_TODOS_KEY, id, normalizeClientTodo)
+  try {
+    const { apiDeleteSalesClientTodo } = await import('./api.js')
+    const res = await apiDeleteSalesClientTodo(id)
+    if (!res.ok) return { ok: false, error: res.error || 'Could not delete todo online' }
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e?.message || 'Could not delete todo online' }
+  }
+}
+
 function docMatchesClient(client, doc) {
   if (!client || !doc || doc.deleted) return false
   if (String(doc.clientId || '') && String(doc.clientId) === String(client.id)) return true
@@ -2972,7 +2986,7 @@ function clientHasPaidInvoice(client) {
 function ensureVisitFollowUps(client) {
   if (!client?.id || client.visited !== true) return
   if (clientBlocksVisitTodos(client)) return
-  const existing = listClientTodos({ clientId: client.id, includeDeleted: true }).filter((t) => !t.deleted)
+  const existing = listClientTodos({ clientId: client.id, includeDeleted: true })
   const ownerAgentId = client.ownerAgentId || client.createdByAgentId || ''
   if (!existing.some((t) => t.kind === 'visit_1')) {
     upsertClientTodoLocal({

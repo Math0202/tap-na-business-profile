@@ -77,6 +77,7 @@ import {
   listClientTodos,
   saveClientTodo,
   completeClientTodo,
+  deleteClientTodo,
   formatTodoDue,
   todoIsDueOrOverdue,
   getClient,
@@ -2021,6 +2022,17 @@ async function markClientTodoDone(todo) {
     return
   }
   reloadTodos()
+}
+
+async function removeClientTodo(todo) {
+  if (!confirm('Delete this follow-up?')) return
+  const res = await deleteClientTodo(todo.id)
+  if (res && res.ok === false) {
+    flash(res.error || 'Could not delete follow-up')
+    return
+  }
+  reloadTodos()
+  flash('Follow-up deleted')
 }
 
 async function rescheduleClientTodo(todo, value) {
@@ -4270,6 +4282,13 @@ onMounted(async () => {
               Done
             </button>
             <span v-else class="text-[10px] uppercase tracking-wide text-gray-500">Done</span>
+            <button
+              type="button"
+              class="px-2.5 py-1 rounded-full text-red-400"
+              @click="removeClientTodo(t)"
+            >
+              Delete
+            </button>
           </div>
           <div class="flex flex-wrap gap-2 pt-1">
             <input
