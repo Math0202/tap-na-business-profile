@@ -7,6 +7,24 @@ export default {
     const url = new URL(request.url)
     const host = url.hostname.toLowerCase()
 
+    // #region agent log
+    try {
+      fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '61b56f' },
+        body: JSON.stringify({
+          sessionId: '61b56f',
+          runId: 'pre-fix',
+          hypothesisId: 'A',
+          location: 'admin-spa.js:fetch',
+          message: 'admin worker request',
+          data: { host, path: url.pathname, search: url.search },
+          timestamp: Date.now()
+        })
+      }).catch(() => {})
+    } catch (_) {}
+    // #endregion
+
     if (host && host !== 'admin.tapnam.com' && !host.endsWith('.workers.dev')) {
       const next = new URL(request.url)
       next.protocol = 'https:'

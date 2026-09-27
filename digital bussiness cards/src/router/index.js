@@ -253,7 +253,7 @@ const router = createRouter({
   }
 })
 
-router.beforeEach((to) => {
+router.beforeEach((to, from) => {
   const profile = loadProfile()
 
   if (to.path === '/me' && isTableBusiness(profile) && !isProfileDeleted(profile)) {
@@ -272,9 +272,15 @@ router.beforeEach((to) => {
   // Staff area — home and /c/:serial stay public
   if (to.path.startsWith('/admin') && !to.meta.staffPublic) {
     if (!isStaffLoggedIn()) {
+      // #region agent log
+      fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'A',location:'digital/router:admin-guard',message:'admin route blocked → login',data:{host:typeof window!=='undefined'?window.location.hostname:'',toPath:to.path,toFull:to.fullPath,fromPath:from?.path,href:typeof window!=='undefined'?window.location.href:''},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       return { path: '/login', query: { next: to.fullPath } }
     }
     if (!staffCanAccessAdminPath(to.path)) {
+      // #region agent log
+      fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'C',location:'digital/router:staff-access-denied',message:'staff logged in but path denied',data:{toPath:to.path,sales:isStaffSalesTeam(),redirect:isStaffSalesTeam()?'/admin/sales':'/login'},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       return isStaffSalesTeam() ? '/admin/sales' : '/login'
     }
     if (to.meta.staffRoles?.length) {

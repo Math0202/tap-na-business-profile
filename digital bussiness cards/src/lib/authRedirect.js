@@ -22,6 +22,11 @@ export function staffHomePath() {
  */
 export function navigateAfterLogin(router, kind, opts = {}) {
   const path = resolvePostLoginPath(kind, opts)
+  // #region agent log
+  if (typeof window !== 'undefined') {
+    fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'E',location:'digital/authRedirect.js:navigateAfterLogin',message:'navigateAfterLogin',data:{kind,path,next:opts.next||'',host:window.location.hostname,href:window.location.href,adminHost:isAdminHost(),local:isLocalHost()},timestamp:Date.now()})}).catch(()=>{});
+  }
+  // #endregion
   if (typeof window === 'undefined') {
     router.push(path)
     return

@@ -8,6 +8,9 @@ const route = useRoute()
 const router = useRouter()
 
 onMounted(() => {
+  // #region agent log
+  fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'D',location:'digital/AdminLoginView.vue:onMounted',message:'admin/login redirect shim',data:{host:typeof window!=='undefined'?window.location.hostname:'',href:typeof window!=='undefined'?window.location.href:'',query:route.query,staff:isStaffLoggedIn()},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   if (isStaffLoggedIn()) {
     router.replace(staffHomePath())
     return
