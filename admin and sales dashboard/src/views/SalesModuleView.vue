@@ -65,6 +65,7 @@ import {
   formatSalesStatus,
   cashCategoryLabel,
   listClients,
+  clientAddedDirectly,
   getClient,
   saveClient,
   deleteClient,
@@ -1761,13 +1762,36 @@ function statusClass(status) {
   return 'bg-red-500/15 text-red-300'
 }
 
+function isDirectCrmClient(client) {
+  return clientAddedDirectly(client, {
+    quotes: quotes.value,
+    invoices: invoices.value,
+    orders: sales.value,
+    cash: cash.value
+  })
+}
+
+function showVisitedOnClientForm() {
+  if (!editingClientId.value) return true
+  const existing = clients.value.find((c) => c.id === editingClientId.value)
+  return existing ? isDirectCrmClient(existing) : false
+}
+
+const funnelClients = computed(() =>
+  clients.value.map((client) => ({
+    ...client,
+    addedDirectly: isDirectCrmClient(client)
+  }))
+)
+
 const filteredClients = computed(() => {
   const q = crmQuery.value.trim().toLowerCase()
   const list = clients.value.filter((c) => {
     if (crmPipelineFilter.value !== 'all' && c.pipelineStatus !== crmPipelineFilter.value) return false
     if (crmSampleFilter.value !== 'all' && c.sampleCardStatus !== crmSampleFilter.value) return false
-    if (crmVisitFilter.value === 'visited' && !c.visited) return false
-    if (crmVisitFilter.value === 'not_visited' && c.visited) return false
+    const directCrm = isDirectCrmClient(c)
+    if (crmVisitFilter.value === 'visited' && (!directCrm || !c.visited)) return false
+    if (crmVisitFilter.value === 'not_visited' && (!directCrm || c.visited)) return false
     if (crmStageFilter.value !== 'all') {
       // Prefer enriched saleStage from finance refresh (shared issuance); fall back to own docs
       const stage =
@@ -2306,7 +2330,7 @@ onMounted(async () => {
         />
 
         <AgentPerformancePanel
-          :clients="clients"
+          :clients="funnelClients"
           :quotes="quotes"
           :invoices="invoices"
           :meetings="performanceMeetings"
@@ -2723,11 +2747,13 @@ onMounted(async () => {
                 <td class="px-3 py-2.5 align-middle text-gray-400 max-w-[9rem] truncate">{{ c.company || '—' }}</td>
                 <td class="px-3 py-2.5 align-middle whitespace-nowrap">
                   <span
+                    v-if="isDirectCrmClient(c)"
                     class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
                     :class="c.visited ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-500/15 text-gray-400'"
                   >
                     {{ c.visited ? 'Visited' : 'Not visited' }}
                   </span>
+                  <span v-else class="text-gray-600">—</span>
                 </td>
                 <td class="px-3 py-2.5 align-middle">
                   <span class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full" :class="statusClass(c.pipelineStatus)">
@@ -4210,7 +4236,7 @@ onMounted(async () => {
               <option value="invoice">Invoice</option>
             </select>
           </div>
-          <div>
+          <div v-if="showVisitedOnClientForm()">
             <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Visited</label>
             <select v-model="clientForm.visited" class="field-input w-full bg-zinc-950 text-sm">
               <option :value="false">Not visited</option>
@@ -4345,7 +4371,7 @@ onMounted(async () => {
               <option value="invoice">Invoice</option>
             </select>
           </div>
-          <div>
+          <div v-if="isDirectCrmClient(activeClient)">
             <label class="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Visited</label>
             <select
               class="field-input w-full bg-zinc-950 text-xs"

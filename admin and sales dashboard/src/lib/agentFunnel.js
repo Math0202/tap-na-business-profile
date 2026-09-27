@@ -58,7 +58,8 @@ function flagsFor(client, quotes, invoices, meetings) {
     client.pipelineStatus === 'closed_sold' || liveInvoices.some((inv) => inv.status === 'paid')
   const invoiced = closed || liveInvoices.length > 0
   const quoted = invoiced || qualifying.length > 0
-  const visited = quoted || client.visited === true || meetings.length > 0
+  const directVisit = client.addedDirectly !== false
+  const visited = quoted || (directVisit && (client.visited === true || meetings.length > 0))
   return { visited, quoted, invoiced, closed }
 }
 

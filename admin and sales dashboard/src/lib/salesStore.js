@@ -2795,6 +2795,58 @@ function phoneDigits(value) {
   return String(value || '').replace(/\D/g, '')
 }
 
+function normLabel(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+}
+
+function clientMatchesCustomer(client, customerName) {
+  const customer = normLabel(customerName)
+  const name = normLabel(client?.name)
+  if (!customer || !name) return false
+  if (customer === name) return true
+  const company = normLabel(client?.company)
+  if (company && (customer === name + ' - ' + company || customer === name + ' ' + company)) return true
+  return customer.startsWith(name + ' ') && (!company || customer.includes(company))
+}
+
+function docBelongsToClient(client, doc, customerName) {
+  if (!doc || doc.deleted) return false
+  if (String(doc.clientId || '') && String(doc.clientId) === String(client.id)) return true
+  const email = normLabel(client?.email)
+  if (email && normLabel(doc.customerEmail) === email) return true
+  return clientMatchesCustomer(client, customerName || doc.customerName)
+}
+
+/**
+ * Visited is only for prospects added in CRM.
+ * A contact created from a quote, invoice, sale, or payment is not.
+ * A prospect added first, then quoted later, still counts.
+ */
+export function clientAddedDirectly(client, { quotes = [], invoices = [], orders = [], cash = [] } = {}) {
+  if (!client?.id) return false
+  const created = Date.parse(client.createdAt || '')
+  let first = Infinity
+  const consider = (doc, at, customerName) => {
+    if (!docBelongsToClient(client, doc, customerName)) return
+    const t = Date.parse(at || '')
+    if (Number.isFinite(t) && t < first) first = t
+  }
+  for (const quote of quotes) consider(quote, quote.createdAt, quote.customerName)
+  for (const invoice of invoices) consider(invoice, invoice.issuedAt || invoice.createdAt, invoice.customerName)
+  for (const order of orders) consider(order, order.soldAt || order.createdAt, order.customerName)
+  for (const entry of cash) {
+    if (!entry || entry.deleted) continue
+    const customer = String(entry.description || '').replace(/^Sale\s*·\s*[^·]*·\s*/i, '')
+    consider(entry, entry.at, customer)
+  }
+  if (!Number.isFinite(first)) return true
+  if (!Number.isFinite(created)) return false
+  return created < first - 2000
+}
+
 /** Whether a CRM client belongs to this sales agent (owner, or creator if unassigned). */
 export function clientBelongsToAgent(client, agentId) {
   const aid = String(agentId || '').trim()
