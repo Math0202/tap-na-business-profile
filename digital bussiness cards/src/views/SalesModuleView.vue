@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch, onMounted } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import BrandMark from '../components/BrandMark.vue'
+import LazyMore from '../components/LazyMore.vue'
 import AdminBottomNav from '../components/AdminBottomNav.vue'
 import SalesPerformanceCharts from '../components/SalesPerformanceCharts.vue'
 import {
@@ -758,6 +759,48 @@ const agentRows = computed(() =>
     perf: agentPerformance(a.id)
   }))
 )
+
+const LAZY_PAGE = 24
+const lazyLimit = reactive({
+  overview: LAZY_PAGE,
+  overviewAgents: LAZY_PAGE,
+  sales: LAZY_PAGE,
+  quotes: LAZY_PAGE,
+  invoices: LAZY_PAGE,
+  crm: LAZY_PAGE,
+  products: LAZY_PAGE,
+  cash: LAZY_PAGE,
+  agents: LAZY_PAGE
+})
+
+function resetLazy(...keys) {
+  for (const key of keys) lazyLimit[key] = LAZY_PAGE
+}
+
+function loadMore(key, total) {
+  const n = Number(total) || 0
+  if (lazyLimit[key] >= n) return
+  lazyLimit[key] = Math.min(n, lazyLimit[key] + LAZY_PAGE)
+}
+
+const visibleDueTodos = computed(() => dueTodos.value.slice(0, lazyLimit.overview))
+const visibleOverviewAgents = computed(() => agentRows.value.slice(0, lazyLimit.overviewAgents))
+const visibleSales = computed(() => filteredSales.value.slice(0, lazyLimit.sales))
+const visibleQuotes = computed(() => filteredQuotes.value.slice(0, lazyLimit.quotes))
+const visibleInvoices = computed(() => filteredInvoices.value.slice(0, lazyLimit.invoices))
+const visibleClients = computed(() => filteredClients.value.slice(0, lazyLimit.crm))
+const visibleProducts = computed(() => filteredProducts.value.slice(0, lazyLimit.products))
+const visibleCash = computed(() => cashRows.value.slice(0, lazyLimit.cash))
+const visibleAgents = computed(() => agentRows.value.slice(0, lazyLimit.agents))
+
+watch([query, agentFilter, salesListMode], () => {
+  resetLazy('sales', 'quotes', 'invoices', 'products', 'cash')
+})
+watch(
+  [crmQuery, crmPipelineFilter, crmSampleFilter, crmStageFilter, crmOwnerFilter, crmReferralFilter],
+  () => resetLazy('crm')
+)
+watch([cashTypeFilter, cashCategoryFilter, cashFrom, cashTo], () => resetLazy('cash'))
 
 const openQuotes = computed(() =>
   quotes.value.filter((q) => q.status === 'draft' || q.status === 'sent' || q.status === 'accepted')
@@ -2211,7 +2254,7 @@ onMounted(async () => {
           <p class="text-[11px] uppercase tracking-wide text-gray-500">Follow-ups due</p>
           <p v-if="!dueTodos.length" class="text-sm text-gray-500">Nothing due today.</p>
           <ul v-else class="space-y-2">
-            <li v-for="todo in dueTodos" :key="todo.id">
+            <li v-for="todo in visibleDueTodos" :key="todo.id">
               <button type="button" class="w-full text-left" @click="openDueTodo(todo)">
                 <span class="text-sm font-semibold">{{ todo.title }}</span>
                 <span class="text-sm text-gray-400"> · {{ todo.clientName }}</span>
@@ -2219,6 +2262,13 @@ onMounted(async () => {
               </button>
             </li>
           </ul>
+          <LazyMore
+            v-if="dueTodos.length > visibleDueTodos.length"
+            :stamp="lazyLimit.overview"
+            :loaded="visibleDueTodos.length"
+            :total="dueTodos.length"
+            @more="loadMore('overview', dueTodos.length)"
+          />
         </div>
 
         <SalesPerformanceCharts
@@ -2233,7 +2283,7 @@ onMounted(async () => {
           </h2>
           <ul class="space-y-2">
             <li
-              v-for="a in agentRows"
+              v-for="a in visibleOverviewAgents"
               :key="a.id"
               class="card-item-bg rounded-2xl p-4 flex items-center gap-3"
             >
@@ -2260,6 +2310,13 @@ onMounted(async () => {
               </div>
             </li>
           </ul>
+          <LazyMore
+            v-if="agentRows.length > visibleOverviewAgents.length"
+            :stamp="lazyLimit.overviewAgents"
+            :loaded="visibleOverviewAgents.length"
+            :total="agentRows.length"
+            @more="loadMore('overviewAgents', agentRows.length)"
+          />
         </div>
 
         <div class="flex flex-wrap gap-2">
@@ -2365,7 +2422,7 @@ onMounted(async () => {
         </div>
 
         <ul v-if="salesListMode === 'orders'" class="space-y-2">
-          <li v-for="s in filteredSales" :key="s.id" class="card-item-bg rounded-2xl p-4">
+          <li v-for="s in visibleSales" :key="s.id" class="card-item-bg rounded-2xl p-4">
             <div class="flex items-start justify-between gap-3">
               <div class="flex items-start gap-3 min-w-0">
                 <img
@@ -2407,6 +2464,13 @@ onMounted(async () => {
             </div>
           </li>
         </ul>
+        <LazyMore
+          v-if="salesListMode === 'orders' && filteredSales.length > visibleSales.length"
+          :stamp="lazyLimit.sales"
+          :loaded="visibleSales.length"
+          :total="filteredSales.length"
+          @more="loadMore('sales', filteredSales.length)"
+        />
         <p v-if="salesListMode === 'orders' && !filteredSales.length" class="text-sm text-gray-500">
           <template v-if="salesHiddenByAgentFilter">
             No sales for this agent filter — switch to
@@ -2416,7 +2480,7 @@ onMounted(async () => {
         </p>
 
         <ul v-if="salesListMode === 'quotes'" class="space-y-2">
-          <li v-for="q in filteredQuotes" :key="q.id" class="card-item-bg rounded-2xl p-4">
+          <li v-for="q in visibleQuotes" :key="q.id" class="card-item-bg rounded-2xl p-4">
             <div class="flex items-start justify-between gap-3">
               <div class="flex items-start gap-3 min-w-0">
                 <img
@@ -2478,6 +2542,13 @@ onMounted(async () => {
             </div>
           </li>
         </ul>
+        <LazyMore
+          v-if="salesListMode === 'quotes' && filteredQuotes.length > visibleQuotes.length"
+          :stamp="lazyLimit.quotes"
+          :loaded="visibleQuotes.length"
+          :total="filteredQuotes.length"
+          @more="loadMore('quotes', filteredQuotes.length)"
+        />
         <p v-if="salesListMode === 'quotes' && !filteredQuotes.length" class="text-sm text-gray-500">
           <template v-if="quotesHiddenByAgentFilter">
             No quotes for this agent filter — switch to
@@ -2497,7 +2568,7 @@ onMounted(async () => {
         </div>
 
         <ul class="space-y-2">
-          <li v-for="inv in filteredInvoices" :key="inv.id" class="card-item-bg rounded-2xl p-4">
+          <li v-for="inv in visibleInvoices" :key="inv.id" class="card-item-bg rounded-2xl p-4">
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0">
                 <div class="flex items-center gap-2 flex-wrap">
@@ -2527,6 +2598,13 @@ onMounted(async () => {
             </div>
           </li>
         </ul>
+        <LazyMore
+          v-if="filteredInvoices.length > visibleInvoices.length"
+          :stamp="lazyLimit.invoices"
+          :loaded="visibleInvoices.length"
+          :total="filteredInvoices.length"
+          @more="loadMore('invoices', filteredInvoices.length)"
+        />
         <p v-if="!filteredInvoices.length" class="text-sm text-gray-500">No invoices yet. Save a sale to generate one.</p>
       </section>
 
@@ -2604,7 +2682,7 @@ onMounted(async () => {
 
         <ul class="space-y-2">
           <li
-            v-for="c in filteredClients"
+            v-for="c in visibleClients"
             :key="c.id"
             class="card-item-bg rounded-2xl p-4 cursor-pointer hover:brightness-110 transition"
             @click="openClientDetail(c)"
@@ -2653,6 +2731,13 @@ onMounted(async () => {
             </div>
           </li>
         </ul>
+        <LazyMore
+          v-if="filteredClients.length > visibleClients.length"
+          :stamp="lazyLimit.crm"
+          :loaded="visibleClients.length"
+          :total="filteredClients.length"
+          @more="loadMore('crm', filteredClients.length)"
+        />
         <p v-if="!filteredClients.length" class="text-sm text-gray-500 text-center py-8">
           No clients yet. Add a prospect or referral to get started.
         </p>
@@ -2676,7 +2761,7 @@ onMounted(async () => {
         </div>
 
         <ul class="space-y-2">
-          <li v-for="p in filteredProducts" :key="p.id" class="card-item-bg rounded-2xl p-4 flex items-start gap-3">
+          <li v-for="p in visibleProducts" :key="p.id" class="card-item-bg rounded-2xl p-4 flex items-start gap-3">
             <div class="w-14 h-14 rounded-2xl bg-white/10 overflow-hidden flex items-center justify-center shrink-0">
               <img v-if="productThumb(p)" :src="productThumb(p)" :alt="p.name" class="w-full h-full object-cover">
               <span v-else class="material-symbols-outlined text-[22px]">inventory_2</span>
@@ -2713,6 +2798,13 @@ onMounted(async () => {
             </div>
           </li>
         </ul>
+        <LazyMore
+          v-if="filteredProducts.length > visibleProducts.length"
+          :stamp="lazyLimit.products"
+          :loaded="visibleProducts.length"
+          :total="filteredProducts.length"
+          @more="loadMore('products', filteredProducts.length)"
+        />
         <p v-if="!filteredProducts.length" class="text-sm text-gray-500">No products found.</p>
       </section>
 
@@ -2824,7 +2916,7 @@ onMounted(async () => {
         </div>
 
         <ul class="space-y-2">
-          <li v-for="c in cashRows" :key="c.id" class="card-item-bg rounded-2xl p-4 flex gap-3">
+          <li v-for="c in visibleCash" :key="c.id" class="card-item-bg rounded-2xl p-4 flex gap-3">
             <div
               class="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
               :class="c.type === 'in' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'"
@@ -2862,6 +2954,13 @@ onMounted(async () => {
             </div>
           </li>
         </ul>
+        <LazyMore
+          v-if="cashRows.length > visibleCash.length"
+          :stamp="lazyLimit.cash"
+          :loaded="visibleCash.length"
+          :total="cashRows.length"
+          @more="loadMore('cash', cashRows.length)"
+        />
         <p v-if="!cashRows.length" class="text-sm text-gray-500">No cash entries found.</p>
       </section>
 
@@ -2883,7 +2982,7 @@ onMounted(async () => {
         </div>
 
         <ul class="space-y-2">
-          <li v-for="a in agentRows" :key="a.id" class="card-item-bg rounded-2xl p-4" :class="a.deleted ? 'opacity-60' : ''">
+          <li v-for="a in visibleAgents" :key="a.id" class="card-item-bg rounded-2xl p-4" :class="a.deleted ? 'opacity-60' : ''">
             <div class="flex items-start gap-3">
               <div class="w-11 h-11 rounded-full bg-white text-black flex items-center justify-center shrink-0 font-bold">
                 {{ (a.name || '?').slice(0, 1) }}
@@ -2927,6 +3026,13 @@ onMounted(async () => {
             </div>
           </li>
         </ul>
+        <LazyMore
+          v-if="agentRows.length > visibleAgents.length"
+          :stamp="lazyLimit.agents"
+          :loaded="visibleAgents.length"
+          :total="agentRows.length"
+          @more="loadMore('agents', agentRows.length)"
+        />
       </section>
 
 
