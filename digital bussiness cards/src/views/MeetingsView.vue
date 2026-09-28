@@ -65,11 +65,6 @@ function toDayKey(d) {
 function profileId() {
   const p = publicProfile.value
   if (activeAssistExecutiveId.value) return activeAssistExecutiveId.value
-  // Visitors book the stand-in while cover is active; owners/assistants still manage the viewed calendar.
-  if (!isLoggedIn() || !isOwner.value) {
-    const bookingId = String(p.bookingProfileId || '').trim()
-    if (p.standinActive && bookingId) return bookingId
-  }
   return String(p.remoteProfileId || p.id || '').trim()
 }
 
@@ -297,15 +292,7 @@ onMounted(() => {
           {{ isOwner || isAssistantFlag ? 'Your booking calendar' : 'Book time with ' + ownerName }}
         </p>
         <p
-          v-if="publicProfile.standinActive && publicProfile.standinCover && !activeAssistExecutiveId"
-          class="mt-2 text-xs text-amber-200/90 bg-amber-500/10 border border-amber-500/25 rounded-xl px-3 py-2 leading-relaxed"
-        >
-          {{ ownerName }} is away.
-          Covering: <span class="font-semibold text-amber-100">{{ publicProfile.standinCover.name }}</span>
-          <span v-if="publicProfile.standinNote"> · {{ publicProfile.standinNote }}</span>
-        </p>
-        <p
-          v-else-if="isAssistantFlag"
+          v-if="isAssistantFlag"
           class="mt-2 text-xs text-sky-300/90"
         >
           Managing this calendar as personal assistant

@@ -1722,11 +1722,11 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
 
   const standinActive = isStandinCoverActive(row)
   let standinCover = null
-  let bookingProfileId = row.id
+  const bookingProfileId = row.id
   if (standinActive && row.standin_profile_id) {
     const standinRows = await sb(
       env,
-      `profiles?id=eq.${encodeURIComponent(row.standin_profile_id)}&deleted=eq.false&select=id,name,title,company,phone,email,whatsapp,show_booking,disabled`
+      `profiles?id=eq.${encodeURIComponent(row.standin_profile_id)}&deleted=eq.false&select=id,disabled`
     )
     const standin = standinRows?.[0]
     if (standin && !standin.disabled) {
@@ -1734,18 +1734,8 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
         env,
         `cards?profile_id=eq.${encodeURIComponent(standin.id)}&kind=eq.personal&deleted=eq.false&status=eq.linked&select=slug&order=linked_at.desc.nullslast&limit=1`
       )
-      standinCover = {
-        id: standin.id,
-        name: String(standin.name || standin.company || 'Stand-in').trim() || 'Stand-in',
-        title: standin.title || '',
-        company: standin.company || '',
-        phone: standin.phone || '',
-        email: standin.email || '',
-        whatsapp: standin.whatsapp || '',
-        shareSlug: standinCards?.[0]?.slug || '',
-        showBooking: standin.show_booking !== false
-      }
-      bookingProfileId = standin.id
+      const shareSlug = String(standinCards?.[0]?.slug || '').trim()
+      if (shareSlug) standinCover = { shareSlug }
     }
   }
 
@@ -8425,6 +8415,17 @@ async function handleApi(request, env, url) {
         hostEmails = hostEmails.filter((em) => !excludedOwnerEmails.has(em.toLowerCase()))
       }
 
+      if (owner?.assistant_profile_id) {
+        const assistants = await sb(
+          env,
+          `profiles?id=eq.${encodeURIComponent(owner.assistant_profile_id)}&deleted=eq.false&select=id,email,login_email,disabled&limit=1`
+        )
+        const assistant = assistants?.[0]
+        if (assistant && !assistant.disabled) {
+          hostEmails = uniqueEmails(...hostEmails, ...ownerNotifyEmails(assistant))
+        }
+      }
+
       const guestReplyTo = hostEmails[0] || ownerEmail || 'welcome@tapnam.com'
       const sends = []
 
@@ -8432,6 +8433,7 @@ async function handleApi(request, env, url) {
       sends.push(
         sendCloudflareEmail(env, {
           to: email,
+          from: 'tap-na <no-reply@tapnam.com>',
           replyTo: guestReplyTo,
           subject: `Meeting request with ${ownerName}`,
           html: transactionalShell({
@@ -8462,6 +8464,7 @@ async function handleApi(request, env, url) {
         sends.push(
           sendCloudflareEmail(env, {
             to: hostEmails,
+            from: 'tap-na <no-reply@tapnam.com>',
             replyTo: email,
             subject: `New meeting request from ${name}`,
             html: transactionalShell({

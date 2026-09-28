@@ -269,6 +269,19 @@ onMounted(async () => {
       const mine = loadProfile()
       const isMine =
         remote.profile.id && (mine.remoteProfileId === remote.profile.id || mine.id === remote.profile.id)
+      const standSlug = String(remote.profile.standinCover?.shareSlug || '').trim()
+      if (
+        !isMine &&
+        String(route.query.stood || '') !== '1' &&
+        remote.profile.standinActive &&
+        standSlug &&
+        standSlug !== String(serial.value || '').trim()
+      ) {
+        const query = { stood: '1' }
+        if (via) query.via = via
+        router.replace({ path: `/c/${standSlug}`, query })
+        return
+      }
       const profileToView = isMine
         ? {
             ...remote.profile,

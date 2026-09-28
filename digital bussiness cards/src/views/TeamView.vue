@@ -775,7 +775,7 @@ onMounted(() => {
 
           <h2 class="text-sm font-semibold pt-2">Stand-in (away / vacation)</h2>
           <p class="text-xs text-gray-500 leading-relaxed">
-            When active, visitors book and contact your stand-in instead. Your NFC card still opens your profile with a covering notice.
+            When active, a tap or scan of your card opens your stand-in’s profile.
           </p>
           <select v-model="standinProfileId" class="field-input w-full bg-transparent" :disabled="saving">
             <option value="">No stand-in</option>
