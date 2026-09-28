@@ -112,7 +112,8 @@ import {
   staffAgentId,
   getStaffUser,
   staffLogout,
-  upsertStaffSalesUser
+  upsertStaffSalesUser,
+  fetchStaffMe
 } from '../lib/staffAuth'
 import QRCode from 'qrcode'
 import { buddyPaymentUrl } from '../lib/buddyPayment'
@@ -135,12 +136,25 @@ const stats = ref(getSalesStats())
 const query = ref('')
 const agentFilter = ref('')
 const toast = ref('')
+const staffSessionTick = ref(0)
 
-const canManageAgents = computed(() => canManageSalesOrg())
-const canManageProducts = computed(() => canManageSalesOrg())
+const canManageAgents = computed(() => {
+  staffSessionTick.value
+  return canManageSalesOrg()
+})
+const canManageProducts = computed(() => {
+  staffSessionTick.value
+  return canManageSalesOrg()
+})
 /** Sales agents only see their own data; admins and managers see every agent. */
-const isSalesScoped = computed(() => isStaffSales() && !canManageSalesOrg())
-const myAgentId = computed(() => staffAgentId())
+const isSalesScoped = computed(() => {
+  staffSessionTick.value
+  return isStaffSales() && !canManageSalesOrg()
+})
+const myAgentId = computed(() => {
+  staffSessionTick.value
+  return staffAgentId()
+})
 const crmDueCount = computed(() =>
   todos.value.filter((t) => t.status === 'open' && todoIsDueOrOverdue(t.dueAt)).length
 )
@@ -188,6 +202,7 @@ function openDueTodo(todo) {
 /** Full agent roster for CRM owner filter (finance refresh stores all agents). */
 const crmOwnerAgents = computed(() => listAgents().filter((a) => !a.deleted))
 const staffLabel = computed(() => {
+  staffSessionTick.value
   const u = getStaffUser()
   if (!u) return ''
   if (u.role === 'admin') return 'Admin'
@@ -1642,8 +1657,16 @@ async function submitAgent(e) {
     }
   }
 
-  const accessRole =
-    isStaffAdmin() && agentForm.value.accessRole === 'manager' ? 'manager' : 'sales'
+  const existingRole = editingAgentId.value
+    ? listAgents({ includeDeleted: true }).find((a) => a.id === editingAgentId.value)?.accessRole
+    : ''
+  const accessRole = isStaffAdmin()
+    ? agentForm.value.accessRole === 'manager'
+      ? 'manager'
+      : 'sales'
+    : existingRole === 'manager'
+      ? 'manager'
+      : 'sales'
   const cloud = await saveAgentToCloud({
     ...agentForm.value,
     id: editingAgentId.value || undefined,
@@ -1658,8 +1681,7 @@ async function submitAgent(e) {
   let saved = cloud.agent
 
   if (loginEmail && (loginPassword || saved.authUserId)) {
-    const staffRole =
-      isStaffAdmin() && agentForm.value.accessRole === 'manager' ? 'manager' : 'sales'
+    const staffRole = accessRole === 'manager' ? 'manager' : 'sales'
     const result = await upsertStaffSalesUser({
       email: loginEmail,
       password: loginPassword || undefined,
@@ -2149,6 +2171,8 @@ async function logoutStaff() {
 }
 
 onMounted(async () => {
+  await fetchStaffMe()
+  staffSessionTick.value += 1
   const t = route.query.tab
   const allowed = salesTabs.value.map((x) => x.id)
   if (allowed.includes(t)) tab.value = t

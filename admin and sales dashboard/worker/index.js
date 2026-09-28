@@ -457,6 +457,38 @@ function isSalesElevated(staff) {
   return staff?.role === 'admin' || staff?.role === 'manager'
 }
 
+/** Agent row marked manager keeps full sales access even if the login was saved as sales. */
+async function elevateSalesManager(env, claims) {
+  if (!claims || claims.role === 'admin' || claims.role === 'manager') return claims
+  try {
+    const agentId = String(claims.agentId || '').trim()
+    const userId = String(claims.id || '').trim()
+    let row = null
+    if (agentId) {
+      const rows = await sb(
+        env,
+        'sales_agents?id=eq.' + encodeURIComponent(agentId) + '&select=id,access_role,deleted&limit=1'
+      )
+      row = rows?.[0] || null
+    }
+    if ((!row || row.deleted === true) && userId) {
+      const rows = await sb(
+        env,
+        'sales_agents?auth_user_id=eq.' +
+          encodeURIComponent(userId) +
+          '&deleted=eq.false&select=id,access_role&limit=1'
+      )
+      row = rows?.[0] || null
+    }
+    if (row && row.deleted !== true && row.access_role === 'manager') {
+      return { ...claims, role: 'manager', agentId: claims.agentId || row.id || '' }
+    }
+  } catch {
+    /* keep the stored login role */
+  }
+  return claims
+}
+
 function staffClaimsFromUser(user) {
   const meta = user?.app_metadata || {}
   const role = normalizeStaffRole(meta.role)
@@ -566,7 +598,7 @@ async function getStaffFromRequest(env, request) {
     })
     if (!res.ok) return null
     const user = await res.json()
-    const claims = staffClaimsFromUser(user)
+    const claims = await elevateSalesManager(env, staffClaimsFromUser(user))
     if (!claims.role) return null
     return { ...claims, accessToken: token, user }
   } catch {
@@ -3547,7 +3579,7 @@ async function handleApi(request, env, url) {
     if (!res.ok) {
       return bad(data?.error_description || data?.msg || data?.error || 'Invalid login', 401)
     }
-    const claims = staffClaimsFromUser(data.user)
+    const claims = await elevateSalesManager(env, staffClaimsFromUser(data.user))
     if (!claims.role) return bad('This account is not staff', 403)
     if (isDeliverableEmail(email)) {
       sendLoginAlertEmail(env, {
@@ -3562,7 +3594,7 @@ async function handleApi(request, env, url) {
         context: { kind: 'staff_login_alert' }
       }))
     }
-    return json(staffSessionPayload(data, data.user))
+    return json({ ...staffSessionPayload(data, data.user), user: claims })
   }
 
   if (pathname === '/api/staff/refresh' && method === 'POST') {
@@ -3583,9 +3615,9 @@ async function handleApi(request, env, url) {
     if (!res.ok) {
       return bad(data?.error_description || data?.msg || data?.error || 'Session expired', 401)
     }
-    const claims = staffClaimsFromUser(data.user)
+    const claims = await elevateSalesManager(env, staffClaimsFromUser(data.user))
     if (!claims.role) return bad('This account is not staff', 403)
-    return json(staffSessionPayload(data, data.user))
+    return json({ ...staffSessionPayload(data, data.user), user: claims })
   }
 
   if (pathname === '/api/staff/me' && method === 'GET') {
