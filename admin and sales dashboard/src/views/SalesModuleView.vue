@@ -384,6 +384,9 @@ function emptySale() {
     paymentMethod: 'eft',
     soldAt: new Date().toISOString().slice(0, 16),
     notes: '',
+    discount: 0,
+    extraDescription: '',
+    extraAmount: 0,
     quoteId: ''
   }
 }
@@ -402,7 +405,10 @@ function emptyQuote() {
     lines: [emptyLine()],
     status: 'draft',
     validUntil: valid.toISOString().slice(0, 10),
-    notes: ''
+    notes: '',
+    discount: 0,
+    extraDescription: '',
+    extraAmount: 0
   }
 }
 
@@ -887,7 +893,12 @@ const salePickerLines = computed(() =>
           : p.defaultPrice
     }))
 )
-const saleFormTotal = computed(() => linesTotal(salePickerLines.value))
+function netFormTotal(subtotal, form) {
+  const discount = Math.max(0, Number(form?.discount) || 0)
+  const extra = Math.max(0, Number(form?.extraAmount) || 0)
+  return Math.max(0, Math.round((Number(subtotal) - discount + extra) * 100) / 100)
+}
+const saleFormTotal = computed(() => netFormTotal(linesTotal(salePickerLines.value), saleForm.value))
 const quotePickerLines = computed(() =>
   productOptions.value
     .filter((p) => (quoteProductQty[p.id] || 0) > 0)
@@ -901,7 +912,7 @@ const quotePickerLines = computed(() =>
           : p.defaultPrice
     }))
 )
-const quoteFormTotal = computed(() => linesTotal(quotePickerLines.value))
+const quoteFormTotal = computed(() => netFormTotal(linesTotal(quotePickerLines.value), quoteForm.value))
 
 function resetProductPicker(qtyMap, priceMap, lines = []) {
   for (const key of Object.keys(qtyMap)) delete qtyMap[key]
@@ -1037,6 +1048,9 @@ function openEditSale(s) {
     paymentMethod: s.paymentMethod,
     soldAt: s.soldAt ? s.soldAt.slice(0, 16) : '',
     notes: s.notes,
+    discount: Number(s.discount) || 0,
+    extraDescription: s.extraDescription || '',
+    extraAmount: Number(s.extraAmount) || 0,
     quoteId: s.quoteId || ''
   }
   resetSaleProductPicker(saleForm.value.lines)
@@ -1268,7 +1282,10 @@ function openEditQuote(q) {
     lines: cloneLines(q.lines, q),
     status: q.status,
     validUntil: q.validUntil ? q.validUntil.slice(0, 10) : '',
-    notes: q.notes
+    notes: q.notes,
+    discount: Number(q.discount) || 0,
+    extraDescription: q.extraDescription || '',
+    extraAmount: Number(q.extraAmount) || 0
   }
   resetQuoteProductPicker(quoteForm.value.lines)
   openDialog('quote')
@@ -3487,6 +3504,20 @@ onMounted(async () => {
           <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Sold at</label>
           <div class="field-shell"><input v-model="saleForm.soldAt" type="datetime-local" class="field-input"></div>
         </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Discount (N$)</label>
+            <div class="field-shell"><input v-model.number="saleForm.discount" type="number" min="0" step="1" class="field-input" placeholder="0"></div>
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Additional amount (N$)</label>
+            <div class="field-shell"><input v-model.number="saleForm.extraAmount" type="number" min="0" step="1" class="field-input" placeholder="0"></div>
+          </div>
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Additional products / services</label>
+          <div class="field-shell"><input v-model="saleForm.extraDescription" class="field-input" placeholder="Setup, delivery, design…"></div>
+        </div>
         <div>
           <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Notes</label>
           <div class="field-shell"><input v-model="saleForm.notes" class="field-input" placeholder="Optional"></div>
@@ -3496,6 +3527,11 @@ onMounted(async () => {
           <div class="min-w-0">
             <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Total</p>
             <p class="text-[11px] text-gray-500 mt-0.5">An invoice is generated when you save a new sale</p>
+            <p v-if="Number(saleForm.discount) > 0 || Number(saleForm.extraAmount) > 0 || saleForm.extraDescription" class="text-[11px] text-gray-500 mt-0.5">
+              Subtotal {{ formatMoney(linesTotal(salePickerLines)) }}
+              <span v-if="Number(saleForm.discount) > 0"> · Discount {{ formatMoney(saleForm.discount) }}</span>
+              <span v-if="Number(saleForm.extraAmount) > 0 || saleForm.extraDescription"> · Extra {{ formatMoney(saleForm.extraAmount || 0) }}</span>
+            </p>
           </div>
           <p class="text-2xl font-bold tabular-nums shrink-0">{{ formatMoney(saleFormTotal) }}</p>
         </div>
@@ -3672,6 +3708,20 @@ onMounted(async () => {
             <div class="field-shell"><input v-model="quoteForm.validUntil" type="date" class="field-input"></div>
           </div>
         </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Discount (N$)</label>
+            <div class="field-shell"><input v-model.number="quoteForm.discount" type="number" min="0" step="1" class="field-input" placeholder="0"></div>
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Additional amount (N$)</label>
+            <div class="field-shell"><input v-model.number="quoteForm.extraAmount" type="number" min="0" step="1" class="field-input" placeholder="0"></div>
+          </div>
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Additional products / services</label>
+          <div class="field-shell"><input v-model="quoteForm.extraDescription" class="field-input" placeholder="Setup, delivery, design…"></div>
+        </div>
         <div>
           <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Notes</label>
           <div class="field-shell"><input v-model="quoteForm.notes" class="field-input" placeholder="Optional"></div>
@@ -3681,6 +3731,11 @@ onMounted(async () => {
           <div class="min-w-0">
             <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Total</p>
             <p class="text-[11px] text-gray-500 mt-0.5">Banking details are included when you email the quote</p>
+            <p v-if="Number(quoteForm.discount) > 0 || Number(quoteForm.extraAmount) > 0 || quoteForm.extraDescription" class="text-[11px] text-gray-500 mt-0.5">
+              Subtotal {{ formatMoney(linesTotal(quotePickerLines)) }}
+              <span v-if="Number(quoteForm.discount) > 0"> · Discount {{ formatMoney(quoteForm.discount) }}</span>
+              <span v-if="Number(quoteForm.extraAmount) > 0 || quoteForm.extraDescription"> · Extra {{ formatMoney(quoteForm.extraAmount || 0) }}</span>
+            </p>
           </div>
           <p class="text-2xl font-bold tabular-nums shrink-0">{{ formatMoney(quoteFormTotal) }}</p>
         </div>
@@ -3953,6 +4008,14 @@ onMounted(async () => {
             <p class="text-xs text-gray-500 pt-1">{{ activeInvoice.paymentMethod }}</p>
           </div>
           <div class="border-t border-[var(--border)] pt-3 space-y-1.5">
+            <div v-if="Number(activeInvoice.discount) > 0" class="flex justify-between items-center">
+              <span class="text-xs uppercase tracking-wide text-gray-500">Discount</span>
+              <span class="text-sm font-semibold">−{{ formatMoney(activeInvoice.discount) }}</span>
+            </div>
+            <div v-if="Number(activeInvoice.extraAmount) > 0 || activeInvoice.extraDescription" class="flex justify-between items-center gap-3">
+              <span class="text-xs uppercase tracking-wide text-gray-500">{{ activeInvoice.extraDescription || 'Additional products / services' }}</span>
+              <span class="text-sm font-semibold shrink-0">{{ formatMoney(activeInvoice.extraAmount || 0) }}</span>
+            </div>
             <div class="flex justify-between items-center">
               <span class="text-xs uppercase tracking-wide text-gray-500">Invoice total</span>
               <span class="text-sm font-semibold">{{ formatMoney(activeInvoice.amount) }}</span>

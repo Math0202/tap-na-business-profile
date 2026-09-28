@@ -148,6 +148,16 @@ export function moneyRound(n) {
   return Math.round((Number(n) || 0) * 100) / 100
 }
 
+/** Net payable = line subtotal − discount + additional products/services. */
+export function pricingAdjustments(doc = {}, subtotal = 0) {
+  const discount = moneyRound(Math.max(0, Number(doc.discount) || 0))
+  const extraAmount = moneyRound(Math.max(0, Number(doc.extraAmount ?? doc.extra_amount) || 0))
+  const extraDescription = String(doc.extraDescription || doc.extra_description || '').trim().slice(0, 240)
+  const base = moneyRound(Math.max(0, Number(subtotal) || 0))
+  const amount = moneyRound(Math.max(0, base - discount + extraAmount))
+  return { discount, extraAmount, extraDescription, subtotal: base, amount }
+}
+
 /** Amount already received on an invoice. Paid invoices with no ledger default to the full total. */
 export function invoicePaidAmount(inv) {
   const total = moneyRound(inv?.amount)
@@ -422,11 +432,12 @@ export function summarizeLines(lines, legacy = {}) {
 
 function normalizeSale(s) {
   const summary = summarizeLines(s.lines, s)
+  const priced = pricingAdjustments(s, summary.amount)
   const rate = Number(s.commissionRate)
   const commission =
     s.commission != null
       ? Number(s.commission)
-      : Math.round(summary.amount * ((Number.isFinite(rate) ? rate : 10) / 100) * 100) / 100
+      : Math.round(priced.amount * ((Number.isFinite(rate) ? rate : 10) / 100) * 100) / 100
   return {
     id: s.id || uid('sale'),
     agentId: s.agentId || '',
@@ -440,7 +451,10 @@ function normalizeSale(s) {
     productName: summary.productName,
     quantity: summary.quantity,
     unitPrice: summary.unitPrice,
-    amount: summary.amount,
+    amount: priced.amount,
+    discount: priced.discount,
+    extraDescription: priced.extraDescription,
+    extraAmount: priced.extraAmount,
     commission,
     commissionRate: Number.isFinite(rate) ? rate : 10,
     status: SALE_STATUSES.includes(s.status) ? s.status : 'pending',
@@ -469,6 +483,7 @@ function nextDocNumber(prefix, list, field) {
 
 function normalizeQuote(q) {
   const summary = summarizeLines(q.lines, q)
+  const priced = pricingAdjustments(q, summary.amount)
   return {
     id: q.id || uid('quote'),
     quoteNumber: q.quoteNumber || '',
@@ -483,7 +498,10 @@ function normalizeQuote(q) {
     productName: summary.productName,
     quantity: summary.quantity,
     unitPrice: summary.unitPrice,
-    amount: summary.amount,
+    amount: priced.amount,
+    discount: priced.discount,
+    extraDescription: priced.extraDescription,
+    extraAmount: priced.extraAmount,
     status: QUOTE_STATUSES.includes(q.status) ? q.status : 'draft',
     validUntil: q.validUntil || '',
     notes: q.notes || '',
@@ -499,12 +517,13 @@ function normalizeQuote(q) {
 
 function normalizeInvoice(inv) {
   const summary = summarizeLines(inv.lines, inv)
+  const priced = pricingAdjustments(inv, summary.amount)
   const previousStatus = INVOICE_STATUSES.includes(inv.status) ? inv.status : 'draft'
   let paidAmount = moneyRound(inv.paidAmount ?? inv.paid_amount ?? 0)
-  if (previousStatus === 'paid' && paidAmount <= 0) paidAmount = moneyRound(summary.amount)
-  paidAmount = Math.max(0, Math.min(moneyRound(summary.amount), paidAmount))
+  if (previousStatus === 'paid' && paidAmount <= 0) paidAmount = priced.amount
+  paidAmount = Math.max(0, Math.min(priced.amount, paidAmount))
   const status = invoiceSettlementStatus(
-    { ...inv, amount: summary.amount, paidAmount },
+    { ...inv, amount: priced.amount, paidAmount },
     { paidAmount, previousStatus }
   )
   return {
@@ -523,7 +542,10 @@ function normalizeInvoice(inv) {
     productName: summary.productName,
     quantity: summary.quantity,
     unitPrice: summary.unitPrice,
-    amount: summary.amount,
+    amount: priced.amount,
+    discount: priced.discount,
+    extraDescription: priced.extraDescription,
+    extraAmount: priced.extraAmount,
     paidAmount,
     status,
     paymentMethod: PAYMENT_METHODS.includes(inv.paymentMethod) ? inv.paymentMethod : 'eft',
@@ -1203,8 +1225,9 @@ export function saveSale(payload, { recordCash = true, createInvoice = true } = 
   // No agent → no commission (shop/unassigned quotes). Match agent rate when assigned.
   const rate = agent ? Number(agent.commissionRate) || 0 : 0
   const summary = summarizeLines(payload.lines, payload)
+  const priced = pricingAdjustments(payload, summary.amount)
   const commission = agent
-    ? Math.round(summary.amount * (rate / 100) * 100) / 100
+    ? Math.round(priced.amount * (rate / 100) * 100) / 100
     : 0
 
   let clientId = String(payload.clientId || '').trim()
@@ -1232,7 +1255,7 @@ export function saveSale(payload, { recordCash = true, createInvoice = true } = 
     productName: summary.productName,
     quantity: summary.quantity,
     unitPrice: summary.unitPrice,
-    amount: summary.amount,
+    amount: priced.amount,
     commission,
     commissionRate: rate
   })
@@ -1322,6 +1345,9 @@ export function saveSale(payload, { recordCash = true, createInvoice = true } = 
         quantity: next.quantity,
         unitPrice: next.unitPrice,
         amount: next.amount,
+        discount: next.discount,
+        extraDescription: next.extraDescription,
+        extraAmount: next.extraAmount,
         paidAmount,
         paymentMethod: next.paymentMethod,
         customerName: next.customerName,
@@ -1482,6 +1508,9 @@ export function convertQuoteToSale(quoteId, overrides = {}) {
     customerEmail: quote.customerEmail,
     customerAddress: quote.customerAddress,
     lines: quote.lines,
+    discount: quote.discount,
+    extraDescription: quote.extraDescription,
+    extraAmount: quote.extraAmount,
     productId: quote.productId,
     productName: quote.productName,
     quantity: quote.quantity,
@@ -1566,6 +1595,9 @@ export function createInvoiceFromSale(sale) {
     quantity: sale.quantity,
     unitPrice: sale.unitPrice,
     amount: sale.amount,
+    discount: sale.discount,
+    extraDescription: sale.extraDescription,
+    extraAmount: sale.extraAmount,
     paidAmount: sale.status === 'paid' || sale.status === 'fulfilled' ? moneyRound(sale.amount) : 0,
     status: sale.status === 'paid' || sale.status === 'fulfilled' ? 'paid' : 'draft',
     paymentMethod: sale.paymentMethod,
@@ -1726,6 +1758,44 @@ function companyHeaderText() {
   ].join('\n')
 }
 
+function adjustmentBits(doc) {
+  const discount = moneyRound(Math.max(0, Number(doc?.discount) || 0))
+  const extraAmount = moneyRound(Math.max(0, Number(doc?.extraAmount) || 0))
+  const extraDescription = String(doc?.extraDescription || '').trim()
+  const show = discount > 0.004 || extraAmount > 0.004 || Boolean(extraDescription)
+  const subtotal = show
+    ? moneyRound(normalizeLines(doc?.lines, doc).reduce((sum, line) => sum + (Number(line.amount) || 0), 0))
+    : moneyRound(doc?.amount)
+  return { show, discount, extraAmount, extraDescription, subtotal }
+}
+
+function adjustmentSummaryHtml(doc) {
+  const bits = adjustmentBits(doc)
+  if (!bits.show) return ''
+  const extraLabel = escapeHtml(bits.extraDescription || 'Additional products / services')
+  return [
+    `<p style="font-size:14px;margin:0 0 4px;">Subtotal: ${escapeHtml(formatMoney(bits.subtotal))}</p>`,
+    bits.discount > 0.004
+      ? `<p style="font-size:14px;margin:0 0 4px;">Discount: −${escapeHtml(formatMoney(bits.discount))}</p>`
+      : '',
+    bits.extraAmount > 0.004 || bits.extraDescription
+      ? `<p style="font-size:14px;margin:0 0 4px;">${extraLabel}: ${escapeHtml(formatMoney(bits.extraAmount))}</p>`
+      : ''
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+function adjustmentSummaryText(doc) {
+  const bits = adjustmentBits(doc)
+  if (!bits.show) return []
+  const extraLabel = bits.extraDescription || 'Additional products / services'
+  const lines = [`Subtotal: ${formatMoney(bits.subtotal)}`]
+  if (bits.discount > 0.004) lines.push(`Discount: -${formatMoney(bits.discount)}`)
+  if (bits.extraAmount > 0.004 || bits.extraDescription) lines.push(`${extraLabel}: ${formatMoney(bits.extraAmount)}`)
+  return lines
+}
+
 function productImageHtml(productId, { size = 72 } = {}) {
   const img = resolveProductImage(productId)
   if (!img.src && !img.absolute) return ''
@@ -1805,6 +1875,7 @@ export function buildInvoiceEmailPayload(invoice, { to } = {}) {
       ${linesTableRowsHtml(invoice)}
     </tbody>
   </table>
+  ${adjustmentSummaryHtml(invoice)}
   <p style="font-size:14px;margin:0 0 4px;">Invoice total: ${escapeHtml(formatMoney(invoice.amount))}</p>
   ${
     invoicePaidAmount(invoice) > 0.004
@@ -1838,6 +1909,7 @@ export function buildInvoiceEmailPayload(invoice, { to } = {}) {
     '',
     linesTextBlock(invoice),
     '',
+    ...adjustmentSummaryText(invoice),
     `Invoice total: ${formatMoney(invoice.amount)}`,
     ...(invoicePaidAmount(invoice) > 0.004 ? [`Paid: ${formatMoney(invoicePaidAmount(invoice))}`] : []),
     `Amount due: ${formatMoney(invoiceRemaining(invoice))}`,
@@ -1909,6 +1981,7 @@ export function buildQuoteEmailPayload(quote, { to } = {}) {
       ${linesTableRowsHtml(quote)}
     </tbody>
   </table>
+  ${adjustmentSummaryHtml(quote)}
   <p style="font-size:15px;font-weight:700;margin:0 0 6px;">Quoted total: ${escapeHtml(formatMoney(quote.amount))}</p>
   <p style="font-size:13px;margin:0 0 16px;">Payment method: ${escapeHtml(paymentMethod)}</p>
   ${bankingDetailsHtml(quote.quoteNumber, { kind: 'quote', amount: quote.amount })}
@@ -1929,6 +2002,7 @@ export function buildQuoteEmailPayload(quote, { to } = {}) {
     '',
     linesTextBlock(quote),
     '',
+    ...adjustmentSummaryText(quote),
     `Quoted total: ${formatMoney(quote.amount)}`,
     `Payment method: ${paymentMethod}`,
     '',

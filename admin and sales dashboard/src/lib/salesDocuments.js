@@ -227,7 +227,29 @@ function drawMinimalTable(doc, lines, y) {
 function drawTotals(doc, row, isInvoice, y) {
   const paid = isInvoice ? invoicePaidAmount(row) : 0
   const due = isInvoice ? invoiceRemaining(row) : 0
-  y = ensureSpace(doc, y, paid > 0.004 ? 32 : 18)
+  const discount = Math.max(0, Number(row.discount) || 0)
+  const extraAmount = Math.max(0, Number(row.extraAmount) || 0)
+  const extraDescription = String(row.extraDescription || '').trim()
+  const showAdj = discount > 0.004 || extraAmount > 0.004 || Boolean(extraDescription)
+  y = ensureSpace(doc, y, (paid > 0.004 ? 32 : 18) + (showAdj ? 22 : 0))
+  doc.setTextColor(17, 17, 17)
+  if (showAdj) {
+    const subtotal = normalizeLines(row.lines, row).reduce((sum, line) => sum + (Number(line.amount) || 0), 0)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(10)
+    doc.text(`Subtotal: ${formatMoney(subtotal)}`, 20, y)
+    y += 6
+    if (discount > 0.004) {
+      doc.text(`Discount: -${formatMoney(discount)}`, 20, y)
+      y += 6
+    }
+    if (extraAmount > 0.004 || extraDescription) {
+      const label = extraDescription || 'Additional products / services'
+      const wrapped = doc.splitTextToSize(`${label}: ${formatMoney(extraAmount)}`, 170)
+      doc.text(wrapped, 20, y)
+      y += Math.max(6, wrapped.length * 4.5)
+    }
+  }
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(12)
   doc.setTextColor(17, 17, 17)
