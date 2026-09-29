@@ -2498,6 +2498,115 @@ async function resolveSharedCatalogForProfile(env, profileId) {
   }
 }
 
+function cardContactPreset(card) {
+  if (!card || card.profile_id || card.status === 'linked' || card.status === 'disabled') return null
+  const preset = {
+    name: String(card.contact_name || '').trim(),
+    company: String(card.contact_company || '').trim(),
+    phone: String(card.contact_phone || '').trim(),
+    email: String(card.contact_email || '').trim(),
+    title: String(card.contact_title || '').trim()
+  }
+  if (!preset.name && !preset.company && !preset.phone && !preset.email && !preset.title) return null
+  return preset
+}
+
+function claimProfileFields(body, claimCard) {
+  const contact = claimCard || {}
+  const pick = (bodyVal, contactVal, max) => {
+    if (bodyVal !== undefined && bodyVal !== null) return String(bodyVal).trim().slice(0, max)
+    return String(contactVal || '').trim().slice(0, max)
+  }
+  const nameFromBody = String(body?.name || '').trim().slice(0, 160)
+  return {
+    name: nameFromBody || String(contact.contact_name || '').trim().slice(0, 160),
+    company: pick(body?.company, contact.contact_company, 160),
+    phone: pick(body?.phone, contact.contact_phone, 40),
+    title: pick(body?.title, contact.contact_title, 160)
+  }
+}
+
+async function findTeamByOwnerCard(env, cardId) {
+  const id = String(cardId || '').trim()
+  if (!id) return null
+  const rows = await sb(
+    env,
+    `teams?owner_card_id=eq.${encodeURIComponent(id)}&deleted=eq.false&select=*&limit=1`
+  )
+  return rows?.[0] || null
+}
+
+/** When the designated lead claims, attach them to the existing team instead of creating another. */
+async function assignDesignatedLead(env, team, profile, card) {
+  if (!team?.id || !profile?.id) return false
+  if (team.owner_profile_id && team.owner_profile_id !== profile.id) return false
+  const now = new Date().toISOString()
+  const email = String(profile.login_email || profile.email || '').trim().toLowerCase()
+  const role = normalizePersonalType(team.package_ceiling || 'executive_exclusive')
+  if (!team.owner_profile_id) {
+    const patched = await sb(
+      env,
+      `teams?id=eq.${encodeURIComponent(team.id)}&owner_profile_id=is.null`,
+      {
+        method: 'PATCH',
+        body: {
+          owner_profile_id: profile.id,
+          owner_email: email,
+          updated_at: now
+        },
+        prefer: 'return=representation'
+      }
+    )
+    if (!patched?.length) return false
+  }
+  const existingMem = await sb(
+    env,
+    `team_members?team_id=eq.${encodeURIComponent(team.id)}&profile_id=eq.${encodeURIComponent(profile.id)}&deleted=eq.false&select=id&limit=1`
+  )
+  if (!existingMem?.length) {
+    await sb(env, 'team_members', {
+      method: 'POST',
+      body: {
+        id: uid('tmem'),
+        team_id: team.id,
+        profile_id: profile.id,
+        card_id: card?.id || null,
+        slug: card?.slug || '',
+        role,
+        status: 'active',
+        invite_email: email,
+        invited_by_profile_id: profile.id,
+        invite_token: '',
+        joined_at: now,
+        created_at: now,
+        updated_at: now
+      },
+      prefer: 'return=minimal'
+    })
+  }
+  return true
+}
+
+async function teamOwnerDisplayName(env, team) {
+  if (team?.owner_profile_id) {
+    const owners = await sb(
+      env,
+      `profiles?id=eq.${encodeURIComponent(team.owner_profile_id)}&select=name,company`
+    )
+    const fromProfile = String(owners?.[0]?.name || owners?.[0]?.company || '').trim()
+    if (fromProfile) return fromProfile
+  }
+  if (team?.owner_card_id) {
+    const leadCards = await sb(
+      env,
+      `cards?id=eq.${encodeURIComponent(team.owner_card_id)}&select=contact_name,contact_company`
+    )
+    const fromCard = String(leadCards?.[0]?.contact_name || leadCards?.[0]?.contact_company || '').trim()
+    if (fromCard) return fromCard
+  }
+  return 'Team owner'
+}
+
 async function findPendingTeamInviteForCard(env, cardId, profileId = '') {
   let q =
     `team_members?deleted=eq.false&status=in.(pending_claim,invited)&select=*&order=created_at.desc&limit=5`
@@ -2513,12 +2622,7 @@ async function findPendingTeamInviteForCard(env, cardId, profileId = '') {
   )
   const team = teams?.[0]
   if (!team) return null
-  let ownerName = ''
-  const owners = await sb(
-    env,
-    `profiles?id=eq.${encodeURIComponent(team.owner_profile_id)}&select=name,company`
-  )
-  ownerName = String(owners?.[0]?.name || owners?.[0]?.company || 'Team owner').trim()
+  const ownerName = await teamOwnerDisplayName(env, team)
   return {
     memberId: row.id,
     teamId: team.id,
@@ -3946,6 +4050,7 @@ async function handleApi(request, env, url) {
       },
       profile: await publicProfile(env, profile),
       destination: destinationFor(card, profile),
+      preset: cardContactPreset(card),
       pendingTeamInvite:
         card.status === 'unlinked'
           ? await findPendingTeamInviteForCard(env, card.id)
@@ -4884,13 +4989,18 @@ async function handleApi(request, env, url) {
     const pendingTeamInviteForClaim = claimCard
       ? await findPendingTeamInviteForCard(env, claimCard.id)
       : null
+    const provisionalLeadTeam = claimCard
+      ? await findTeamByOwnerCard(env, claimCard.id)
+      : null
+    const isDesignatedLead = !!(provisionalLeadTeam && !provisionalLeadTeam.owner_profile_id)
     const claimPersonalType =
       claimCard?.kind === 'personal'
         ? normalizePersonalType(claimCard.personal_type || 'business')
         : ''
     const isTeamOwnerClaim =
-      !pendingTeamInviteForClaim &&
-      (claimPersonalType === 'business' || claimPersonalType === 'executive_exclusive')
+      isDesignatedLead ||
+      (!pendingTeamInviteForClaim &&
+        (claimPersonalType === 'business' || claimPersonalType === 'executive_exclusive'))
     let ownerIntegrations = null
     if (isTeamOwnerClaim) {
       ownerIntegrations = parseTeamIntegrationsFromBody(body || {})
@@ -4902,17 +5012,19 @@ async function handleApi(request, env, url) {
     const cardType = claimCard
       ? (claimCard.kind === 'personal' ? 'personal' : 'table')
       : (body.cardType === 'table' ? 'table' : 'personal')
+    const seeded = claimProfileFields(body, claimCard)
     await sb(env, 'profiles', {
       method: 'POST',
       body: {
         id,
         card_type: cardType,
-        name: String(body.name || '').trim(),
-        company: body.company || '',
+        name: seeded.name,
+        title: seeded.title,
+        company: seeded.company,
         email,
-        phone: body.phone || '',
+        phone: seeded.phone,
         login_email: email,
-        login_phone: body.loginPhone || body.phone || '',
+        login_phone: body.loginPhone || seeded.phone || '',
         password_hash: passwordHash
       },
       prefer: 'return=minimal'
@@ -4966,10 +5078,30 @@ async function handleApi(request, env, url) {
       }
     }
 
-    const pendingTeamInvite = claimCard
-      ? await findPendingTeamInviteForCard(env, claimCard.id, id)
-      : pendingTeamInviteForClaim
-    if (ownerIntegrations && newProfile) {
+    const pendingTeamInvite = isDesignatedLead
+      ? null
+      : claimCard
+        ? await findPendingTeamInviteForCard(env, claimCard.id, id)
+        : pendingTeamInviteForClaim
+    let leadAssigned = false
+    if (isDesignatedLead && provisionalLeadTeam && newProfile && claimCard) {
+      try {
+        leadAssigned = await assignDesignatedLead(env, provisionalLeadTeam, newProfile, claimCard)
+        if (leadAssigned && ownerIntegrations) {
+          await applyTeamIntegrations(env, provisionalLeadTeam.id, ownerIntegrations)
+        }
+      } catch (err) {
+        await logAppError(env, {
+          source: 'team_integrations',
+          message: err?.message || String(err),
+          stack: err?.stack || '',
+          path: pathname,
+          method,
+          context: { kind: 'signup_designated_lead' }
+        })
+      }
+    }
+    if (!leadAssigned && ownerIntegrations && newProfile) {
       try {
         const team = await getOrCreateOwnedTeam(env, newProfile)
         if (team?.id) await applyTeamIntegrations(env, team.id, ownerIntegrations)

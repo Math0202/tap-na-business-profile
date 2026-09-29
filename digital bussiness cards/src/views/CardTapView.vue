@@ -45,6 +45,10 @@ const joinTeamOpen = ref(false)
 const firstName = ref('')
 const surname = ref('')
 const email = ref('')
+const company = ref('')
+const jobTitle = ref('')
+const phone = ref('')
+const showPresetContact = ref(false)
 const password = ref('')
 const confirmPassword = ref('')
 const meetingTool = ref('')
@@ -84,6 +88,29 @@ const claimTypeLabel = computed(() => {
 function forceClaimLogout() {
   logout()
   setApiToken('')
+}
+
+function splitContactName(full) {
+  const parts = String(full || '').trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return { first: '', surname: '' }
+  if (parts.length === 1) return { first: parts[0], surname: '' }
+  return { first: parts[0], surname: parts.slice(1).join(' ') }
+}
+
+function applyClaimPreset(preset) {
+  if (!preset || typeof preset !== 'object') return
+  const split = splitContactName(preset.name)
+  if (split.first) firstName.value = split.first
+  if (split.surname) surname.value = split.surname
+  const presetEmail = String(preset.email || '').trim()
+  const presetCompany = String(preset.company || '').trim()
+  const presetTitle = String(preset.title || '').trim()
+  const presetPhone = String(preset.phone || '').trim()
+  if (presetEmail) email.value = presetEmail
+  if (presetCompany) company.value = presetCompany
+  if (presetTitle) jobTitle.value = presetTitle
+  if (presetPhone) phone.value = presetPhone
+  showPresetContact.value = !!(presetCompany || presetTitle || presetPhone)
 }
 
 /** Business cards with exactly one configured destination skip the profile grid. */
@@ -162,6 +189,9 @@ async function createProfile(e) {
       cardType,
       slug: serial.value,
       name: fullName || loginEmail,
+      company: company.value.trim(),
+      title: jobTitle.value.trim(),
+      phone: phone.value.trim(),
       ...(integrations || {})
     })
 
@@ -180,11 +210,11 @@ async function createProfile(e) {
     // Log into THIS card's new account (never keep a previous session)
     saveProfile({
       cardType,
-      name: fullName,
-      title: '',
-      company: '',
-      phone: '',
-      email: loginEmail,
+      name: profile.name || fullName,
+      title: profile.title || jobTitle.value.trim(),
+      company: profile.company || company.value.trim(),
+      phone: profile.phone || phone.value.trim(),
+      email: profile.email || loginEmail,
       whatsapp: '',
       linkedin: '',
       youtube: '',
@@ -201,7 +231,7 @@ async function createProfile(e) {
       logo: '',
       video: '',
       loginEmail,
-      loginPhone: '',
+      loginPhone: profile.phone || phone.value.trim(),
       passwordHash,
       remoteProfileId: profile.id,
       shareSlug: serial.value,
@@ -257,6 +287,7 @@ onMounted(async () => {
         ? normalizePersonalType(remote.card.personalType || remote.card.personal_type || remote.profile?.personalType || DEFAULT_PERSONAL_TYPE)
         : ''
     if (remote.pendingTeamInvite) pendingTeamInvite.value = remote.pendingTeamInvite
+    if (remote.card.status !== 'linked') applyClaimPreset(remote.preset)
 
     if (remote.card?.status === 'disabled' || remote.profile?.disabled) {
       mode.value = 'disabled'
@@ -493,6 +524,55 @@ onUnmounted(() => setClaimChrome(false))
                   required
                 >
               </div>
+            </div>
+          </div>
+
+          <div v-if="showPresetContact">
+            <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5" for="claim-company">
+              Company
+            </label>
+            <div class="field-shell">
+              <span class="material-symbols-outlined text-gray-400 text-[20px]">apartment</span>
+              <input
+                id="claim-company"
+                v-model="company"
+                type="text"
+                class="field-input"
+                placeholder="Company"
+                autocomplete="organization"
+              >
+            </div>
+          </div>
+          <div v-if="showPresetContact">
+            <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5" for="claim-title">
+              Job title
+            </label>
+            <div class="field-shell">
+              <span class="material-symbols-outlined text-gray-400 text-[20px]">work</span>
+              <input
+                id="claim-title"
+                v-model="jobTitle"
+                type="text"
+                class="field-input"
+                placeholder="Job title"
+                autocomplete="organization-title"
+              >
+            </div>
+          </div>
+          <div v-if="showPresetContact">
+            <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5" for="claim-phone">
+              Phone
+            </label>
+            <div class="field-shell">
+              <span class="material-symbols-outlined text-gray-400 text-[20px]">call</span>
+              <input
+                id="claim-phone"
+                v-model="phone"
+                type="tel"
+                class="field-input"
+                placeholder="Phone"
+                autocomplete="tel"
+              >
             </div>
           </div>
 
