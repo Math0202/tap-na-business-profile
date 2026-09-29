@@ -2083,6 +2083,7 @@ function mapTeamRow(row) {
     id: row.id,
     name: row.name || '',
     ownerProfileId: row.owner_profile_id || '',
+    ownerCardId: row.owner_card_id || '',
     ownerEmail: row.owner_email || '',
     packageCeiling: normalizePersonalType(row.package_ceiling || 'business'),
     shopQuoteRef: row.shop_quote_ref || '',
@@ -2126,6 +2127,7 @@ function mapTeamMemberRow(row) {
     updatedAt: row.updated_at,
     memberName: row.member_name || '',
     memberEmail: row.member_email || '',
+    virtualLead: row.virtual_lead === true,
     deleted: row.deleted === true,
     deletedAt: row.deleted_at || '',
     deletedBy: row.deleted_by || ''
@@ -2385,7 +2387,7 @@ async function enrichTeamMembers(env, members) {
   }
   const cardsByIdOrSlug = {}
   if (cardIds.length || slugs.length) {
-    let cardQuery = 'cards?deleted=eq.false&select=id,slug,status,kind,personal_type'
+    let cardQuery = 'cards?deleted=eq.false&select=id,slug,status,kind,personal_type,contact_name,contact_company,contact_email'
     if (cardIds.length && slugs.length) {
       cardQuery += `&or=(id.in.(${cardIds.map(encodeURIComponent).join(',')}),slug.in.(${slugs.map(encodeURIComponent).join(',')}))`
     } else if (cardIds.length) {
@@ -2406,12 +2408,56 @@ async function enrichTeamMembers(env, members) {
     return mapTeamMemberRow({
       ...m,
       card_status: cardStatus,
-      member_name: p ? String(p.name || p.company || '').trim() : '',
+      member_name: p
+        ? String(p.name || p.company || '').trim()
+        : String(c?.contact_name || c?.contact_company || '').trim(),
       member_email: p
         ? String(p.login_email || p.email || m.invite_email || '').trim()
         : String(m.invite_email || '')
     })
   })
+}
+
+/** Show an unclaimed designated lead in the group list without a join-invite membership. */
+async function unclaimedLeadMember(env, team, members) {
+  const cardId = String(team?.owner_card_id || '').trim()
+  if (!cardId || team?.owner_profile_id) return null
+  const present = (members || []).some((m) => !m.deleted && String(m.cardId || '') === cardId)
+  if (present) return null
+  const cards = await sb(
+    env,
+    `cards?id=eq.${encodeURIComponent(cardId)}&deleted=eq.false&select=id,slug,status,contact_name,contact_company,contact_email,personal_type`
+  )
+  const card = cards?.[0]
+  if (!card) return null
+  const name = String(card.contact_name || card.contact_company || '').trim()
+  const email = String(card.contact_email || team.owner_email || '').trim()
+  return mapTeamMemberRow({
+    id: `lead_${team.id}`,
+    team_id: team.id,
+    profile_id: '',
+    card_id: card.id,
+    slug: card.slug || '',
+    role: normalizePersonalType(team.package_ceiling || card.personal_type || 'executive_exclusive'),
+    status: 'pending_claim',
+    card_status: card.status === 'disabled' ? 'disabled' : 'linked',
+    invite_email: email,
+    member_name: name,
+    member_email: email,
+    virtual_lead: true,
+    deleted: false
+  })
+}
+
+function teamWithLeadDisplay(team, lead) {
+  const mapped = mapTeamRow(team)
+  if (!lead) return mapped
+  return {
+    ...mapped,
+    ownerName: lead.memberName || '',
+    ownerEmail: lead.memberEmail || lead.inviteEmail || '',
+    ownerSlug: lead.slug || ''
+  }
 }
 
 /**
@@ -6894,12 +6940,28 @@ async function handleApi(request, env, url) {
         memberCountsByTeam[m.team_id] = (memberCountsByTeam[m.team_id] || 0) + 1
       }
     }
+    const leadCardIds = [...new Set((teams || []).map((t) => t.owner_card_id).filter(Boolean))]
+    const leadCardsById = {}
+    if (leadCardIds.length) {
+      const leadRows = await sb(
+        env,
+        `cards?id=in.(${leadCardIds.map(encodeURIComponent).join(',')})&select=id,slug,contact_name,contact_company,contact_email`
+      )
+      for (const c of leadRows || []) leadCardsById[c.id] = c
+    }
     const list = (teams || []).map((t) => {
-      const owner = ownersById[t.owner_profile_id]
+      const owner = t.owner_profile_id ? ownersById[t.owner_profile_id] : null
+      const leadCard = !owner && t.owner_card_id ? leadCardsById[t.owner_card_id] : null
+      const leadName = leadCard
+        ? String(leadCard.contact_name || leadCard.contact_company || '').trim()
+        : ''
       return {
         ...mapTeamRow(t),
-        ownerName: owner ? String(owner.name || owner.company || '').trim() : '',
-        ownerEmail: owner ? String(owner.login_email || owner.email || t.owner_email || '').trim() : (t.owner_email || ''),
+        ownerName: owner ? String(owner.name || owner.company || '').trim() : leadName,
+        ownerEmail: owner
+          ? String(owner.login_email || owner.email || t.owner_email || '').trim()
+          : String(leadCard?.contact_email || t.owner_email || '').trim(),
+        ownerSlug: leadCard?.slug || '',
         memberCount: memberCountsByTeam[t.id] || 0
       }
     })
@@ -7091,7 +7153,12 @@ async function handleApi(request, env, url) {
       : `team_members?team_id=eq.${encodeURIComponent(teamId)}&deleted=eq.false&select=*&order=created_at.asc`
     const memberRows = await sb(env, memberQ)
     const members = await enrichTeamMembers(env, memberRows || [])
-    return json({ ok: true, team: mapTeamRow(team), members })
+    const lead = await unclaimedLeadMember(env, team, members)
+    return json({
+      ok: true,
+      team: teamWithLeadDisplay(team, lead),
+      members: lead ? [lead, ...members] : members
+    })
   }
 
   if (adminTeamMembersMatch && method === 'POST') {

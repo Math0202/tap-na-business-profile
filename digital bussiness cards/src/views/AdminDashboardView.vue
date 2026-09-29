@@ -509,6 +509,16 @@ function flashMemberToast(msg) {
   setTimeout(() => { memberModalToast.value = '' }, 2500)
 }
 
+function isGroupLeader(member) {
+  const team = activeTeam.value
+  const ownerId = String(team?.ownerProfileId || '').trim()
+  const profileId = String(member?.profileId || '').trim()
+  if (ownerId && profileId && ownerId === profileId) return true
+  const ownerCardId = String(team?.ownerCardId || '').trim()
+  const cardId = String(member?.cardId || '').trim()
+  return !!(ownerCardId && cardId && ownerCardId === cardId)
+}
+
 function openMembersModal(t) {
   activeTeam.value = t
   memberModalError.value = ''
@@ -537,6 +547,13 @@ async function loadTeamMembers(teamId) {
     const res = await apiAdminListTeamMembers(teamId, { includeDeleted: true })
     if (res.ok && res.data?.members) {
       teamMembers.value = res.data.members
+      const teamPatch = res.data.team
+      if (teamPatch && activeTeam.value?.id === teamId) {
+        if (teamPatch.ownerName) activeTeam.value.ownerName = teamPatch.ownerName
+        if (teamPatch.ownerEmail) activeTeam.value.ownerEmail = teamPatch.ownerEmail
+        if (teamPatch.ownerSlug) activeTeam.value.ownerSlug = teamPatch.ownerSlug
+        if (teamPatch.ownerCardId) activeTeam.value.ownerCardId = teamPatch.ownerCardId
+      }
       const activeCount = res.data.members.filter((m) => !m.deleted).length
       if (activeTeam.value) activeTeam.value.memberCount = activeCount
       const found = teams.value.find((t) => t.id === teamId)
@@ -1077,7 +1094,9 @@ onMounted(() => {
                 <p class="text-[10px] uppercase tracking-wider text-gray-500 font-bold">Team Leader / Owner</p>
                 <p class="text-sm font-semibold truncate text-gray-200">{{ t.ownerName || '—' }}</p>
                 <p class="text-xs text-gray-400 truncate">{{ t.ownerEmail || '—' }}</p>
-                <p class="text-[10px] text-gray-600 font-mono truncate">ID: {{ t.ownerProfileId }}</p>
+                <p v-if="t.ownerName && !t.ownerProfileId" class="text-[10px] text-amber-300">Awaiting claim</p>
+                <p v-else-if="t.ownerProfileId" class="text-[10px] text-gray-600 font-mono truncate">ID: {{ t.ownerProfileId }}</p>
+                <p v-else-if="t.ownerSlug" class="text-[10px] text-gray-600 font-mono truncate">Card: {{ t.ownerSlug }}</p>
               </div>
 
               <!-- Stats & sharing indicators -->
@@ -1542,6 +1561,7 @@ onMounted(() => {
                 <span class="font-semibold text-gray-300">Leader:</span>
                 <span>{{ activeTeam?.ownerName || '—' }}</span>
                 <span v-if="activeTeam?.ownerEmail" class="text-gray-500">({{ activeTeam.ownerEmail }})</span>
+                <span v-if="activeTeam?.ownerName && !activeTeam?.ownerProfileId" class="text-amber-300">Awaiting claim</span>
               </p>
             </div>
             <button
@@ -1735,7 +1755,7 @@ onMounted(() => {
                     <div class="flex items-center gap-2 flex-wrap">
                       <p class="text-sm font-bold text-white truncate">{{ m.memberName || m.slug || 'Member' }}</p>
                       <span
-                        v-if="m.profileId === activeTeam?.ownerProfileId"
+                        v-if="isGroupLeader(m)"
                         class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-700/40"
                       >
                         Group Leader
@@ -1766,7 +1786,7 @@ onMounted(() => {
                 </div>
 
                 <!-- Controls for active members -->
-                <div v-if="!m.deleted" class="space-y-3 pt-2 border-t border-zinc-800/80">
+                <div v-if="!m.deleted && !m.virtualLead" class="space-y-3 pt-2 border-t border-zinc-800/80">
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <!-- Role dropdown -->
                     <div>
@@ -1914,7 +1934,7 @@ onMounted(() => {
                     </button>
 
                     <button
-                      v-if="m.profileId !== activeTeam?.ownerProfileId"
+                      v-if="!isGroupLeader(m)"
                       type="button"
                       class="py-1.5 px-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-[11px] font-semibold text-red-400 border border-zinc-700 flex items-center gap-1 transition cursor-pointer ml-auto"
                       :disabled="memberActionSaving"
