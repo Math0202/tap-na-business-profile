@@ -23,6 +23,8 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'share', 'copy', 'download'])
 
+/** '' = chooser, 'profile' = URL QR, 'details' = vCard QR */
+const shareMode = ref('')
 const qrDataUrl = ref('')
 const copyLabel = ref(props.copyLinkLabel)
 
@@ -42,18 +44,33 @@ const hasContact = computed(
     )
 )
 
+const showingQr = computed(() => shareMode.value === 'profile' || shareMode.value === 'details')
+
+const qrHeading = computed(() =>
+  shareMode.value === 'details' ? 'Share Direct Details' : shareMode.value === 'profile' ? 'Share Profile' : props.title
+)
+
+const qrCopyText = computed(() => {
+  if (shareMode.value === 'details') return 'Scan to save this contact (includes profile link).'
+  if (shareMode.value === 'profile') return 'Scan to open this profile.'
+  return 'Choose how you want to share.'
+})
+
 const qrPayload = computed(() => {
-  if (!hasContact.value) return url.value
-  return (
-    buildShareVcardPayload({
-      name: props.contactName,
-      company: props.contactCompany,
-      phone: props.contactPhone,
-      email: props.contactEmail,
-      title: props.contactTitle,
-      profileUrl: url.value
-    }) || url.value
-  )
+  if (shareMode.value === 'details' && hasContact.value) {
+    return (
+      buildShareVcardPayload({
+        name: props.contactName,
+        company: props.contactCompany,
+        phone: props.contactPhone,
+        email: props.contactEmail,
+        title: props.contactTitle,
+        profileUrl: url.value
+      }) || url.value
+    )
+  }
+  if (shareMode.value === 'profile') return url.value
+  return ''
 })
 
 async function renderQr() {
@@ -70,16 +87,40 @@ async function renderQr() {
   }
 }
 
+function pickShareMode(mode) {
+  shareMode.value = mode
+  copyLabel.value = props.copyLinkLabel
+}
+
+function backToChooser() {
+  shareMode.value = ''
+  qrDataUrl.value = ''
+}
+
+function closeShare() {
+  shareMode.value = ''
+  qrDataUrl.value = ''
+  emit('close')
+}
+
 watch(
-  () => [props.open, qrPayload.value],
-  ([isOpen]) => {
+  () => props.open,
+  (isOpen) => {
     if (isOpen) {
+      shareMode.value = hasContact.value ? '' : 'profile'
       copyLabel.value = props.copyLinkLabel
-      renderQr()
+      qrDataUrl.value = ''
+      if (shareMode.value === 'profile') renderQr()
+    } else {
+      shareMode.value = ''
+      qrDataUrl.value = ''
     }
-  },
-  { immediate: true }
+  }
 )
+
+watch(qrPayload, (payload) => {
+  if (props.open && payload) renderQr()
+})
 
 async function copyLink() {
   emit('copy')
@@ -168,20 +209,56 @@ defineExpose({ downloadQr, renderQr, qrDataUrl })
       class="app-dialog-overlay fixed inset-0 z-[200] flex items-center justify-center p-6"
       aria-hidden="false"
     >
-      <div class="absolute inset-0 bg-black/70" @click="emit('close')" />
+      <div class="absolute inset-0 bg-black/70" @click="closeShare" />
       <div class="relative w-full max-w-sm card-item-bg rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-lg font-bold">{{ title }}</h2>
+          <div class="flex items-center gap-2 min-w-0">
+            <button
+              v-if="showingQr && hasContact"
+              type="button"
+              aria-label="Back"
+              class="w-9 h-9 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center transition-colors shrink-0"
+              @click="backToChooser"
+            >
+              <span class="material-symbols-outlined text-[20px]">arrow_back</span>
+            </button>
+            <h2 class="text-lg font-bold truncate">{{ qrHeading }}</h2>
+          </div>
           <button
             type="button"
             aria-label="Close"
-            class="w-9 h-9 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center transition-colors"
-            @click="emit('close')"
+            class="w-9 h-9 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center transition-colors shrink-0"
+            @click="closeShare"
           >
             <span class="material-symbols-outlined text-[20px]">close</span>
           </button>
         </div>
-      <p class="text-gray-400 text-sm mb-5">{{ copyText }}</p>
+
+      <template v-if="!showingQr">
+        <p class="text-gray-400 text-sm mb-5">Choose how you want to share.</p>
+        <div class="space-y-3">
+          <button
+            type="button"
+            class="w-full text-left rounded-2xl border border-zinc-700 bg-zinc-800/80 hover:bg-zinc-800 p-4 transition-colors"
+            @click="pickShareMode('profile')"
+          >
+            <p class="text-sm font-bold">Share Profile</p>
+            <p class="text-xs text-gray-400 mt-1">QR code opens this profile page.</p>
+          </button>
+          <button
+            v-if="hasContact"
+            type="button"
+            class="w-full text-left rounded-2xl border border-zinc-700 bg-zinc-800/80 hover:bg-zinc-800 p-4 transition-colors"
+            @click="pickShareMode('details')"
+          >
+            <p class="text-sm font-bold">Share Direct Details</p>
+            <p class="text-xs text-gray-400 mt-1">QR code saves the contact to a phone.</p>
+          </button>
+        </div>
+      </template>
+
+      <template v-else>
+      <p class="text-gray-400 text-sm mb-5">{{ qrCopyText }}</p>
       <div class="bg-white rounded-2xl p-4 flex items-center justify-center">
         <img v-if="qrDataUrl" :src="qrDataUrl" alt="QR code" class="w-[200px] h-[200px]" />
       </div>
@@ -246,6 +323,7 @@ defineExpose({ downloadQr, renderQr, qrDataUrl })
         <span class="material-symbols-outlined text-[18px]">link</span>
         {{ copyLabel }}
       </button>
+      </template>
     </div>
     </div>
   </Teleport>

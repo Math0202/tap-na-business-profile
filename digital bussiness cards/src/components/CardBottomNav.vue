@@ -125,6 +125,27 @@ const showCartNav = computed(() => {
   return guestCartCount.value > 0 || catalogCartCount.value > 0
 })
 
+/** Logged-in owner of the personal card currently on screen (empty catalog still needs a nav link). */
+const isOwnPersonalNav = computed(() => {
+  if (!loggedIn.value || isTableOwner.value) return false
+  const p = route.path
+  if (
+    p === '/me' ||
+    p === '/profile' ||
+    p === '/catalog' ||
+    p === '/catalog-cart' ||
+    p === '/connections' ||
+    p === '/team'
+  ) {
+    return true
+  }
+  const slug = browsingPersonalSlug(route)
+  const mine = String(loadProfile().shareSlug || '').trim()
+  return !!(mine && slug && mine.toLowerCase() === slug.toLowerCase())
+})
+
+const showCatalogNav = computed(() => hasCatalog.value || isOwnPersonalNav.value)
+
 const navItems = computed(() => {
   const slug = browsingPersonalSlug(route)
   const profileTo = personalPagePath(slug)
@@ -139,7 +160,7 @@ const navItems = computed(() => {
     }
   ]
 
-  if (hasCatalog.value) {
+  if (showCatalogNav.value) {
     items.push({
       to: catalogTo,
       label: 'Catalog',
