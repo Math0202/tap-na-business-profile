@@ -227,8 +227,9 @@ async function createProfile(e) {
       googleReview: '',
       checkInUrl: '',
       feedbackUrl: '',
-      avatar: '',
-      logo: '',
+      avatar: profile.avatar || '',
+      logo: profile.logo || '',
+      banner: profile.banner || '',
       video: '',
       loginEmail,
       loginPhone: profile.phone || phone.value.trim(),
@@ -294,7 +295,9 @@ onMounted(async () => {
         ? normalizePersonalType(remote.card.personalType || remote.card.personal_type || remote.profile?.personalType || DEFAULT_PERSONAL_TYPE)
         : ''
     if (remote.pendingTeamInvite) pendingTeamInvite.value = remote.pendingTeamInvite
-    if (remote.card.status !== 'linked') applyClaimPreset(remote.preset)
+    if (remote.card.status !== 'linked' || remote.profile?.isClaimed === false) {
+      applyClaimPreset(remote.preset)
+    }
 
     if (remote.card?.status === 'disabled' || remote.profile?.disabled) {
       mode.value = 'disabled'
@@ -302,7 +305,7 @@ onMounted(async () => {
       return
     }
 
-    if (remote.card.status === 'linked' && remote.profile) {
+    if (remote.card.status === 'linked' && remote.profile && remote.profile.isClaimed !== false) {
       linkedType.value = isPersonal ? 'personal' : 'table'
       const mine = loadProfile()
       const isMine =

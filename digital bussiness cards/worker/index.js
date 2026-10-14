@@ -1778,7 +1778,10 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
     showCheckin: !!row.show_checkin,
     showFeedback: !!row.show_feedback,
     showBooking: row.show_booking !== false,
-    checkinForm: row.checkin_form && typeof row.checkin_form === 'object' ? row.checkin_form : {},
+    checkinForm:
+      row.checkin_form && typeof row.checkin_form === 'object'
+        ? Object.fromEntries(Object.entries(row.checkin_form).filter(([k]) => k !== '_tap_is_claimed'))
+        : {},
     feedbackForm: row.feedback_form && typeof row.feedback_form === 'object' ? row.feedback_form : {},
     catalogItems: normalizeCatalogItems(row.catalog_items),
     avatar: row.avatar,
@@ -1796,6 +1799,7 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
     standinUntil: row.standin_until || '',
     standinCover,
     bookingProfileId,
+    isClaimed: isProfileClaimed(row),
     ...(includeCards ? { cards: mapped } : {})
   }
 }
@@ -2552,14 +2556,23 @@ function cardRedirectSlug(card, fromSlug = '') {
   return target
 }
 
-function cardContactPreset(card) {
-  if (!card || card.profile_id || card.status === 'linked' || card.status === 'disabled') return null
+function isProfileClaimed(profile) {
+  if (!profile) return true
+  if (profile.is_claimed === false || profile.isClaimed === false) return false
+  const form = profile.checkin_form
+  if (form && typeof form === 'object' && form._tap_is_claimed === false) return false
+  return true
+}
+
+function cardContactPreset(card, profile = null) {
+  if (!card || card.status === 'linked' || card.status === 'disabled') return null
+  const fromProfile = !!(profile && card.status === 'unlinked')
   const preset = {
-    name: String(card.contact_name || '').trim(),
-    company: String(card.contact_company || '').trim(),
-    phone: String(card.contact_phone || '').trim(),
-    email: String(card.contact_email || '').trim(),
-    title: String(card.contact_title || '').trim()
+    name: String((fromProfile && profile.name) || card.contact_name || '').trim(),
+    company: String((fromProfile && profile.company) || card.contact_company || '').trim(),
+    phone: String((fromProfile && profile.phone) || card.contact_phone || '').trim(),
+    email: String((fromProfile && profile.email) || card.contact_email || '').trim(),
+    title: String((fromProfile && profile.title) || card.contact_title || '').trim()
   }
   if (!preset.name && !preset.company && !preset.phone && !preset.email && !preset.title) return null
   return preset
@@ -3680,7 +3693,7 @@ async function serveOgImage(env, origin, slug) {
 }
 
 function destinationFor(card, profile) {
-  if (!profile) return null
+  if (!profile || String(card?.status || '') !== 'linked' || !isProfileClaimed(profile)) return null
   if (profile.disabled) {
     return {
       path: profile.card_type === 'table' ? '/business' : (card.slug ? `/c/${encodeURIComponent(card.slug)}` : '/me'),
@@ -4106,7 +4119,7 @@ async function handleApi(request, env, url) {
       profile: await publicProfile(env, profile),
       destination: destinationFor(card, profile),
       redirectSlug,
-      preset: cardContactPreset(card),
+      preset: cardContactPreset(card, profile),
       pendingTeamInvite:
         !redirectSlug && card.status === 'unlinked'
           ? await findPendingTeamInviteForCard(env, card.id)
@@ -5027,20 +5040,34 @@ async function handleApi(request, env, url) {
     if (!passwordHash) return bad('Password is required')
 
     let claimCard = null
+    let unclaimedProfile = null
     if (slug) {
       const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&deleted=eq.false&select=*`)
       claimCard = cards?.[0]
       if (!claimCard) return bad('Card not found', 404)
-      if (claimCard.profile_id || claimCard.status === 'linked') {
+      if (claimCard.status === 'linked') {
         return bad('Card already linked to another profile', 409)
+      }
+      if (claimCard.profile_id) {
+        const rows = await sb(
+          env,
+          `profiles?id=eq.${encodeURIComponent(claimCard.profile_id)}&deleted=eq.false&select=*`
+        )
+        unclaimedProfile = rows?.[0] || null
+        if (!unclaimedProfile) {
+          return bad('Card already linked to another profile', 409)
+        }
       }
     }
 
     const existing = await sb(
       env,
-      `profiles?or=(login_email.ilike.${encodeURIComponent(email)},email.ilike.${encodeURIComponent(email)})&select=id&limit=1`
+      `profiles?or=(login_email.ilike.${encodeURIComponent(email)},email.ilike.${encodeURIComponent(email)})&select=id,is_claimed&limit=5`
     )
-    if (existing?.length) return bad('An account with this email already exists', 409)
+    const otherAccount = (existing || []).find(
+      (row) => !unclaimedProfile || row.id !== unclaimedProfile.id
+    )
+    if (otherAccount) return bad('An account with this email already exists', 409)
 
     const pendingTeamInviteForClaim = claimCard
       ? await findPendingTeamInviteForCard(env, claimCard.id)
@@ -5064,32 +5091,57 @@ async function handleApi(request, env, url) {
       if (ownerIntegrations.usesCrm && !ownerIntegrations.crmOk) return bad('Choose the CRM you use')
     }
 
-    const id = uid('prof')
     const cardType = claimCard
       ? (claimCard.kind === 'personal' ? 'personal' : 'table')
       : (body.cardType === 'table' ? 'table' : 'personal')
     const seeded = claimProfileFields(body, claimCard)
-    await sb(env, 'profiles', {
-      method: 'POST',
-      body: {
-        id,
-        card_type: cardType,
-        name: seeded.name,
-        title: seeded.title,
-        company: seeded.company,
-        email,
-        phone: seeded.phone,
-        login_email: email,
-        login_phone: body.loginPhone || seeded.phone || '',
-        password_hash: passwordHash
-      },
-      prefer: 'return=minimal'
-    })
+    const id = unclaimedProfile?.id || uid('prof')
+    if (unclaimedProfile) {
+      await sb(env, `profiles?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: {
+          card_type: cardType,
+          name: seeded.name || unclaimedProfile.name || '',
+          title: seeded.title || unclaimedProfile.title || '',
+          company: seeded.company || unclaimedProfile.company || '',
+          email,
+          phone: seeded.phone || unclaimedProfile.phone || '',
+          login_email: email,
+          login_phone: body.loginPhone || seeded.phone || unclaimedProfile.login_phone || '',
+          password_hash: passwordHash,
+          checkin_form:
+            unclaimedProfile.checkin_form && typeof unclaimedProfile.checkin_form === 'object'
+              ? Object.fromEntries(
+                  Object.entries(unclaimedProfile.checkin_form).filter(([k]) => k !== '_tap_is_claimed')
+                )
+              : {},
+          updated_at: new Date().toISOString()
+        },
+        prefer: 'return=minimal'
+      })
+    } else {
+      await sb(env, 'profiles', {
+        method: 'POST',
+        body: {
+          id,
+          card_type: cardType,
+          name: seeded.name,
+          title: seeded.title,
+          company: seeded.company,
+          email,
+          phone: seeded.phone,
+          login_email: email,
+          login_phone: body.loginPhone || seeded.phone || '',
+          password_hash: passwordHash
+        },
+        prefer: 'return=minimal'
+      })
+    }
 
     if (claimCard) {
       const claimed = await sb(
         env,
-        `cards?slug=eq.${encodeURIComponent(slug)}&profile_id=is.null`,
+        `cards?slug=eq.${encodeURIComponent(slug)}&status=eq.unlinked`,
         {
           method: 'PATCH',
           body: {
