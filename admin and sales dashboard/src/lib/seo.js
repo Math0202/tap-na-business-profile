@@ -183,9 +183,9 @@ export const ROUTE_SEO = {
       'NFC Venue Display cards in Namibia for restaurants and businesses. Menus, reviews, Wi-Fi, and guest check-in — tap once at the table. Free Windhoek delivery.'
   },
   'team-package': {
-    title: 'Connect Teams business cards — tap-na Namibia',
+    title: 'Business & Executive NFC cards — tap-na Namibia',
     description:
-      'Connect business cards for teams in Namibia. Combine Business and Executive Tap NFC cards. Once-off purchase. Free delivery in Windhoek.'
+      'Business Tier and Executive Tier NFC cards in Namibia. Mix charcoal Business and matte-black Executive. Once-off purchase. Free delivery in Windhoek.'
   },
   cart: {
     title: 'Cart — tap-na NFC business cards',

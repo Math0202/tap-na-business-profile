@@ -2275,9 +2275,9 @@ async function provisionTeamFromShopQuote(env, {
     .toLowerCase()
   const packageCeiling = executiveQty > 0 ? 'executive_exclusive' : 'business'
   const teamName =
-    String(company || name || 'Connect Teams')
+    String(company || name || 'Team')
       .trim()
-      .slice(0, 120) || 'Connect Teams'
+      .slice(0, 120) || 'Team'
   const id = uid('team')
   const now = new Date().toISOString()
 
@@ -4477,7 +4477,7 @@ async function handleApi(request, env, url) {
     const defaultRole = normalizePersonalType(
       body?.role || card.personal_type || 'business'
     )
-    // Cap by Connect Teams package ceiling (highest seat), not current owner's card
+    // Cap by mix-package ceiling (highest seat), not current owner's card
     if (!assignableTeamRoles(packageCeiling).includes(defaultRole)) {
       return bad(
         `This team package only includes ${assignableTeamRoles(packageCeiling).join(', ')} roles`,
@@ -9677,7 +9677,7 @@ export default {
         const shareUrl = `${url.origin}/product/${encodeURIComponent(productId)}`
         const title = product?.name
           ? `${product.name} — tap-na`
-          : 'tap-na Connect card'
+          : 'tap-na NFC card'
         const price =
           product && Number(product.price) > 0
             ? `N$ ${Number(product.price).toLocaleString(undefined, {
@@ -9706,7 +9706,7 @@ export default {
             url: shareUrl,
             image,
             type: 'product',
-            imageAlt: product?.name || 'tap-na Connect card',
+            imageAlt: product?.name || 'tap-na NFC card',
             imageWidth: '1200',
             imageHeight: '1600'
           }),

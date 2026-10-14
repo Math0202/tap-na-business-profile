@@ -1,4 +1,4 @@
-/** Connect Teams owner: meeting tool + CRM (claim / onboard). */
+/** Team owner: meeting tool + CRM (claim / onboard). */
 
 export const MEETING_TOOLS = [
   {

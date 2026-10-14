@@ -4,7 +4,6 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import ShopHeader from '../components/ShopHeader.vue'
 import ConnectPackageDialog from '../components/ConnectPackageDialog.vue'
 import {
-  connectSoloCards,
   connectTeamCards,
   formatPrice,
   isTeamCard,
@@ -27,7 +26,7 @@ const sections = ref([])
 const catalogTick = ref(0)
 const heroCardsIn = ref(0)
 const packageOpen = ref(false)
-const packageMode = ref('solo')
+const packageMode = ref('team')
 const packageFocusId = ref('')
 let observer = null
 let toastTimer = null
@@ -35,27 +34,19 @@ let heroStaggerTimers = []
 
 const HERO_CARDS = [
   {
-    id: 'blue-card',
-    image: '/images/professional_cobalt_blue.png',
-    alt: 'Professional cobalt blue Connect card',
-    label: 'View Professional package',
-    rot: -16,
-    slot: 'left'
-  },
-  {
     id: 'black-card',
     image: '/images/business_charcoal.png',
-    alt: 'Business charcoal Connect card',
-    label: 'View Business team package',
-    rot: 0,
-    slot: 'center'
+    alt: 'Business Tier charcoal NFC card',
+    label: 'View Business Tier',
+    rot: -10,
+    slot: 'left'
   },
   {
     id: 'black-card-front',
     image: '/images/executive_black.png',
-    alt: 'Executive black Connect card',
-    label: 'View Executive team package',
-    rot: 14,
+    alt: 'Executive Tier black NFC card',
+    label: 'View Executive Tier',
+    rot: 12,
     slot: 'right'
   }
 ]
@@ -64,11 +55,6 @@ const HOME_REVIEWS = [
   { quote: '""', initials: '--', name: '......', role: '-----' },
   { quote: '""', initials: '--', name: '......', role: '-----' }
 ]
-
-const soloCards = computed(() => {
-  catalogTick.value
-  return connectSoloCards()
-})
 
 const teamCards = computed(() => {
   catalogTick.value
@@ -82,7 +68,7 @@ async function refreshCatalog() {
 
 function scrollToShop() {
   menuOpen.value = false
-  document.getElementById('connect-solo')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  document.getElementById('connect-team')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 function scrollToTeam() {
@@ -152,7 +138,7 @@ function revealSection(el) {
 watch(
   () => route.hash,
   (hash) => {
-    if (hash === '#business-cards' || hash === '#connect-solo') nextTick(() => scrollToShop())
+    if (hash === '#business-cards' || hash === '#connect-solo' || hash === '#connect-team') nextTick(() => scrollToShop())
     if (hash === '#connect-team') nextTick(() => scrollToTeam())
     if (hash === '#table-brochures') router.replace('/venue-display')
   }
@@ -173,7 +159,7 @@ onMounted(async () => {
     heroStaggerTimers.push(timer)
   })
   if (route.hash === '#connect-team') scrollToTeam()
-  else if (route.hash === '#business-cards' || route.hash === '#connect-solo') scrollToShop()
+  else if (route.hash === '#business-cards' || route.hash === '#connect-solo' || route.hash === '#connect-team') scrollToShop()
   observer = new IntersectionObserver(
     (entries) => {
       entries.forEach((entry) => {
@@ -310,11 +296,7 @@ onUnmounted(() => {
           </div>
         </section>
 
-        <!-- Connect packages: Team first, then Solo (side-by-side on desktop) -->
-        <div
-          class="px-margin-mobile md:px-margin-desktop pt-stack-lg grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-10 lg:gap-14 items-start"
-        >
-        <!-- Connect Teams -->
+        <div class="px-margin-mobile md:px-margin-desktop pt-stack-lg">
         <section
           id="connect-team"
           :ref="setSectionRef"
@@ -323,11 +305,11 @@ onUnmounted(() => {
           <div class="flex justify-between items-end gap-4">
             <div class="flex flex-col gap-1 min-w-0">
               <h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg uppercase">
-                Connect Teams
+                Business &amp; Executive
               </h2>
               <div class="h-1 w-12 bg-primary" />
               <p class="text-on-surface-variant text-sm mt-1">
-                Business &amp; Executive in one package (min 2).
+                Business Tier and Executive Tier (min 2 cards).
               </p>
             </div>
             <span class="font-label-caps text-label-caps text-ink-muted shrink-0">{{ teamCards.length }} ITEMS</span>
@@ -390,86 +372,6 @@ onUnmounted(() => {
           </div>
         </section>
 
-        <!-- Connect Solo -->
-        <section
-          id="connect-solo"
-          :ref="setSectionRef"
-          class="flex flex-col gap-8 scroll-mt-20"
-        >
-          <div class="flex justify-between items-end gap-4">
-            <div class="flex flex-col gap-1 min-w-0">
-              <h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg uppercase">
-                Connect Solo
-              </h2>
-              <div class="h-1 w-12 bg-primary" />
-              <p class="text-on-surface-variant text-sm mt-1">
-                Professional
-              </p>
-            </div>
-            <span class="font-label-caps text-label-caps text-ink-muted shrink-0">{{ soloCards.length }} ITEMS</span>
-          </div>
-
-          <div class="flex flex-col gap-0 divide-y divide-border-subtle border-y border-border-subtle md:border-0 md:divide-y-0 md:gap-8">
-            <article
-              v-for="product in soloCards"
-              :key="product.id"
-              class="flex flex-col gap-3 py-5 md:py-0 md:gap-4 group"
-            >
-              <button
-                type="button"
-                class="text-left no-underline text-inherit flex flex-col gap-4 bg-transparent border-0 p-0 cursor-pointer w-full"
-                @click="openProductInfo(product.id)"
-              >
-                <div class="w-full aspect-[3/4] max-h-[28rem] bg-surface-container overflow-hidden rounded-xl relative flex items-center justify-center p-4">
-                  <img
-                    v-if="product.image"
-                    :alt="product.alt"
-                    class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
-                    :src="product.image"
-                  >
-                  <span
-                    v-else
-                    class="material-symbols-outlined text-on-surface-variant text-[48px] opacity-40"
-                    aria-hidden="true"
-                  >image</span>
-                </div>
-                <div class="flex flex-1 min-w-0 flex-col gap-1">
-                  <div class="flex justify-between items-start gap-3">
-                    <h3 class="font-headline-lg-mobile text-[18px] md:text-[20px] font-medium">{{ product.name }}</h3>
-                    <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(product.price) }}</span>
-                  </div>
-                  <p
-                    v-if="product.label"
-                    class="font-label-caps text-[11px] uppercase tracking-widest text-primary"
-                  >
-                    {{ product.label }}
-                  </p>
-                  <p class="text-on-surface-variant text-sm line-clamp-2 md:line-clamp-2">
-                    {{ product.desc }}
-                  </p>
-                </div>
-              </button>
-              <button
-                type="button"
-                class="w-full border border-primary text-primary py-3 md:py-4 font-button-text uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-colors"
-                @click="openPackage('solo', product.id)"
-              >
-                View package | Order now
-              </button>
-            </article>
-
-            <figure class="pt-2 md:pt-4 m-0">
-              <img
-                src="/profile_image.png"
-                alt="tap-na NFC business cards Namibia — Connect Business digital profile"
-                class="w-full h-auto rounded-xl object-cover"
-                loading="lazy"
-                width="1254"
-                height="1254"
-              >
-            </figure>
-        </div>
-      </section>
         </div>
 
         <!-- Feature matrix -->
@@ -484,14 +386,11 @@ onUnmounted(() => {
             <div class="h-1 w-12 bg-primary" />
           </div>
           <div class="overflow-x-auto -mx-1 px-1 bg-surface-container rounded-xl p-4 md:p-6">
-            <table class="w-full min-w-[560px] text-left text-sm border-collapse">
+            <table class="w-full min-w-[420px] text-left text-sm border-collapse">
               <thead>
                 <tr class="border-b border-border-subtle">
                   <th class="py-3 pr-4 font-label-caps text-[10px] uppercase tracking-widest text-ink-muted font-medium">
                     Feature
-                  </th>
-                  <th class="py-3 px-2 font-label-caps text-[10px] uppercase tracking-widest text-ink-muted font-medium text-center">
-                    Solo
                   </th>
                   <th class="py-3 px-2 font-label-caps text-[10px] uppercase tracking-widest text-ink-muted font-medium text-center">
                     Business
@@ -508,10 +407,6 @@ onUnmounted(() => {
                   :class="idx < featureMatrix.length - 1 ? 'border-b border-border-subtle/70' : ''"
                 >
                   <td class="py-3 pr-4 text-on-surface">{{ row.feature }}</td>
-                  <td
-                    class="py-3 px-2 text-center"
-                    :class="row.solo === 'yes' ? 'text-primary' : ''"
-                  >{{ markLabel(row.solo) }}</td>
                   <td
                     class="py-3 px-2 text-center"
                     :class="row.business === 'yes' ? 'text-primary' : ''"
@@ -576,7 +471,7 @@ onUnmounted(() => {
             <li class="bg-surface-container rounded-xl p-4 flex gap-3">
               <span class="material-symbols-outlined text-primary shrink-0" aria-hidden="true">verified</span>
               <div>
-                <p class="font-medium text-sm">Professional</p>
+                <p class="font-medium text-sm">Polished first impression</p>
                 <p class="text-xs text-on-surface-variant mt-1">A modern first impression that matches how you work.</p>
               </div>
             </li>
@@ -706,14 +601,7 @@ onUnmounted(() => {
               class="text-left text-on-surface hover:opacity-70"
               @click="scrollToShop"
             >
-              Connect Solo
-            </button>
-            <button
-              type="button"
-              class="text-left text-on-surface hover:opacity-70"
-              @click="scrollToTeam"
-            >
-              Connect Teams
+              Business &amp; Executive
             </button>
             <RouterLink to="/venue-display" class="text-on-surface no-underline hover:opacity-70">
               Venue Display
@@ -775,11 +663,9 @@ onUnmounted(() => {
 
     <ConnectPackageDialog
       :open="packageOpen"
-      :mode="packageMode"
+      mode="team"
       :focus-id="packageFocusId"
-      :solo-product-id="packageFocusId || 'blue-card'"
       @close="packageOpen = false"
-      @switch-to-team="openPackage('team', packageFocusId || 'black-card')"
       @ordered="onPackageOrdered"
     />
 

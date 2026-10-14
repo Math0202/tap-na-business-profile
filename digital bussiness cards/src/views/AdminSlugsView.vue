@@ -18,6 +18,7 @@ import {
   slugStats,
   kindLabel,
   PERSONAL_TYPES,
+  SELLABLE_PERSONAL_TYPES,
   personalTypeLabel
 } from '../lib/cardLinkStore'
 import {
@@ -96,6 +97,7 @@ const contactEditProfileUrl = computed(() => {
 const UNGROUPED_KEY = '__ungrouped__'
 const kindOptions = computed(() => Object.values(CARD_KINDS))
 const personalTypeOptions = computed(() => Object.values(PERSONAL_TYPES))
+const newPersonalTypeOptions = computed(() => SELLABLE_PERSONAL_TYPES)
 
 function emptyContactRow() {
   return { name: '', company: '', phone: '', email: '', title: '' }
@@ -400,7 +402,12 @@ async function generateSlugs() {
   }
   const count = Math.min(200, Math.max(1, Number(slugForm.value.count) || 1))
   const kind = slugForm.value.kind === 'personal' ? 'personal' : 'table'
-  const personalType = kind === 'personal' ? slugForm.value.personalType || 'business' : ''
+  const personalType =
+    kind === 'personal'
+      ? slugForm.value.personalType === 'professional'
+        ? 'business'
+        : slugForm.value.personalType || 'business'
+      : ''
   const includeVcard = slugForm.value.includeVcard === true
   let contacts = null
   if (includeVcard) {
@@ -495,7 +502,12 @@ async function createEmptyFolder() {
     return
   }
   const kind = slugForm.value.kind === 'personal' ? 'personal' : 'table'
-  const personalType = kind === 'personal' ? slugForm.value.personalType || 'business' : ''
+  const personalType =
+    kind === 'personal'
+      ? slugForm.value.personalType === 'professional'
+        ? 'business'
+        : slugForm.value.personalType || 'business'
+      : ''
   folderCreating.value = true
   try {
     const res = await apiCreateCardBatch({ name, kind, personalType })
@@ -1000,7 +1012,7 @@ watch(filteredSlugs, (rows) => {
           </div>
           <div v-if="slugForm.kind === 'personal'" class="flex flex-wrap gap-2">
             <button
-              v-for="t in personalTypeOptions"
+              v-for="t in newPersonalTypeOptions"
               :key="t.id"
               type="button"
               class="px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-colors"

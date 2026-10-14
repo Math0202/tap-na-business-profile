@@ -68,7 +68,7 @@ function showToast(msg) {
 
 function shopAll() {
   menuOpen.value = false
-  router.push({ path: '/', hash: '#connect-solo' })
+  router.push({ path: '/', hash: '#connect-team' })
 }
 
 function bump(id, delta) {

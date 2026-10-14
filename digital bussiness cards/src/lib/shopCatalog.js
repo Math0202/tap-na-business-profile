@@ -141,12 +141,12 @@ export function getProduct(id) {
   return listShopProducts({ includeInactive: true }).find((p) => p.id === id) || null
 }
 
-/** Business + Executive form one Connect Teams package (mix allowed). */
+/** Business + Executive mix order (min 2). */
 export const BUSINESS_CARD_ID = 'black-card'
 export const EXECUTIVE_CARD_ID = 'black-card-front'
 export const TEAM_CARD_IDS = new Set([BUSINESS_CARD_ID, EXECUTIVE_CARD_ID])
 export const TEAM_PACKAGE_MIN = 2
-/** Connect Solo max qty before recommending Connect Teams. */
+/** Unused for storefront; leftover non-team lines (legacy products). */
 export const SOLO_PACKAGE_MAX = 4
 /** Business alone (0 Executive) cannot exceed this. */
 export const TEAM_BUSINESS_ALONE_MAX = 10
@@ -281,12 +281,7 @@ export function businessCards() {
   return loadShopCatalog().filter((p) => p.section === 'business-cards')
 }
 
-/** Professional / individual Connect cards (min 1, unlimited). */
-export function connectSoloCards() {
-  return businessCards().filter((p) => !isTeamCard(p.id))
-}
-
-/** Business + Executive team cards (combined package, min 2 total). */
+/** Business + Executive cards (combined mix, min 2 total). */
 export function connectTeamCards() {
   const list = businessCards().filter((p) => isTeamCard(p.id))
   const order = [BUSINESS_CARD_ID, EXECUTIVE_CARD_ID]

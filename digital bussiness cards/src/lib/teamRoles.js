@@ -42,6 +42,11 @@ export const PERSONAL_TYPES = {
 
 export const PERSONAL_TYPE_IDS = Object.keys(PERSONAL_TYPES)
 
+/** New cards and shop seats — Professional is legacy-only. */
+export const SELLABLE_PERSONAL_TYPES = Object.values(PERSONAL_TYPES).filter(
+  (t) => t.id !== 'professional'
+)
+
 /** Default personal / team role */
 export const DEFAULT_PERSONAL_TYPE = 'business'
 
@@ -93,7 +98,7 @@ export function packageCeilingFromRoles(roles) {
 }
 
 /**
- * Solo (Professional) hides Team. Business / Executive seats (or an existing team) unlock it.
+ * Legacy Professional hides Team. Business / Executive seats (or an existing team) unlock it.
  */
 export function canAccessTeamFeatures(personalType, { hasTeam = false } = {}) {
   if (hasTeam) return true

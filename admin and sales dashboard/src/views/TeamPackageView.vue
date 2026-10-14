@@ -143,12 +143,12 @@ function parseCopy(desc) {
   return { about: about.trim(), features: bullets, footer: footer.trim() }
 }
 
-/** Business/Executive extras beyond Solo baseline (from shared matrix). */
+/** Business-only extras (e.g. external NFC sticker). */
 const TEAM_FEATURE_EXTRAS = CONNECT_FEATURE_MATRIX.filter(
-  (r) => r.solo === 'no' && r.business === 'yes'
+  (r) => r.business === 'yes' && r.executive === 'no'
 ).map((r) => r.feature)
 
-const EXECUTIVE_FEATURE_EXTRAS = [...TEAM_FEATURE_EXTRAS, ...EXECUTIVE_ONLY_FEATURE_LABELS]
+const EXECUTIVE_FEATURE_EXTRAS = [...EXECUTIVE_ONLY_FEATURE_LABELS]
 
 const REMOVED_FEATURE_PATTERNS = [
   /custom subdomain/i,
@@ -272,7 +272,7 @@ async function refresh() {
   const focus = String(route.query.focus || '').trim()
   applyFocus(focus)
   setPageSeo({
-    title: 'Connect Teams business cards — tap-na Namibia',
+    title: 'Business & Executive NFC cards — tap-na Namibia',
     description:
       'Connect business cards for teams in Namibia. Combine Business and Executive Tap NFC cards. Once-off purchase. Free delivery in Windhoek.',
     path: '/package/team'
@@ -322,9 +322,9 @@ onUnmounted(() => {
         </button>
 
         <div class="flex flex-col gap-2 max-w-2xl">
-          <p class="font-label-caps text-[11px] uppercase tracking-widest text-primary">Connect Teams</p>
+          <p class="font-label-caps text-[11px] uppercase tracking-widest text-primary">Business &amp; Executive</p>
           <h1 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg uppercase">
-            Teams package
+            Card tiers
           </h1>
           <div class="h-1 w-12 bg-primary" />
           <p class="text-on-surface-variant text-sm mt-1">

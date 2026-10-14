@@ -4,11 +4,8 @@ import {
   BUSINESS_CARD_ID,
   EXECUTIVE_CARD_ID,
   TEAM_BUSINESS_ALONE_MAX,
-  TEAM_EXEC_SUBDOMAIN_MIN,
   TEAM_PACKAGE_MIN,
-  SOLO_PACKAGE_MAX,
   TEAM_FREE_MIX_AFTER,
-  TEAM_SCALE_THRESHOLD,
   isTeamExecutiveBridge,
   formatPrice,
   getProduct,
@@ -18,41 +15,33 @@ import {
   isTeamMixOrderReady,
   validateTeamMix
 } from '../lib/shopCatalog'
-import { addToCart, removeFromCart, setTeamPackage } from '../lib/cartStore'
+import { setTeamPackage } from '../lib/cartStore'
 import {
   CONNECT_FEATURE_MATRIX,
-  featureMarkLabel,
-  teamsPackageMark
+  featureMarkLabel
 } from '../lib/featureMatrix'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
-  mode: { type: String, default: 'solo' },
+  mode: { type: String, default: 'team' },
   focusId: { type: String, default: '' },
-  soloProductId: { type: String, default: 'blue-card' },
   initialBusinessQty: { type: Number, default: null },
   initialExecutiveQty: { type: Number, default: null },
-  initialSubdomain: { type: String, default: '' },
-  initialSoloQty: { type: Number, default: 1 }
+  initialSubdomain: { type: String, default: '' }
 })
 
-const emit = defineEmits(['close', 'ordered', 'added-to-cart', 'switch-to-team'])
+const emit = defineEmits(['close', 'ordered', 'added-to-cart'])
 
 const featureMatrix = CONNECT_FEATURE_MATRIX
 const markLabel = featureMarkLabel
-const teamsMark = teamsPackageMark
 
-const soloQty = ref(1)
 const businessQty = ref(2)
 const executiveQty = ref(3)
 const error = ref('')
 const notice = ref('')
-const soloLimitOpen = ref(false)
 let noticeTimer = null
 const submitting = ref(false)
 
-const isTeam = computed(() => props.mode === 'team')
-const soloProduct = computed(() => getProduct(props.soloProductId || props.focusId || 'blue-card'))
 const businessProduct = computed(() => getProduct(BUSINESS_CARD_ID))
 const executiveProduct = computed(() => getProduct(EXECUTIVE_CARD_ID))
 const teamTotal = computed(() => businessQty.value + executiveQty.value)
@@ -60,15 +49,14 @@ const teamMixCheck = computed(() => validateTeamMix(businessQty.value, executive
 const teamOrderReady = computed(() => isTeamMixOrderReady(businessQty.value, executiveQty.value))
 const inExecutiveBridge = computed(() => isTeamExecutiveBridge(teamTotal.value))
 const minExecutiveNeeded = computed(() => minExecutiveForTeamTotal(teamTotal.value))
-const soloSubtotal = computed(() => (soloProduct.value?.price || 0) * soloQty.value)
 const teamSubtotal = computed(
   () =>
     (businessProduct.value?.price || 0) * businessQty.value +
     (executiveProduct.value?.price || 0) * executiveQty.value
 )
-const subtotal = computed(() => (isTeam.value ? teamSubtotal.value : soloSubtotal.value))
-const title = computed(() => (isTeam.value ? 'Connect Teams package' : 'Connect Solo'))
-const itemCount = computed(() => (isTeam.value ? teamTotal.value : soloQty.value))
+const subtotal = computed(() => teamSubtotal.value)
+const title = computed(() => 'Business & Executive')
+const itemCount = computed(() => teamTotal.value)
 const cardsNeededForMin = computed(() => Math.max(0, TEAM_PACKAGE_MIN - teamTotal.value))
 const mixStatusLabel = computed(() => {
   if (teamTotal.value < TEAM_PACKAGE_MIN) {
@@ -122,16 +110,16 @@ const executiveRemoveTitle = computed(() => {
 })
 const placeOrderDisabled = computed(() => {
   if (submitting.value) return true
-  if (isTeam.value && !teamOrderReady.value) return true
+  if (!teamOrderReady.value) return true
   return false
 })
 const placeOrderLabel = computed(() => {
   if (submitting.value) return 'Adding…'
-  if (isTeam.value && teamTotal.value < TEAM_PACKAGE_MIN) {
+  if (teamTotal.value < TEAM_PACKAGE_MIN) {
     const n = cardsNeededForMin.value
     return `Add ${n} more card${n === 1 ? '' : 's'} to cart`
   }
-  if (isTeam.value && !teamOrderReady.value) return 'Fix mix to add'
+  if (!teamOrderReady.value) return 'Fix mix to add'
   return 'Add to cart'
 })
 let previousHtmlOverflow = ''
@@ -171,17 +159,12 @@ watch(
     if (!open) return
     error.value = ''
     notice.value = ''
-    soloLimitOpen.value = false
     submitting.value = false
-    if (props.mode === 'team') {
-      const mix = initialTeamMix(props.focusId)
-      businessQty.value =
-        props.initialBusinessQty != null ? Math.max(0, Math.floor(props.initialBusinessQty)) : mix.businessQty
-      executiveQty.value =
-        props.initialExecutiveQty != null ? Math.max(0, Math.floor(props.initialExecutiveQty)) : mix.executiveQty
-    } else {
-      soloQty.value = Math.min(SOLO_PACKAGE_MAX, Math.max(1, Math.floor(Number(props.initialSoloQty) || 1)))
-    }
+    const mix = initialTeamMix(props.focusId)
+    businessQty.value =
+      props.initialBusinessQty != null ? Math.max(0, Math.floor(props.initialBusinessQty)) : mix.businessQty
+    executiveQty.value =
+      props.initialExecutiveQty != null ? Math.max(0, Math.floor(props.initialExecutiveQty)) : mix.executiveQty
   }
 )
 
@@ -194,23 +177,6 @@ function showNotice(msg) {
   }, 4500)
 }
 
-function bumpSolo(delta) {
-  const next = Math.min(SOLO_PACKAGE_MAX, Math.max(1, soloQty.value + delta))
-  if (delta > 0 && soloQty.value >= SOLO_PACKAGE_MAX) {
-    soloLimitOpen.value = true
-    return
-  }
-  soloQty.value = next
-  error.value = ''
-  soloLimitOpen.value = false
-}
-function closeSoloLimit() {
-  soloLimitOpen.value = false
-}
-function switchToTeam() {
-  soloLimitOpen.value = false
-  emit('switch-to-team')
-}
 function bumpBusiness(delta) {
   const next = Math.min(99, Math.max(0, businessQty.value + delta))
   if (next === businessQty.value) return
@@ -261,48 +227,31 @@ function close() {
 
 async function addPackageToCart() {
   error.value = ''
-  if (isTeam.value) {
-    const check = validateTeamMix(businessQty.value, executiveQty.value)
-    if (!check.ok) {
-      error.value = check.error
-      showNotice(check.error)
-      return
-    }
-  } else if (soloQty.value > SOLO_PACKAGE_MAX) {
-    soloLimitOpen.value = true
+  const check = validateTeamMix(businessQty.value, executiveQty.value)
+  if (!check.ok) {
+    error.value = check.error
+    showNotice(check.error)
     return
   }
 
   submitting.value = true
   try {
-    let ok = false
-    if (isTeam.value) {
-      ok = setTeamPackage({
-        businessQty: businessQty.value,
-        executiveQty: executiveQty.value,
-        subdomain: ''
-      })
-    } else {
-      const id = soloProduct.value?.id
-      if (!id) {
-        error.value = 'Product unavailable.'
-        return
-      }
-      removeFromCart(id)
-      ok = addToCart(id, soloQty.value)
-    }
+    const ok = setTeamPackage({
+      businessQty: businessQty.value,
+      executiveQty: executiveQty.value,
+      subdomain: ''
+    })
     if (!ok) {
       error.value = 'Could not add to cart. Check quantities and try again.'
       showNotice(error.value)
       return
     }
     emit('added-to-cart', {
-      mode: isTeam.value ? 'team' : 'solo',
+      mode: 'team',
       total: itemCount.value
     })
-    // Keep ordered for older listeners
     emit('ordered', {
-      mode: isTeam.value ? 'team' : 'solo',
+      mode: 'team',
       total: itemCount.value,
       addedToCart: true
     })
@@ -332,8 +281,8 @@ async function addPackageToCart() {
         <div class="shrink-0 z-10 bg-surface/95 backdrop-blur-md border-b border-border-subtle px-5 py-4 flex items-start justify-between gap-3">
           <div class="min-w-0">
             <h2 class="font-headline-lg-mobile text-[22px] font-medium uppercase tracking-tight">{{ title }}</h2>
-            <p v-if="!isTeam" class="text-on-surface-variant text-sm mt-1">
-              Professional · 1–{{ SOLO_PACKAGE_MAX }} cards
+            <p class="text-on-surface-variant text-sm mt-1">
+              Mix Business Tier and Executive Tier · min {{ TEAM_PACKAGE_MIN }} cards
             </p>
           </div>
           <button
@@ -347,81 +296,6 @@ async function addPackageToCart() {
         </div>
 
         <form class="px-5 py-5 flex flex-col gap-5 overflow-y-auto flex-1 min-h-0" @submit.prevent="addPackageToCart">
-          <!-- Solo line -->
-          <template v-if="!isTeam && soloProduct">
-            <div class="flex gap-4 py-1">
-              <div class="w-20 h-20 shrink-0 bg-surface-container rounded-lg overflow-hidden flex items-center justify-center p-2">
-                <img v-if="soloProduct.image" :src="soloProduct.image" :alt="soloProduct.name" class="w-full h-full object-contain">
-              </div>
-              <div class="flex-1 min-w-0 flex flex-col gap-2">
-                <div class="flex justify-between gap-3 items-start">
-                  <h3 class="font-headline-lg-mobile text-[17px] font-medium truncate">{{ soloProduct.name }}</h3>
-                  <span class="font-label-caps text-label-caps shrink-0">{{ formatPrice(soloSubtotal) }}</span>
-                </div>
-                <div class="inline-flex items-center border border-border-subtle rounded-full overflow-hidden self-start">
-                  <button type="button" class="w-10 h-10 flex items-center justify-center" aria-label="Decrease quantity" @click="bumpSolo(-1)">
-                    <span class="material-symbols-outlined text-[18px]" aria-hidden="true">remove</span>
-                  </button>
-                  <span class="min-w-[3.5rem] px-1 text-center text-[13px] font-medium tabular-nums" aria-live="polite">
-                    {{ soloQty }}
-                    <span class="block text-[9px] font-label-caps uppercase tracking-widest text-ink-muted font-normal -mt-0.5">cards</span>
-                  </span>
-                  <button type="button" class="w-10 h-10 flex items-center justify-center" aria-label="Increase quantity" @click="bumpSolo(1)">
-                    <span class="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-          <!-- Solo summary -->
-          <div v-if="!isTeam" class="bg-surface-container rounded-xl p-4 flex flex-col gap-3">
-            <div class="flex items-baseline justify-between gap-3">
-              <h3 class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">Summary</h3>
-              <span class="font-label-caps text-[10px] uppercase tracking-widest text-on-surface">{{ soloQty }} / {{ SOLO_PACKAGE_MAX }} cards</span>
-            </div>
-            <table class="w-full text-left text-[12px] border-collapse">
-              <thead>
-                <tr class="border-b border-border-subtle">
-                  <th class="py-2 pr-2 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium">Feature</th>
-                  <th class="py-2 px-1 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium text-center whitespace-nowrap">Solo</th>
-                  <th class="py-2 pl-1 font-label-caps text-[9px] uppercase tracking-widest text-ink-muted font-medium text-center whitespace-nowrap">Connect Teams</th>
-                </tr>
-              </thead>
-              <tbody class="text-on-surface-variant">
-                <tr
-                  v-for="(row, idx) in featureMatrix"
-                  :key="'solo-' + row.feature"
-                  :class="idx < featureMatrix.length - 1 ? 'border-b border-border-subtle/60' : ''"
-                >
-                  <td class="py-2 pr-2 text-on-surface">{{ row.feature }}</td>
-                  <td
-                    class="py-2 px-1 text-center"
-                    :class="row.solo === 'yes' ? 'text-primary' : ''"
-                  >{{ markLabel(row.solo) }}</td>
-                  <td
-                    class="py-2 pl-1 text-center text-[11px] leading-snug"
-                    :class="teamsMark(row) !== 'no' ? 'text-primary' : ''"
-                  >{{ markLabel(teamsMark(row)) }}</td>
-                </tr>
-              </tbody>
-            </table>
-            <p class="text-[11px] text-on-surface-variant leading-snug">
-              Need {{ TEAM_PACKAGE_MIN }}+ cards, choose Connect Teams (Business package).
-              <span class="block mt-1">Exec = Executive Exclusive only (team manager, assistant, stand-in).</span>
-            </p>
-            <button
-              type="button"
-              class="w-full border border-primary text-primary py-3 font-button-text text-[11px] uppercase tracking-widest hover:bg-primary hover:text-on-primary transition-colors"
-              @click="switchToTeam"
-            >
-              View Connect Teams
-            </button>
-          </div>
-
-          </template>
-
-          <!-- Team lines -->
-          <template v-else-if="isTeam">
             <div class="bg-surface-container rounded-xl p-4 flex flex-col gap-3">
               <h3 class="font-label-caps text-[11px] uppercase tracking-widest text-ink-muted">Features</h3>
               <table class="w-full text-left text-[12px] border-collapse">
@@ -485,8 +359,8 @@ async function addPackageToCart() {
                   <div class="flex-1 min-w-0 flex flex-col gap-3">
                     <div class="flex justify-between gap-3 items-start">
                       <div class="min-w-0">
-                        <p class="text-[15px] font-medium leading-tight">Business</p>
-                        <p class="text-[12px] text-on-surface-variant mt-0.5">Charcoal · logo black &amp; white</p>
+                        <p class="text-[15px] font-medium leading-tight">Business Tier</p>
+                        <p class="text-[12px] text-on-surface-variant mt-0.5">External NFC sticker · charcoal · logo black &amp; white</p>
                         <p class="text-[12px] text-on-surface mt-1">{{ formatPrice(businessProduct.price || 0) }} each</p>
                       </div>
                       <div class="text-right shrink-0">
@@ -531,8 +405,8 @@ async function addPackageToCart() {
                   <div class="flex-1 min-w-0 flex flex-col gap-3">
                     <div class="flex justify-between gap-3 items-start">
                       <div class="min-w-0">
-                        <p class="text-[15px] font-medium leading-tight">Executive</p>
-                        <p class="text-[12px] text-on-surface-variant mt-0.5">Matte black · logo black &amp; white</p>
+                        <p class="text-[15px] font-medium leading-tight">Executive Tier</p>
+                        <p class="text-[12px] text-on-surface-variant mt-0.5">Internal NFC · matte black · logo black &amp; white</p>
                         <p class="text-[12px] text-on-surface mt-1">{{ formatPrice(executiveProduct.price || 0) }} each</p>
                       </div>
                       <div class="text-right shrink-0">
@@ -575,7 +449,6 @@ async function addPackageToCart() {
                 </li>
               </ul>
             </section>
-          </template>
 
           <p class="text-sm text-on-surface-variant leading-snug">
             
@@ -589,7 +462,7 @@ async function addPackageToCart() {
             <span class="font-button-text text-button-text uppercase tracking-widest text-sm">Total</span>
             <span class="font-display-lg text-[24px] font-semibold leading-none">{{ formatPrice(subtotal) }}</span>
           </div>
-          <p v-if="isTeam && !teamOrderReady" class="text-[12px] text-amber-800 leading-snug -mt-1">
+          <p v-if="!teamOrderReady" class="text-[12px] text-amber-800 leading-snug -mt-1">
             {{ mixStatusLabel }}
           </p>
           <button
@@ -604,52 +477,6 @@ async function addPackageToCart() {
       </div>
     </div>
 
-
-    <!-- Solo limit dialog -->
-    <div
-      v-if="open && soloLimitOpen"
-      class="fixed inset-0 z-[130] flex items-center justify-center p-5"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="solo-limit-title"
-    >
-      <button
-        type="button"
-        class="absolute inset-0 bg-black/55 border-0 cursor-pointer"
-        aria-label="Dismiss"
-        @click="closeSoloLimit"
-      />
-      <div class="relative w-full max-w-sm bg-surface text-on-surface rounded-2xl shadow-2xl p-6 flex flex-col gap-4">
-        <div class="flex items-start gap-3">
-          <span class="material-symbols-outlined text-primary text-[28px] shrink-0" aria-hidden="true">groups</span>
-          <div class="min-w-0 flex flex-col gap-2">
-            <h3 id="solo-limit-title" class="font-headline-lg-mobile text-[18px] font-medium">
-              Need {{ TEAM_PACKAGE_MIN }}+ cards?
-            </h3>
-            <p class="text-sm text-on-surface-variant leading-relaxed">
-              Connect Solo is limited to {{ SOLO_PACKAGE_MAX }} cards only.
-              Choose Connect Teams package instead.
-            </p>
-          </div>
-        </div>
-        <div class="flex flex-col gap-2 pt-1">
-          <button
-            type="button"
-            class="w-full bg-primary text-on-primary py-3.5 font-button-text text-[12px] uppercase tracking-widest hover:opacity-90"
-            @click="switchToTeam"
-          >
-            Choose Connect Teams
-          </button>
-          <button
-            type="button"
-            class="w-full border border-border-subtle text-on-surface py-3.5 font-button-text text-[12px] uppercase tracking-widest hover:bg-surface-container"
-            @click="closeSoloLimit"
-          >
-            Stay on Solo
-          </button>
-        </div>
-      </div>
-    </div>
 
     <div
       v-if="open && notice"

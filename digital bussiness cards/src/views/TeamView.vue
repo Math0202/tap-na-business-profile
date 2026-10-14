@@ -661,22 +661,22 @@ onMounted(() => {
         <BrandMark size="sm" class="mb-3" />
         <h1 class="text-2xl font-bold tracking-tight">Team</h1>
         <p class="text-gray-400 text-sm mt-1">
-          Connect Teams seats, roles, and ownership. Members claim their cards to join.
+          Business and Executive seats, roles, and ownership. Members claim their cards to join.
         </p>
       </header>
 
       <p v-if="loading" class="text-sm text-gray-500 py-8 text-center">Loading…</p>
 
       <div v-else-if="!canUseTeam" class="card-item-bg rounded-2xl p-5 space-y-3">
-        <h2 class="text-lg font-bold">Team is part of Connect Teams</h2>
+        <h2 class="text-lg font-bold">Team needs a Business or Executive card</h2>
         <p class="text-sm text-gray-400 leading-relaxed">
-          Professional (Connect Solo) cards are personal-only. Upgrade to Business or Executive for shared team profiles, catalog sharing, and ownership.
+          This card is personal-only. Use a Business or Executive seat for shared team profiles, catalog sharing, and ownership.
         </p>
         <RouterLink
           to="/#connect-team"
           class="inline-flex w-full items-center justify-center py-3 rounded-full bg-white text-black text-sm font-bold no-underline"
         >
-          View Connect Teams
+          View Business &amp; Executive
         </RouterLink>
       </div>
 

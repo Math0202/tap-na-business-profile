@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import ShopHeader from '../components/ShopHeader.vue'
-import { formatPrice, getMaxQty, getMinQty, getProduct, isTeamCard, loadShopProducts, SOLO_PACKAGE_MAX, TEAM_PACKAGE_MIN } from '../lib/shopCatalog'
+import { formatPrice, getMaxQty, getMinQty, getProduct, isTeamCard, loadShopProducts, TEAM_PACKAGE_MIN } from '../lib/shopCatalog'
 import { addToCart } from '../lib/cartStore'
 import { youtubeEmbedUrl } from '../lib/shareHelpers'
 import { setPageSeo } from '../lib/seo'
@@ -78,7 +78,7 @@ async function refresh() {
 
 function shopAll() {
   menuOpen.value = false
-  router.push({ path: '/', hash: '#connect-solo' })
+  router.push({ path: '/', hash: '#connect-team' })
 }
 
 function showToast(msg) {

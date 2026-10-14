@@ -17,6 +17,7 @@ export const CARD_KINDS = {
 
 export {
   PERSONAL_TYPES,
+  SELLABLE_PERSONAL_TYPES,
   PERSONAL_CARD_IMAGES,
   personalTypeLabel,
   normalizePersonalType,

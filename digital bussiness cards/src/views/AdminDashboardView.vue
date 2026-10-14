@@ -1654,7 +1654,6 @@ onMounted(() => {
               <div class="space-y-1">
                 <label class="block text-[11px] font-semibold text-gray-400">Assigned Role</label>
                 <select v-model="newMemberRole" class="field-input w-full bg-zinc-900 text-xs">
-                  <option value="professional">Professional</option>
                   <option value="business">Business</option>
                   <option value="executive_exclusive">Executive Exclusive</option>
                 </select>

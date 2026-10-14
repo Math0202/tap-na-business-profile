@@ -109,7 +109,7 @@ onUnmounted(() => {
             <li class="bg-surface-container rounded-xl p-4 flex gap-3">
               <span class="material-symbols-outlined text-primary shrink-0">verified</span>
               <div>
-                <p class="font-medium text-sm">Professional</p>
+                <p class="font-medium text-sm">Polished first impression</p>
                 <p class="text-xs text-on-surface-variant mt-1">A modern first impression that matches how you work.</p>
               </div>
             </li>
@@ -195,29 +195,20 @@ onUnmounted(() => {
           <div class="flex flex-col gap-4">
             <article class="border border-border-subtle rounded-xl p-5 flex flex-col gap-2">
               <div class="flex items-start justify-between gap-3">
-                <h3 class="font-semibold text-lg">Professional</h3>
-                <span class="font-label-caps text-[10px] uppercase tracking-widest bg-surface-container px-2 py-1">Solo</span>
+                <h3 class="font-semibold text-lg">Business Tier</h3>
+                <span class="font-label-caps text-[10px] uppercase tracking-widest bg-primary text-on-primary px-2 py-1">N$360</span>
               </div>
               <p class="text-sm text-on-surface-variant leading-relaxed">
-                For solopreneurs, consultants, and freelancers.
+                External NFC sticker tag. Meeting booking, catalogue, team profiles, and company logo in black &amp; white (charcoal card).
               </p>
             </article>
             <article class="border border-border-subtle rounded-xl p-5 flex flex-col gap-2">
               <div class="flex items-start justify-between gap-3">
-                <h3 class="font-semibold text-lg">Business</h3>
-                <span class="font-label-caps text-[10px] uppercase tracking-widest bg-primary text-on-primary px-2 py-1">Best Seller</span>
+                <h3 class="font-semibold text-lg">Executive Tier</h3>
+                <span class="font-label-caps text-[10px] uppercase tracking-widest bg-surface-charcoal text-on-primary px-2 py-1">N$510</span>
               </div>
               <p class="text-sm text-on-surface-variant leading-relaxed">
-                For teams. Meeting booking, share catalogue, team profiles, and company logo(W&amp;B) (charcoal card).
-              </p>
-            </article>
-            <article class="border border-border-subtle rounded-xl p-5 flex flex-col gap-2">
-              <div class="flex items-start justify-between gap-3">
-                <h3 class="font-semibold text-lg">Executive Exclusive</h3>
-                <span class="font-label-caps text-[10px] uppercase tracking-widest bg-surface-charcoal text-on-primary px-2 py-1">Executive</span>
-              </div>
-              <p class="text-sm text-on-surface-variant leading-relaxed">
-                For team leads. Deactivate team profiles, manage company details (1 lead at a time), personal assistant, and stand-in when you’re away.
+                Internal NFC. Team manager (deactivate profiles, 1 lead), personal assistant, and stand-in when you’re away.
               </p>
             </article>
           </div>
@@ -230,14 +221,11 @@ onUnmounted(() => {
             <div class="h-1 w-12 bg-primary" />
           </div>
           <div class="overflow-x-auto -mx-1 px-1 bg-surface-container rounded-xl p-4 md:p-6">
-            <table class="w-full min-w-[560px] text-left text-sm border-collapse">
+            <table class="w-full min-w-[420px] text-left text-sm border-collapse">
               <thead>
                 <tr class="border-b border-border-subtle">
                   <th class="py-3 pr-4 font-label-caps text-[10px] uppercase tracking-widest text-ink-muted font-medium">
                     Feature
-                  </th>
-                  <th class="py-3 px-2 font-label-caps text-[10px] uppercase tracking-widest text-ink-muted font-medium text-center">
-                    Solo
                   </th>
                   <th class="py-3 px-2 font-label-caps text-[10px] uppercase tracking-widest text-ink-muted font-medium text-center">
                     Business
@@ -254,10 +242,6 @@ onUnmounted(() => {
                   :class="idx < featureMatrix.length - 1 ? 'border-b border-border-subtle/70' : ''"
                 >
                   <td class="py-3 pr-4 text-on-surface">{{ row.feature }}</td>
-                  <td
-                    class="py-3 px-2 text-center"
-                    :class="row.solo === 'yes' ? 'text-primary' : ''"
-                  >{{ markLabel(row.solo) }}</td>
                   <td
                     class="py-3 px-2 text-center"
                     :class="row.business === 'yes' ? 'text-primary' : ''"
@@ -280,7 +264,7 @@ onUnmounted(() => {
           </div>
           <ul class="space-y-2 text-sm text-on-surface-variant leading-relaxed">
             <li>• Fully online store — order on tapnam.com.</li>
-            <li>• Solo Cards are readily available, Business & Executive Cards are made on order.</li>
+            <li>• Business and Executive cards are made to order (min 2 cards).</li>
             <li>• Free delivery in Windhoek, Courier nationwide.</li>
             <li>• Delivery: 2–4 working days.</li>
             <li>• Quote on order -> invoice after payment and delivery as agreed with sales.</li>
@@ -301,9 +285,9 @@ onUnmounted(() => {
               </p>
             </div>
             <div>
-              <p class="font-medium text-sm">2. Can I customise Professional?</p>
+              <p class="font-medium text-sm">2. Can I customise the cards?</p>
               <p class="text-sm text-on-surface-variant mt-1 leading-relaxed">
-                No — Professional is a standard pack. Choose Business or Executive for company logo branding in B&amp;W.
+                Yes — Business and Executive include company logo branding in black &amp; white.
               </p>
             </div>
             <div>

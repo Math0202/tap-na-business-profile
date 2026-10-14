@@ -626,6 +626,75 @@ function staffSessionPayload(tokenData, user) {
   }
 }
 
+const TWO_TIER_SHOP_PRODUCTS = {
+  'black-card': {
+    name: 'Business Tier',
+    shop_label: 'Business Tier',
+    default_price: 360,
+    active: true,
+    description:
+      'Business Tier NFC card with an external NFC sticker tag. Mix with Executive (min 2 cards). Catalogue, CRM, calendar, and B&W logo.'
+  },
+  'black-card-front': {
+    name: 'Executive Tier',
+    shop_label: 'Executive Tier',
+    default_price: 510,
+    active: true,
+    description:
+      'Executive Tier NFC card with internal NFC. Mix with Business (min 2 cards). Team manager, personal assistant, and stand-in.'
+  }
+}
+
+let shopTiersEnsured = false
+
+async function ensureTwoTierShopCatalog(env) {
+  if (shopTiersEnsured) return
+  try {
+    for (const [id, target] of Object.entries(TWO_TIER_SHOP_PRODUCTS)) {
+      const rows = await sb(
+        env,
+        `sales_products?id=eq.${encodeURIComponent(id)}&select=id,name,default_price,active,shop_label,description`,
+        { skipErrorLog: true }
+      )
+      const row = rows?.[0]
+      if (!row) continue
+      const price = Number(row.default_price) || 0
+      const needs =
+        row.name !== target.name ||
+        price !== target.default_price ||
+        row.active !== target.active ||
+        String(row.shop_label || '') !== target.shop_label ||
+        String(row.description || '') !== target.description
+      if (!needs) continue
+      await sb(env, `sales_products?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: {
+          ...target,
+          updated_at: new Date().toISOString()
+        },
+        prefer: 'return=minimal',
+        skipErrorLog: true
+      })
+    }
+    const blue = await sb(
+      env,
+      'sales_products?id=eq.blue-card&select=id,active',
+      { skipErrorLog: true }
+    )
+    if (blue?.[0] && blue[0].active !== false) {
+      await sb(env, 'sales_products?id=eq.blue-card', {
+        method: 'PATCH',
+        body: { active: false, updated_at: new Date().toISOString() },
+        prefer: 'return=minimal',
+        skipErrorLog: true
+      })
+    }
+    shopTiersEnsured = true
+  } catch {
+    /* catalog still served from current rows */
+  }
+}
+
 function mapSalesProductRow(row) {
   const images = Array.isArray(row?.images)
     ? row.images.filter((src) => typeof src === 'string' && src.trim())
@@ -2280,9 +2349,9 @@ async function provisionTeamFromShopQuote(env, {
     .toLowerCase()
   const packageCeiling = executiveQty > 0 ? 'executive_exclusive' : 'business'
   const teamName =
-    String(company || name || 'Connect Teams')
+    String(company || name || 'Team')
       .trim()
-      .slice(0, 120) || 'Connect Teams'
+      .slice(0, 120) || 'Team'
   const id = uid('team')
   const now = new Date().toISOString()
 
@@ -4606,7 +4675,7 @@ async function handleApi(request, env, url) {
     const defaultRole = normalizePersonalType(
       body?.role || card.personal_type || 'business'
     )
-    // Cap by Connect Teams package ceiling (highest seat), not current owner's card
+    // Cap by mix-package ceiling (highest seat), not current owner's card
     if (!assignableTeamRoles(packageCeiling).includes(defaultRole)) {
       return bad(
         `This team package only includes ${assignableTeamRoles(packageCeiling).join(', ')} roles`,
@@ -5333,6 +5402,7 @@ async function handleApi(request, env, url) {
   }
 
   if (pathname === '/api/shop/products' && method === 'GET') {
+    await ensureTwoTierShopCatalog(env)
     const rows = await sb(
       env,
       'sales_products?active=eq.true&deleted=eq.false&select=id,name,default_price,category,active,description,images,video,shop_label,shop_badge,created_at,updated_at&order=name.asc'
@@ -9879,7 +9949,7 @@ export default {
         const shareUrl = `${url.origin}/product/${encodeURIComponent(productId)}`
         const title = product?.name
           ? `${product.name} — tap-na`
-          : 'tap-na Connect card'
+          : 'tap-na NFC card'
         const price =
           product && Number(product.price) > 0
             ? `N$ ${Number(product.price).toLocaleString(undefined, {
@@ -9908,7 +9978,7 @@ export default {
             url: shareUrl,
             image,
             type: 'product',
-            imageAlt: product?.name || 'tap-na Connect card',
+            imageAlt: product?.name || 'tap-na NFC card',
             imageWidth: '1200',
             imageHeight: '1600'
           }),
