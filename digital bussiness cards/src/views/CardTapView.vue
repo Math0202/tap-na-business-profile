@@ -275,6 +275,13 @@ onMounted(async () => {
 
   const remote = await apiResolveCard(serial.value)
   if (remote?.ok && remote.card) {
+    const alias = String(remote.redirectSlug || '').trim()
+    if (alias && alias !== serial.value) {
+      const query = {}
+      if (via) query.via = via
+      router.replace({ path: `/c/${alias}`, query })
+      return
+    }
     apiLogCardOpen(serial.value, via).catch?.(() => {})
     const isPersonal =
       remote.profile?.cardType === 'personal' ||

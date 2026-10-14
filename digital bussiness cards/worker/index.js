@@ -2544,6 +2544,14 @@ async function resolveSharedCatalogForProfile(env, profileId) {
   }
 }
 
+function cardRedirectSlug(card, fromSlug = '') {
+  const target = String(card?.redirect_slug || '').trim()
+  if (!target) return ''
+  const current = String(fromSlug || card?.slug || '').trim()
+  if (!current || target.toLowerCase() === current.toLowerCase()) return ''
+  return target
+}
+
 function cardContactPreset(card) {
   if (!card || card.profile_id || card.status === 'linked' || card.status === 'disabled') return null
   const preset = {
@@ -4079,6 +4087,7 @@ async function handleApi(request, env, url) {
     const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&deleted=eq.false&select=*`)
     const card = cards?.[0]
     if (!card) return bad('Card not found', 404)
+    const redirectSlug = cardRedirectSlug(card, slug)
     let profile = null
     if (card.profile_id) {
       const profiles = await sb(env, `profiles?id=eq.${encodeURIComponent(card.profile_id)}&select=*`)
@@ -4096,9 +4105,10 @@ async function handleApi(request, env, url) {
       },
       profile: await publicProfile(env, profile),
       destination: destinationFor(card, profile),
+      redirectSlug,
       preset: cardContactPreset(card),
       pendingTeamInvite:
-        card.status === 'unlinked'
+        !redirectSlug && card.status === 'unlinked'
           ? await findPendingTeamInviteForCard(env, card.id)
           : null
     })
@@ -9877,6 +9887,22 @@ export default {
     if (tap && request.method === 'GET' && env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
       const slug = decodeURIComponent(tap[1])
       const ua = request.headers.get('User-Agent') || ''
+      try {
+        const aliasRows = await sb(
+          env,
+          `cards?slug=eq.${encodeURIComponent(slug)}&deleted=eq.false&select=slug,redirect_slug`
+        )
+        const redirectSlug = cardRedirectSlug(aliasRows?.[0], slug)
+        if (redirectSlug) {
+          const next = new URL(request.url)
+          next.hostname = 'tapnam.com'
+          next.protocol = 'https:'
+          next.pathname = `/c/${encodeURIComponent(redirectSlug)}`
+          return Response.redirect(next.toString(), 302)
+        }
+      } catch {
+        /* fall through */
+      }
 
       // Social crawlers get Open Graph HTML with the profile photo (WhatsApp, etc.)
       if (isCrawler(ua)) {
