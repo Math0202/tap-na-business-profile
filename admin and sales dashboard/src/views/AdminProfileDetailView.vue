@@ -58,6 +58,7 @@ const form = ref({
   x: '',
   instagram: '',
   tiktok: '',
+  facebook: '',
   linkedin: '',
   youtube: '',
   cardType: 'personal',
@@ -108,6 +109,7 @@ function applyProfile(p) {
     x: p.x || '',
     instagram: p.instagram || '',
     tiktok: p.tiktok || '',
+    facebook: p.facebook || '',
     website: p.website || '',
     address: p.address || '',
     menuUrl: p.menuUrl || '',
@@ -148,6 +150,7 @@ function applyProfile(p) {
     x: p.x || '',
     instagram: p.instagram || '',
     tiktok: p.tiktok || '',
+    facebook: p.facebook || '',
     linkedin: p.linkedin || '',
     youtube: p.youtube || '',
     cardType: p.cardType === 'table' ? 'table' : 'personal',
@@ -265,6 +268,7 @@ async function saveManage(e) {
     x: form.value.x,
     instagram: form.value.instagram,
     tiktok: form.value.tiktok,
+    facebook: form.value.facebook,
     linkedin: form.value.linkedin,
     youtube: form.value.youtube,
     disabled: form.value.disabled
@@ -641,6 +645,12 @@ onMounted(load)
                 <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">TikTok</label>
                 <div class="field-shell">
                   <input v-model="form.tiktok" type="text" class="field-input" placeholder="@handle or link">
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">Facebook</label>
+                <div class="field-shell">
+                  <input v-model="form.facebook" type="text" class="field-input" placeholder="@handle or link">
                 </div>
               </div>
               <div>

@@ -34,6 +34,11 @@ function json(data, status = 200, extra = {}) {
   })
 }
 
+function whatsappFromPhone(phone) {
+  const digits = String(phone || '').replace(/[^\d]/g, '')
+  return digits ? `https://wa.me/${digits}` : ''
+}
+
 function bad(message, status = 400) {
   return json({ ok: false, error: message }, status)
 }
@@ -1778,7 +1783,6 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
       }
       if (sharedAssets.shareSocialLinks && sharedAssets.socialLinks) {
         const sl = sharedAssets.socialLinks
-        if (sl.whatsapp) whatsapp = sl.whatsapp
         if (sl.linkedin) linkedin = sl.linkedin
         if (sl.youtube) youtube = sl.youtube
         if (sl.x) x = sl.x
@@ -1788,6 +1792,10 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
       }
     }
   } catch {}
+
+  if (!String(whatsapp || '').trim()) {
+    whatsapp = whatsappFromPhone(row.phone)
+  }
 
   const standinActive = isStandinCoverActive(row)
   let standinCover = null
@@ -2589,7 +2597,6 @@ async function resolveSharedTeamAssetsForProfile(env, profileId) {
     website: canShareWebsite ? (owner.website || '') : null,
     socialLinks: canShareSocialLinks
       ? {
-          whatsapp: owner.whatsapp || '',
           linkedin: owner.linkedin || '',
           youtube: owner.youtube || '',
           x: owner.x || '',

@@ -38,18 +38,23 @@ function profileIdForCatalog() {
 async function refreshCatalogVisibility() {
   const seq = ++catalogCheckSeq
   const local = activeCatalogItems(loadPublicProfile()?.catalogItems)
-  hasCatalog.value = local.length > 0
+  if (local.length > 0) hasCatalog.value = true
 
   const id = profileIdForCatalog()
-  if (!id) return
+  if (!id) {
+    hasCatalog.value = local.length > 0
+    return
+  }
   try {
     const res = await apiPublicCatalog(id)
     if (seq !== catalogCheckSeq) return
     if (res.ok && Array.isArray(res.data?.catalogItems)) {
       hasCatalog.value = activeCatalogItems(res.data.catalogItems).length > 0
+    } else if (local.length > 0) {
+      hasCatalog.value = true
     }
   } catch {
-    /* keep local hasCatalog */
+    if (local.length > 0) hasCatalog.value = true
   }
 }
 
