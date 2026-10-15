@@ -22,7 +22,7 @@ import { setPageSeo } from '../lib/seo'
 import ShopFooterCredit from '../components/ShopFooterCredit.vue'
 import {
   CONNECT_FEATURE_MATRIX,
-  EXECUTIVE_ONLY_FEATURE_LABELS
+  featureMarkLabel
 } from '../lib/featureMatrix'
 
 const route = useRoute()
@@ -143,34 +143,17 @@ function parseCopy(desc) {
   return { about: about.trim(), features: bullets, footer: footer.trim() }
 }
 
-/** Business-only extras (e.g. external NFC sticker). */
-const TEAM_FEATURE_EXTRAS = CONNECT_FEATURE_MATRIX.filter(
-  (r) => r.business === 'yes' && r.executive === 'no'
-).map((r) => r.feature)
+const featureMatrix = CONNECT_FEATURE_MATRIX
+const markLabel = featureMarkLabel
 
-const EXECUTIVE_FEATURE_EXTRAS = [...EXECUTIVE_ONLY_FEATURE_LABELS]
-
-const REMOVED_FEATURE_PATTERNS = [
-  /custom subdomain/i,
-  /contact details/i,
-  /profile sharing/i,
-  /^customization$/i,
-  /team profiles/i,
-  /^meeting booking$/i
-]
-
-function withTeamFeatures(copy, extras) {
-  const features = (copy.features || []).filter(
-    (f) => !REMOVED_FEATURE_PATTERNS.some((re) => re.test(String(f)))
-  )
-  for (const extra of extras) {
-    if (!features.some((f) => String(f).toLowerCase() === extra.toLowerCase())) features.push(extra)
-  }
+function copyWithMatrixFeatures(desc, tier) {
+  const copy = parseCopy(desc)
+  const features = CONNECT_FEATURE_MATRIX.filter((r) => r[tier] === 'yes').map((r) => r.feature)
   return { ...copy, features }
 }
 
-const businessCopy = computed(() => withTeamFeatures(parseCopy(businessProduct.value?.desc), TEAM_FEATURE_EXTRAS))
-const executiveCopy = computed(() => withTeamFeatures(parseCopy(executiveProduct.value?.desc), EXECUTIVE_FEATURE_EXTRAS))
+const businessCopy = computed(() => copyWithMatrixFeatures(businessProduct.value?.desc, 'business'))
+const executiveCopy = computed(() => copyWithMatrixFeatures(executiveProduct.value?.desc, 'executive'))
 
 function applyFocus(focusId) {
   const mix = initialTeamMix(focusId)
@@ -436,6 +419,47 @@ onUnmounted(() => {
               </div>
             </section>
           </div>
+
+          <section class="flex flex-col gap-5">
+            <div class="flex flex-col gap-1">
+              <h2 class="font-headline-lg-mobile text-[24px] uppercase font-semibold">Features</h2>
+              <div class="h-1 w-12 bg-primary" />
+            </div>
+            <div class="overflow-x-auto -mx-1 px-1 bg-surface-container rounded-xl p-4 md:p-6">
+              <table class="w-full min-w-[420px] text-left text-sm border-collapse">
+                <thead>
+                  <tr class="border-b border-border-subtle">
+                    <th class="py-3 pr-4 font-label-caps text-[10px] uppercase tracking-widest text-ink-muted font-medium">
+                      Feature
+                    </th>
+                    <th class="py-3 px-2 font-label-caps text-[10px] uppercase tracking-widest text-ink-muted font-medium text-center">
+                      Business
+                    </th>
+                    <th class="py-3 pl-2 font-label-caps text-[10px] uppercase tracking-widest text-ink-muted font-medium text-center">
+                      Executive
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="text-on-surface-variant">
+                  <tr
+                    v-for="(row, idx) in featureMatrix"
+                    :key="row.feature"
+                    :class="idx < featureMatrix.length - 1 ? 'border-b border-border-subtle/70' : ''"
+                  >
+                    <td class="py-3 pr-4 text-on-surface">{{ row.feature }}</td>
+                    <td
+                      class="py-3 px-2 text-center"
+                      :class="row.business === 'yes' ? 'text-primary' : ''"
+                    >{{ markLabel(row.business) }}</td>
+                    <td
+                      class="py-3 pl-2 text-center"
+                      :class="row.executive === 'yes' ? 'text-primary' : ''"
+                    >{{ markLabel(row.executive) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
 
           <!-- Mix builder -->
           <section class="bg-surface-container rounded-xl p-6 md:p-8 flex flex-col gap-6 max-w-3xl">
