@@ -12,16 +12,6 @@
  */
 export const CONNECT_FEATURE_MATRIX = [
   {
-    feature: 'Chip: External NFC Sticker Tag',
-    business: 'yes',
-    executive: 'no'
-  },
-  {
-    feature: 'Chip: Internal NFC',
-    business: 'no',
-    executive: 'yes'
-  },
-  {
     feature: 'NFC + QR → live digital profile',
     business: 'yes',
     executive: 'yes'
@@ -58,6 +48,16 @@ export const CONNECT_FEATURE_MATRIX = [
   },
   {
     feature: 'Stand-in personal capability',
+    business: 'no',
+    executive: 'yes'
+  },
+  {
+    feature: 'Chip: External NFC Sticker Tag',
+    business: 'yes',
+    executive: 'no'
+  },
+  {
+    feature: 'Chip: Internal NFC',
     business: 'no',
     executive: 'yes'
   }
