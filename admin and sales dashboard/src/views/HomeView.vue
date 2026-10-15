@@ -34,19 +34,27 @@ let heroStaggerTimers = []
 
 const HERO_CARDS = [
   {
+    id: 'blue-card',
+    image: '/images/professional_cobalt_blue.png',
+    alt: 'Cobalt blue NFC card color option',
+    label: 'Blue color option — view packages',
+    rot: -16,
+    slot: 'left'
+  },
+  {
     id: 'black-card',
     image: '/images/business_charcoal.png',
     alt: 'Business Tier charcoal NFC card',
     label: 'View Business Tier',
-    rot: -10,
-    slot: 'left'
+    rot: 0,
+    slot: 'center'
   },
   {
     id: 'black-card-front',
     image: '/images/executive_black.png',
     alt: 'Executive Tier black NFC card',
     label: 'View Executive Tier',
-    rot: 12,
+    rot: 14,
     slot: 'right'
   }
 ]
@@ -105,7 +113,11 @@ function openProductInfo(productId) {
 }
 
 function openHeroCard(cardId) {
-  openProductInfo(cardId)
+  if (isTeamCard(cardId)) {
+    openProductInfo(cardId)
+    return
+  }
+  scrollToShop()
 }
 
 function onPackageOrdered(payload) {
