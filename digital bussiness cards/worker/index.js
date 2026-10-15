@@ -5131,7 +5131,7 @@ async function handleApi(request, env, url) {
 
     const existing = await sb(
       env,
-      `profiles?or=(login_email.ilike.${encodeURIComponent(email)},email.ilike.${encodeURIComponent(email)})&select=id,is_claimed&limit=5`
+      `profiles?or=(login_email.ilike.${encodeURIComponent(email)},email.ilike.${encodeURIComponent(email)})&select=id&limit=5`
     )
     const otherAccount = (existing || []).find(
       (row) => !unclaimedProfile || row.id !== unclaimedProfile.id
@@ -5178,6 +5178,7 @@ async function handleApi(request, env, url) {
           login_email: email,
           login_phone: body.loginPhone || seeded.phone || unclaimedProfile.login_phone || '',
           password_hash: passwordHash,
+          is_claimed: true,
           checkin_form:
             unclaimedProfile.checkin_form && typeof unclaimedProfile.checkin_form === 'object'
               ? Object.fromEntries(
@@ -5201,7 +5202,8 @@ async function handleApi(request, env, url) {
           phone: seeded.phone,
           login_email: email,
           login_phone: body.loginPhone || seeded.phone || '',
-          password_hash: passwordHash
+          password_hash: passwordHash,
+          is_claimed: true
         },
         prefer: 'return=minimal'
       })
