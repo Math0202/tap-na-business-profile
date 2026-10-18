@@ -614,13 +614,14 @@ export function apiAdminDeleteTeamMember(teamId, memberId) {
 
 
 /** Upload an image/video to the Supabase "assets bucket" via the Worker */
-export async function apiUploadAsset(file, { kind = "avatar" } = {}) {
+export async function apiUploadAsset(file, { kind = "avatar", profileId = "" } = {}) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 30000)
   try {
     const form = new FormData()
     form.append("file", file)
     form.append("kind", kind)
+    if (profileId) form.append("profileId", profileId)
     const headers = {}
     const token = getStaffAccessToken() || getApiToken()
     if (token) headers.Authorization = `Bearer ${token}`

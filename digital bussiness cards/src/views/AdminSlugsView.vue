@@ -32,7 +32,10 @@ import {
   apiRenameCardBatch,
   apiCreateCardBatch,
   apiMoveCardsToBatch,
-  apiUpdateCardContact
+  apiUpdateCardContact,
+  apiAdminGetProfile,
+  apiAdminUpdateProfile,
+  apiUploadAsset
 } from '../lib/api'
 import {
   downloadSlugQrPng,
@@ -85,6 +88,26 @@ const contactEditForm = ref({
 })
 const contactEditPreview = ref('')
 const contactEditKind = ref('table')
+const contactEditProfileId = ref('')
+const contactEditAvatar = ref('')
+const contactEditLogo = ref('')
+const contactEditBanner = ref('')
+const contactEditCatalog = ref([])
+const contactEditProfileLoading = ref(false)
+const contactEditUploading = ref(false)
+
+const contactEditHasProfile = computed(() => Boolean(contactEditProfileId.value))
+const contactEditIsTable = computed(() => contactEditKind.value === 'table')
+
+function emptyCatalogRow() {
+  return {
+    id: `cat_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    name: '',
+    description: '',
+    price: '',
+    image: ''
+  }
+}
 
 const contactEditProfileUrl = computed(() => {
   const serial = contactEditSerial.value
@@ -745,6 +768,40 @@ async function downloadOneSlugQr(cardOrSerial) {
   }
 }
 
+function resetContactEditProfileFields() {
+  contactEditProfileId.value = ''
+  contactEditAvatar.value = ''
+  contactEditLogo.value = ''
+  contactEditBanner.value = ''
+  contactEditCatalog.value = []
+  contactEditProfileLoading.value = false
+  contactEditUploading.value = false
+}
+
+async function loadContactEditProfile(profileId) {
+  contactEditProfileLoading.value = true
+  try {
+    const res = await apiAdminGetProfile(profileId)
+    if (!res.ok || !res.data?.profile) {
+      flash(res.error || 'Could not load profile media')
+      return
+    }
+    const p = res.data.profile
+    contactEditAvatar.value = p.avatar || ''
+    contactEditLogo.value = p.logo || ''
+    contactEditBanner.value = p.banner || ''
+    contactEditCatalog.value = (Array.isArray(p.catalogItems) ? p.catalogItems : []).map((item) => ({
+      id: item.id || emptyCatalogRow().id,
+      name: item.name || '',
+      description: item.description || '',
+      price: item.price === null || item.price === undefined ? '' : String(item.price),
+      image: Array.isArray(item.images) && item.images[0] ? item.images[0] : ''
+    }))
+  } finally {
+    contactEditProfileLoading.value = false
+  }
+}
+
 function openContactEdit(card) {
   if (!card?.serial || card.deleted) return
   contactEditSerial.value = card.serial
@@ -756,8 +813,11 @@ function openContactEdit(card) {
     email: card.contactEmail || '',
     title: card.contactTitle || ''
   }
+  resetContactEditProfileFields()
+  contactEditProfileId.value = card.profileId || ''
   contactEditOpen.value = true
   refreshContactEditPreview()
+  if (contactEditProfileId.value) loadContactEditProfile(contactEditProfileId.value)
 }
 
 function closeContactEdit() {
@@ -765,6 +825,42 @@ function closeContactEdit() {
   contactEditSerial.value = ''
   contactEditPreview.value = ''
   contactEditSaving.value = false
+  resetContactEditProfileFields()
+}
+
+async function uploadContactEditMedia(file, kind) {
+  const profileId = contactEditProfileId.value
+  if (!file || !profileId) return
+  contactEditUploading.value = true
+  try {
+    const uploaded = await apiUploadAsset(file, { kind, profileId })
+    if (!uploaded.ok || !uploaded.data?.url) {
+      flash(uploaded.error || 'Upload failed')
+      return
+    }
+    const url = uploaded.data.url
+    if (kind === 'avatar') contactEditAvatar.value = url
+    else if (kind === 'logo') contactEditLogo.value = url
+    else if (kind === 'banner') contactEditBanner.value = url
+  } finally {
+    contactEditUploading.value = false
+  }
+}
+
+async function uploadCatalogImage(row, file) {
+  const profileId = contactEditProfileId.value
+  if (!file || !profileId) return
+  contactEditUploading.value = true
+  try {
+    const uploaded = await apiUploadAsset(file, { kind: 'catalog', profileId })
+    if (!uploaded.ok || !uploaded.data?.url) {
+      flash(uploaded.error || 'Upload failed')
+      return
+    }
+    row.image = uploaded.data.url
+  } finally {
+    contactEditUploading.value = false
+  }
 }
 
 async function refreshContactEditPreview() {
@@ -846,7 +942,36 @@ async function saveContactEdit({ clear = false } = {}) {
       }
     }
     await refreshSlugQrs([idx >= 0 ? allSlugs.value[idx] : updated])
-    flash(clear ? 'Contact details cleared — QR is profile URL again' : 'Contact details saved — QR updated')
+    if (contactEditProfileId.value && !clear) {
+      const catalogItems = contactEditCatalog.value
+        .map((row) => ({
+          id: row.id,
+          name: String(row.name || '').trim(),
+          description: String(row.description || '').trim(),
+          price: row.price,
+          active: true,
+          images: row.image ? [row.image] : []
+        }))
+        .filter((row) => row.name)
+      const profilePatch = {
+        banner: contactEditBanner.value,
+        catalogItems
+      }
+      if (contactEditIsTable.value) profilePatch.logo = contactEditLogo.value
+      else profilePatch.avatar = contactEditAvatar.value
+      const profileRes = await apiAdminUpdateProfile(contactEditProfileId.value, profilePatch)
+      if (!profileRes.ok) {
+        flash(profileRes.error || 'Contact saved, but profile media failed')
+        return
+      }
+    }
+    flash(
+      clear
+        ? 'Contact details cleared — QR is profile URL again'
+        : contactEditProfileId.value
+          ? 'Contact, media, and catalog saved'
+          : 'Contact details saved — QR updated'
+    )
     if (clear) {
       contactEditForm.value = { name: '', company: '', phone: '', email: '', title: '' }
       await refreshContactEditPreview()
@@ -1501,7 +1626,7 @@ watch(filteredSlugs, (rows) => {
       @click.self="closeContactEdit"
     >
       <div
-        class="w-full max-w-md rounded-3xl border border-[var(--border)] bg-zinc-950 shadow-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto"
+        class="w-full max-w-lg rounded-3xl border border-[var(--border)] bg-zinc-950 shadow-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto"
         role="dialog"
         aria-modal="true"
         aria-labelledby="contact-edit-title"
@@ -1558,11 +1683,109 @@ watch(filteredSlugs, (rows) => {
             <input v-model="contactEditForm.title" type="text" class="field-input" placeholder="Title (optional)" aria-label="Title">
           </div>
         </div>
+
+        <div v-if="contactEditHasProfile" class="space-y-3 pt-2 border-t border-white/10">
+          <h3 class="text-xs font-bold uppercase tracking-widest text-gray-400">Profile media</h3>
+          <p v-if="contactEditProfileLoading" class="text-[12px] text-gray-500">Loading profile…</p>
+          <template v-else>
+            <div class="grid grid-cols-2 gap-3">
+              <label class="space-y-2 cursor-pointer">
+                <span class="text-[11px] text-gray-400">{{ contactEditIsTable ? 'Logo' : 'Profile image' }}</span>
+                <div class="h-24 rounded-2xl bg-zinc-900 border border-zinc-700 overflow-hidden flex items-center justify-center">
+                  <img
+                    v-if="contactEditIsTable ? contactEditLogo : contactEditAvatar"
+                    :src="contactEditIsTable ? contactEditLogo : contactEditAvatar"
+                    alt=""
+                    class="w-full h-full object-cover"
+                  >
+                  <span v-else class="text-[11px] text-gray-500">Upload</span>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  class="sr-only"
+                  :disabled="contactEditUploading"
+                  @change="uploadContactEditMedia($event.target.files?.[0], contactEditIsTable ? 'logo' : 'avatar'); $event.target.value = ''"
+                >
+              </label>
+              <label class="space-y-2 cursor-pointer">
+                <span class="text-[11px] text-gray-400">Banner</span>
+                <div class="h-24 rounded-2xl bg-zinc-900 border border-zinc-700 overflow-hidden flex items-center justify-center">
+                  <img
+                    v-if="contactEditBanner"
+                    :src="contactEditBanner"
+                    alt=""
+                    class="w-full h-full object-cover"
+                  >
+                  <span v-else class="text-[11px] text-gray-500">Upload</span>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  class="sr-only"
+                  :disabled="contactEditUploading"
+                  @change="uploadContactEditMedia($event.target.files?.[0], 'banner'); $event.target.value = ''"
+                >
+              </label>
+            </div>
+
+            <div class="space-y-2">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="text-xs font-bold uppercase tracking-widest text-gray-400">Catalog</h3>
+                <button
+                  type="button"
+                  class="text-[11px] font-semibold text-sky-300"
+                  @click="contactEditCatalog.push(emptyCatalogRow())"
+                >
+                  Add offering
+                </button>
+              </div>
+              <p v-if="!contactEditCatalog.length" class="text-[12px] text-gray-500">No offerings yet.</p>
+              <div
+                v-for="(row, idx) in contactEditCatalog"
+                :key="row.id"
+                class="rounded-2xl border border-zinc-800 p-3 space-y-2"
+              >
+                <div class="flex gap-2">
+                  <input v-model="row.name" type="text" class="field-input flex-1" placeholder="Name" :aria-label="`Offering ${idx + 1} name`">
+                  <button
+                    type="button"
+                    class="text-gray-400 hover:text-red-300"
+                    aria-label="Remove offering"
+                    @click="contactEditCatalog.splice(idx, 1)"
+                  >
+                    <span class="material-symbols-outlined text-[18px]">close</span>
+                  </button>
+                </div>
+                <input v-model="row.description" type="text" class="field-input" placeholder="Description" :aria-label="`Offering ${idx + 1} description`">
+                <input v-model="row.price" type="number" min="0" step="0.01" class="field-input" placeholder="Price (optional)" :aria-label="`Offering ${idx + 1} price`">
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <div class="w-14 h-14 rounded-xl bg-zinc-900 border border-zinc-700 overflow-hidden flex items-center justify-center shrink-0">
+                    <img v-if="row.image" :src="row.image" alt="" class="w-full h-full object-cover">
+                    <span v-else class="material-symbols-outlined text-gray-500 text-[18px]">image</span>
+                  </div>
+                  <span class="text-[11px] text-gray-400">{{ row.image ? 'Replace image' : 'Add image' }}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    class="sr-only"
+                    :disabled="contactEditUploading"
+                    @change="uploadCatalogImage(row, $event.target.files?.[0]); $event.target.value = ''"
+                  >
+                </label>
+              </div>
+            </div>
+          </template>
+        </div>
+        <p v-else class="text-[12px] text-gray-500 pt-1 border-t border-white/10">
+          Link or pre-create a profile first to add a banner, photo, and catalog.
+        </p>
+
         <div class="flex flex-col sm:flex-row gap-2">
           <button
             type="button"
             class="flex-1 px-4 py-3 rounded-full text-xs font-bold bg-white text-black disabled:opacity-50"
-            :disabled="contactEditSaving"
+            :disabled="contactEditSaving || contactEditUploading || contactEditProfileLoading"
             @click="saveContactEdit()"
           >
             {{ contactEditSaving ? 'Saving…' : 'Save & update QR' }}
@@ -1570,7 +1793,7 @@ watch(filteredSlugs, (rows) => {
           <button
             type="button"
             class="px-4 py-3 rounded-full text-xs font-semibold border border-[var(--border)] text-gray-300 disabled:opacity-50"
-            :disabled="contactEditSaving"
+            :disabled="contactEditSaving || contactEditUploading"
             @click="saveContactEdit({ clear: true })"
           >
             Clear details

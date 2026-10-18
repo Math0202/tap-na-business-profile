@@ -6743,6 +6743,9 @@ async function handleApi(request, env, url) {
     if (body.feedbackForm !== undefined && body.feedbackForm && typeof body.feedbackForm === 'object') {
       patch.feedback_form = body.feedbackForm
     }
+    if (Array.isArray(body.catalogItems)) {
+      patch.catalog_items = normalizeCatalogItems(body.catalogItems)
+    }
 
     await sb(env, `profiles?id=eq.${encodeURIComponent(profileId)}`, {
       method: 'PATCH',
@@ -7351,8 +7354,22 @@ async function handleApi(request, env, url) {
     const kind = ['avatar', 'logo', 'video', 'product', 'menu', 'catalog', 'banner'].includes(kindRaw)
       ? kindRaw
       : 'avatar'
-    if (staff && !profile && kind !== 'product') {
-      return bad('Staff uploads are limited to product media', 403)
+    const requestedProfileId = String(form.get('profileId') || '').trim()
+    const staffProfileKinds = ['avatar', 'logo', 'banner', 'catalog']
+    let targetProfileId = profile?.id || ''
+    if (staff && !profile) {
+      if (kind === 'product') {
+        targetProfileId = ''
+      } else if (staffProfileKinds.includes(kind) && requestedProfileId) {
+        const rows = await sb(
+          env,
+          `profiles?id=eq.${encodeURIComponent(requestedProfileId)}&deleted=eq.false&select=id&limit=1`
+        )
+        if (!rows?.[0]) return bad('Profile not found', 404)
+        targetProfileId = rows[0].id
+      } else {
+        return bad('Staff uploads are limited to product media', 403)
+      }
     }
     const contentType = file.type || 'application/octet-stream'
     if (kind === 'menu' || kind === 'catalog') {
@@ -7400,7 +7417,7 @@ async function handleApi(request, env, url) {
     const extFromName = String(file.name || '').split('.').pop() || ''
     const extFromType = contentType.includes('/') ? contentType.split('/')[1].split(';')[0] : ''
     const ext = (extFromName || extFromType || 'bin').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || 'bin'
-    const ownerId = profile?.id || staff.id || 'staff'
+    const ownerId = targetProfileId || staff?.id || 'staff'
     const path = `profiles/${ownerId}/${kind}-${Date.now()}.${ext}`
     const bucket = 'assets bucket'
     const bytes = new Uint8Array(await file.arrayBuffer())
