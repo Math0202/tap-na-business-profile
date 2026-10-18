@@ -11,6 +11,7 @@ import {
 } from '../lib/shopCatalog'
 import { BRAND_SOCIAL_LINKS } from '../lib/brandLinks'
 import ShopFooterCredit from '../components/ShopFooterCredit.vue'
+import ClientLogoMarquee from '../components/ClientLogoMarquee.vue'
 import { openLegalRequest } from '../lib/legalRequest'
 import { CONNECT_FEATURE_MATRIX, featureMarkLabel } from '../lib/featureMatrix'
 
@@ -288,6 +289,10 @@ onUnmounted(() => {
               
             </div>
           </div>
+        </section>
+
+        <section class="px-margin-mobile md:px-margin-desktop pt-stack-md">
+          <ClientLogoMarquee />
         </section>
 
         <!-- Feature Quick Bar -->
