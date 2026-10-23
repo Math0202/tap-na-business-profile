@@ -86,11 +86,12 @@ class OwnerHome extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: _cell * 4 * 0.7,
                     child: Column(
                       children: [
                         Expanded(
@@ -147,8 +148,9 @@ class OwnerHome extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  WidgetPreviewOption(
+                ),
+                const SizedBox(width: 12),
+                WidgetPreviewOption(
                     title: 'Tap Na Profile',
                     onTap: () => _pinWidget(context, AppConstants.widgetProfileName),
                     child: WidgetProfilePreview(
@@ -157,8 +159,7 @@ class OwnerHome extends StatelessWidget {
                       profile: profile,
                     ),
                   ),
-                ],
-              ),
+              ],
             ),
             const SizedBox(height: 16),
             LayoutBuilder(
@@ -405,14 +406,14 @@ class _ActionTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CircleAvatar(
-                radius: 16,
+                radius: 22,
                 backgroundColor: AppConstants.btnSecondary,
-                child: Icon(icon, color: Colors.white, size: 18),
+                child: Icon(icon, color: Colors.white, size: 26),
               ),
               const Spacer(),
               Text(
@@ -421,18 +422,18 @@ class _ActionTile extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 13,
+                  fontSize: 11,
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 1),
               Text(
                 subtitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: AppConstants.textSecondary,
-                  fontSize: 11,
+                  fontSize: 9,
                 ),
               ),
             ],
