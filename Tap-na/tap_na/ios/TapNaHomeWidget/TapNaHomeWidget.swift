@@ -83,20 +83,26 @@ struct QrPlate: View {
 struct IdentityColumn: View {
   let entry: TapNaEntry
   var showPhoto: Bool
+  var expanded: Bool = false
 
   var body: some View {
     VStack(spacing: 6) {
-      if showPhoto, let avatar = entry.avatar {
-        Image(uiImage: avatar)
-          .resizable()
-          .scaledToFill()
-          .frame(width: 56, height: 56)
-          .clipShape(Circle())
-      } else if showPhoto {
-        Circle().fill(Color(white: 0.25)).frame(width: 56, height: 56)
+      if showPhoto {
+        Group {
+          if let avatar = entry.avatar {
+            Image(uiImage: avatar)
+              .resizable()
+              .scaledToFit()
+          } else {
+            Circle()
+              .fill(Color(white: 0.25))
+              .aspectRatio(1, contentMode: .fit)
+          }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
       Text(entry.name)
-        .font(.headline)
+        .font(expanded ? .title3.weight(.bold) : .headline)
         .foregroundColor(.white)
         .lineLimit(1)
       if !entry.title.isEmpty {
@@ -112,7 +118,7 @@ struct IdentityColumn: View {
           .lineLimit(1)
       }
     }
-    .frame(maxWidth: .infinity)
+    .frame(maxWidth: .infinity, maxHeight: expanded ? .infinity : nil)
     .padding(10)
     .background(TapNaPalette.panel)
     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -146,7 +152,7 @@ struct TapNaCardView: View {
   var body: some View {
     ViewThatFits(in: .vertical) {
       HStack(spacing: 8) {
-        IdentityColumn(entry: entry, showPhoto: true)
+        IdentityColumn(entry: entry, showPhoto: true, expanded: true)
         QrPlate(image: entry.qr)
       }
       HStack(spacing: 8) {
@@ -166,8 +172,11 @@ struct TapNaProfileView: View {
   var body: some View {
     ViewThatFits(in: .vertical) {
       VStack(spacing: 10) {
-        IdentityColumn(entry: entry, showPhoto: true)
+        IdentityColumn(entry: entry, showPhoto: true, expanded: true)
+          .frame(maxHeight: .infinity)
         QrPlate(image: entry.qr)
+          .frame(maxHeight: .infinity)
+          .layoutPriority(-1)
       }
       VStack(spacing: 10) {
         IdentityColumn(entry: entry, showPhoto: false)

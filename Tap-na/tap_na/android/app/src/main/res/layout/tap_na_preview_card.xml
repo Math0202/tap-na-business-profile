@@ -12,20 +12,21 @@
         android:layout_marginEnd="8dp"
         android:layout_weight="4"
         android:background="@drawable/widget_panel"
-        android:gravity="center"
+        android:gravity="center_horizontal"
         android:orientation="vertical"
         android:padding="8dp">
 
         <ImageView
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
             android:contentDescription="@string/widget_card_description"
             android:src="@drawable/widget_skeleton_circle" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="4dp"
             android:text="@string/widget_preview_name"
             android:textColor="#FFFFFF"
             android:textSize="12sp"

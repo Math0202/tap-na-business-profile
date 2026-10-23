@@ -182,14 +182,13 @@ class _LandscapeSkeleton extends StatelessWidget {
                 color: const Color(0xFF2A2A2A),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+              child: Column(
                 children: [
-                  CircleAvatar(radius: 16, backgroundColor: Color(0xFF3F3F46)),
-                  SizedBox(height: 6),
-                  _Bar(width: 48),
-                  SizedBox(height: 4),
-                  _Bar(width: 36, color: Color(0xFF52525B)),
+                  const Expanded(child: _PhotoDot()),
+                  const SizedBox(height: 6),
+                  const _Bar(width: 48),
+                  const SizedBox(height: 4),
+                  const _Bar(width: 36, color: Color(0xFF52525B)),
                 ],
               ),
             ),
@@ -221,25 +220,29 @@ class _TallSkeleton extends StatelessWidget {
       height: 180,
       child: Column(
         children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF2A2A2A),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Column(
-              children: [
-                CircleAvatar(radius: 18, backgroundColor: Color(0xFF3F3F46)),
-                SizedBox(height: 6),
-                _Bar(width: 56),
-                SizedBox(height: 4),
-                _Bar(width: 40, color: Color(0xFF52525B)),
-              ],
+          Expanded(
+            flex: 5,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2A2A2A),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Column(
+                children: [
+                  Expanded(child: _PhotoDot()),
+                  SizedBox(height: 6),
+                  _Bar(width: 56),
+                  SizedBox(height: 4),
+                  _Bar(width: 40, color: Color(0xFF52525B)),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 8),
           Expanded(
+            flex: 3,
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -251,6 +254,25 @@ class _TallSkeleton extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PhotoDot extends StatelessWidget {
+  const _PhotoDot();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: AspectRatio(
+        aspectRatio: 1,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Color(0xFF3F3F46),
+            shape: BoxShape.circle,
+          ),
+        ),
       ),
     );
   }

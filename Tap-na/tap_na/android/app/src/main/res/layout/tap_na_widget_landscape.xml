@@ -14,16 +14,18 @@
         android:layout_marginEnd="8dp"
         android:layout_weight="4"
         android:background="@drawable/widget_panel"
-        android:gravity="top|center_horizontal"
+        android:gravity="center_horizontal"
         android:orientation="vertical"
         android:padding="8dp">
 
         <ImageView
             android:id="@+id/widget_avatar"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:adjustViewBounds="true"
             android:contentDescription="@string/widget_card_description"
-            android:scaleType="centerCrop" />
+            android:scaleType="fitCenter" />
 
         <TextView
             android:id="@+id/widget_name"
