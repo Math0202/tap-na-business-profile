@@ -1,10 +1,8 @@
 <script setup>
 const CLIENTS = [
-  { src: '/clients/Akulyanga.png', alt: 'Akulyanga' },
   { src: '/clients/NaSIA.png', alt: 'NaSIA' },
   { src: '/clients/cchub.png', alt: 'CCHub' },
   { src: '/clients/Cash Crusaders.png', alt: 'Cash Crusaders' },
-  { src: '/clients/nestaudio.png', alt: 'Nest Audio' },
   { src: '/clients/whk law.png', alt: 'WKH Law' },
   { src: '/clients/indongo.png', alt: 'Indongo Auto' }
 ]
