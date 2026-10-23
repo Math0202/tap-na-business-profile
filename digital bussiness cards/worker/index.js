@@ -7713,6 +7713,19 @@ async function handleApi(request, env, url) {
     return json({ ok: true, profile: await publicProfile(env, profile, { includeCards: true }) })
   }
 
+  if (pathname === '/api/app/me' && method === 'GET') {
+    const profile = await getSessionProfile(env, request)
+    if (!profile) return bad('Unauthorized', 401)
+    const pub = await publicProfile(env, profile, { includeCards: true })
+    const shareSlug = String(pub?.shareSlug || '').trim()
+    return json({
+      ok: true,
+      profile: pub,
+      shareSlug,
+      publicProfileUrl: shareSlug ? `${CANONICAL_ORIGIN}/c/${encodeURIComponent(shareSlug)}` : ''
+    })
+  }
+
   if (pathname === '/api/me' && method === 'PUT') {
     const profile = await getSessionProfile(env, request)
     if (!profile) return bad('Unauthorized', 401)
