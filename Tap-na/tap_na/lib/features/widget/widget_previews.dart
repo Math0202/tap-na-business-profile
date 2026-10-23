@@ -1,4 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+
+import '../../core/models/profile_data.dart';
 
 class WidgetPreviewOption extends StatelessWidget {
   const WidgetPreviewOption({
@@ -22,6 +27,7 @@ class WidgetPreviewOption extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             title,
+            textAlign: TextAlign.center,
             style: const TextStyle(color: Color(0xFFA1A1AA), fontSize: 12),
           ),
         ],
@@ -31,64 +37,44 @@ class WidgetPreviewOption extends StatelessWidget {
 }
 
 class WidgetQrPreview extends StatelessWidget {
-  const WidgetQrPreview({super.key, this.size = 72});
+  const WidgetQrPreview({super.key, this.size = 72, this.profile});
 
   final double size;
+  final ProfileData? profile;
 
   @override
   Widget build(BuildContext context) {
+    final url = profile?.publicProfileUrl.trim() ?? '';
     return _Shell(
-      width: size + 16,
-      height: size + 16,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: const Icon(Icons.qr_code_2, color: Colors.black, size: 48),
-      ),
+      width: size,
+      height: size,
+      child: _QrPlate(data: url, iconSize: size * 0.4),
     );
   }
 }
 
 class WidgetCardPreview extends StatelessWidget {
-  const WidgetCardPreview({super.key});
+  const WidgetCardPreview({super.key, this.width, this.height = 110, this.profile});
+
+  final double? width;
+  final double height;
+  final ProfileData? profile;
 
   @override
   Widget build(BuildContext context) {
     return _Shell(
-      width: 220,
-      height: 110,
+      width: width,
+      height: height,
       child: Row(
         children: [
           Expanded(
             flex: 4,
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2A),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Column(
-                children: [
-                  Expanded(child: _PhotoDot()),
-                  SizedBox(height: 6),
-                  _Bar(width: 48),
-                  SizedBox(height: 4),
-                  _Bar(width: 36, color: Color(0xFF52525B)),
-                ],
-              ),
-            ),
+            child: _IdentityPanel(profile: profile, compact: true),
           ),
           const SizedBox(width: 8),
           Expanded(
             flex: 6,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.qr_code_2, color: Colors.black),
-            ),
+            child: _QrPlate(data: profile?.publicProfileUrl.trim() ?? ''),
           ),
         ],
       ),
@@ -97,50 +83,143 @@ class WidgetCardPreview extends StatelessWidget {
 }
 
 class WidgetProfilePreview extends StatelessWidget {
-  const WidgetProfilePreview({super.key});
+  const WidgetProfilePreview({
+    super.key,
+    this.width,
+    this.height = 180,
+    this.profile,
+  });
+
+  final double? width;
+  final double height;
+  final ProfileData? profile;
 
   @override
   Widget build(BuildContext context) {
     return _Shell(
-      width: 120,
-      height: 180,
+      width: width,
+      height: height,
       child: Column(
         children: [
           Expanded(
             flex: 5,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2A),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Column(
-                children: [
-                  Expanded(child: _PhotoDot()),
-                  SizedBox(height: 6),
-                  _Bar(width: 56),
-                  SizedBox(height: 4),
-                  _Bar(width: 40, color: Color(0xFF52525B)),
-                ],
-              ),
-            ),
+            child: _IdentityPanel(profile: profile, compact: false),
           ),
           const SizedBox(height: 8),
           Expanded(
             flex: 3,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Center(
-                child: Icon(Icons.qr_code_2, color: Colors.black, size: 40),
-              ),
-            ),
+            child: _QrPlate(data: profile?.publicProfileUrl.trim() ?? ''),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _IdentityPanel extends StatelessWidget {
+  const _IdentityPanel({this.profile, required this.compact});
+
+  final ProfileData? profile;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final photo = profile?.localImagePath;
+    final hasPhoto = photo != null && File(photo).existsSync();
+    final name = profile?.safeName ?? '';
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(compact ? 8 : 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2A2A),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Expanded(
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: 1,
+                child: hasPhoto
+                    ? ClipOval(
+                        child: Image.file(File(photo), fit: BoxFit.cover),
+                      )
+                    : CircleAvatar(
+                        backgroundColor: const Color(0xFF3F3F46),
+                        child: name.isEmpty
+                            ? null
+                            : Text(
+                                name.substring(0, 1).toUpperCase(),
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                      ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          if (profile == null) ...[
+            const _Bar(width: 56),
+            const SizedBox(height: 4),
+            const _Bar(width: 40, color: Color(0xFF52525B)),
+          ] else ...[
+            Text(
+              profile!.safeName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: compact ? 11 : 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (profile!.title.isNotEmpty)
+              Text(
+                profile!.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: const Color(0xFFA1A1AA),
+                  fontSize: compact ? 9 : 11,
+                ),
+              ),
+            if (profile!.company.isNotEmpty)
+              Text(
+                profile!.company,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: const Color(0xFF71717A),
+                  fontSize: compact ? 9 : 11,
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _QrPlate extends StatelessWidget {
+  const _QrPlate({required this.data, this.iconSize = 40});
+
+  final String data;
+  final double iconSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.all(8),
+      child: data.isEmpty
+          ? Icon(Icons.qr_code_2, color: Colors.black, size: iconSize)
+          : QrImageView(
+              data: data,
+              padding: EdgeInsets.zero,
+              backgroundColor: Colors.white,
+            ),
     );
   }
 }
@@ -164,25 +243,6 @@ class _Shell extends StatelessWidget {
         border: Border.all(color: const Color(0xFF3A3A3A)),
       ),
       child: child,
-    );
-  }
-}
-
-class _PhotoDot extends StatelessWidget {
-  const _PhotoDot();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: AspectRatio(
-        aspectRatio: 1,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: Color(0xFF3F3F46),
-            shape: BoxShape.circle,
-          ),
-        ),
-      ),
     );
   }
 }

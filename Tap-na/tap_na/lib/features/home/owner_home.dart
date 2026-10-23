@@ -1,9 +1,7 @@
 import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_constants.dart';
@@ -12,6 +10,7 @@ import '../../core/models/vcard.dart';
 import '../../core/services/session_service.dart';
 import '../nfc/nfc_share.dart';
 import '../widget/widget_previews.dart';
+import 'share_profile_sheet.dart';
 
 class OwnerHome extends StatelessWidget {
   const OwnerHome({
@@ -27,6 +26,8 @@ class OwnerHome extends StatelessWidget {
   final String? errorMessage;
   final bool offline;
 
+  static const double _cell = 76;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -37,15 +38,13 @@ class OwnerHome extends StatelessWidget {
           children: [
             _Header(onLogout: onLogout),
             const SizedBox(height: 20),
-            _IdentityCard(profile: profile),
             if (offline || (errorMessage != null && errorMessage!.isNotEmpty)) ...[
-              const SizedBox(height: 12),
               Text(
-                errorMessage ?? 'Offline – view only',
+                errorMessage ?? 'Offline — view only',
                 style: const TextStyle(color: Color(0xFFFCD34D), fontSize: 13),
               ),
+              const SizedBox(height: 12),
             ],
-            const SizedBox(height: 28),
             const Text(
               'Home screen widgets',
               style: TextStyle(
@@ -54,57 +53,90 @@ class OwnerHome extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             const Text(
               'Choose a layout to pin on your home screen.',
               style: TextStyle(color: AppConstants.textSecondary, fontSize: 13),
             ),
             const SizedBox(height: 16),
-            Wrap(
-              spacing: 12,
-              runSpacing: 16,
-              alignment: WrapAlignment.center,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 WidgetPreviewOption(
                   title: 'Tap Na QR',
                   onTap: () => _pinWidget(context, AppConstants.widgetQrName),
-                  child: const WidgetQrPreview(size: 96),
+                  child: WidgetQrPreview(size: _cell * 2, profile: profile),
                 ),
-                WidgetPreviewOption(
-                  title: 'Tap Na Card',
-                  onTap: () => _pinWidget(context, AppConstants.widgetCardName),
-                  child: const WidgetCardPreview(),
-                ),
-                WidgetPreviewOption(
-                  title: 'Tap Na Profile',
-                  onTap: () => _pinWidget(context, AppConstants.widgetProfileName),
-                  child: const WidgetProfilePreview(),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return WidgetPreviewOption(
+                        title: 'Tap Na Card',
+                        onTap: () => _pinWidget(context, AppConstants.widgetCardName),
+                        child: WidgetCardPreview(
+                          width: constraints.maxWidth,
+                          height: _cell * 2,
+                          profile: profile,
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                return WidgetPreviewOption(
+                  title: 'Tap Na Profile',
+                  onTap: () => _pinWidget(context, AppConstants.widgetProfileName),
+                  child: WidgetProfilePreview(
+                    width: constraints.maxWidth,
+                    height: _cell * 4,
+                    profile: profile,
+                  ),
+                );
+              },
+            ),
             const SizedBox(height: 28),
-            _ActionButton(
-              title: 'Share Profile',
-              subtitle: 'Send your public profile link.',
-              onTap: () => _shareProfile(profile),
-            ),
-            const SizedBox(height: 10),
-            _ActionButton(
-              title: 'Share Details',
-              subtitle: 'QR code saves the contact on their phone.',
-              onTap: () => _showDetailsQr(context, profile),
-            ),
-            const SizedBox(height: 10),
-            _ActionButton(
-              title: 'Share Details with NFC',
-              subtitle: 'Phone-to-phone contact share.',
-              onTap: () => _showNfc(context, profile),
-            ),
-            const SizedBox(height: 10),
-            _ActionButton(
-              title: 'Edit Profile',
-              subtitle: 'Opens tap-na in your browser.',
-              onTap: () => _editProfile(profile),
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 1.15,
+              children: [
+                _ActionTile(
+                  icon: Icons.qr_code_2,
+                  title: 'Share Profile',
+                  subtitle: 'QR and share link',
+                  onTap: () => showShareProfileSheet(
+                    context,
+                    url: profile.publicProfileUrl,
+                    name: profile.safeName,
+                  ),
+                ),
+                _ActionTile(
+                  icon: Icons.contact_page_outlined,
+                  title: 'Share Details',
+                  subtitle: 'QR saves the contact',
+                  onTap: () => _showDetailsQr(context, profile),
+                ),
+                _ActionTile(
+                  icon: Icons.nfc,
+                  title: 'NFC',
+                  subtitle: 'Phone-to-phone share',
+                  onTap: () => _showNfc(context, profile),
+                ),
+                _ActionTile(
+                  icon: Icons.edit_outlined,
+                  title: 'Edit Profile',
+                  subtitle: 'Opens tap-na in browser',
+                  onTap: () => _editProfile(profile),
+                ),
+              ],
             ),
           ],
         ),
@@ -130,18 +162,6 @@ class OwnerHome extends StatelessWidget {
         content: Text(
           'On iPhone, long-press the Home Screen, tap Edit, then Add Widget and choose Tap Na.',
         ),
-      ),
-    );
-  }
-
-  Future<void> _shareProfile(ProfileData profile) async {
-    final url = profile.publicProfileUrl;
-    await SharePlus.instance.share(
-      ShareParams(
-        text: url.isEmpty
-            ? 'Check out this digital business card on tap-na.'
-            : 'Check out this digital business card: $url',
-        subject: '${profile.safeName} — Digital Business Card',
       ),
     );
   }
@@ -243,7 +263,7 @@ class OwnerHome extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               Text(
                 Platform.isAndroid
                     ? 'Hold the other phone against yours. Their phone should open the contact.'
@@ -321,69 +341,15 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _IdentityCard extends StatelessWidget {
-  const _IdentityCard({required this.profile});
-
-  final ProfileData profile;
-
-  @override
-  Widget build(BuildContext context) {
-    final photo = profile.localImagePath;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppConstants.card,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppConstants.border),
-      ),
-      child: Column(
-        children: [
-          CircleAvatar(
-            radius: 42,
-            backgroundColor: AppConstants.btnSecondary,
-            backgroundImage: photo != null && File(photo).existsSync()
-                ? FileImage(File(photo))
-                : null,
-            child: photo == null || !File(photo).existsSync()
-                ? Text(
-                    profile.safeName.substring(0, 1).toUpperCase(),
-                    style: const TextStyle(fontSize: 28, color: Colors.white),
-                  )
-                : null,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            profile.safeName,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          if (profile.title.isNotEmpty)
-            Text(
-              profile.title,
-              style: const TextStyle(color: AppConstants.textSecondary),
-            ),
-          if (profile.company.isNotEmpty)
-            Text(
-              profile.company,
-              style: const TextStyle(color: AppConstants.textMuted),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ActionButton extends StatelessWidget {
-  const _ActionButton({
+class _ActionTile extends StatelessWidget {
+  const _ActionTile({
+    required this.icon,
     required this.title,
     required this.subtitle,
     required this.onTap,
   });
 
+  final IconData icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
@@ -391,19 +357,24 @@ class _ActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xCC27272A),
+      color: const Color(0xFF2A2A2A),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         side: const BorderSide(color: Color(0xFF3F3F46)),
       ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              CircleAvatar(
+                backgroundColor: AppConstants.btnSecondary,
+                child: Icon(icon, color: Colors.white),
+              ),
+              const Spacer(),
               Text(
                 title,
                 style: const TextStyle(
@@ -415,6 +386,8 @@ class _ActionButton extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: AppConstants.textSecondary,
                   fontSize: 12,

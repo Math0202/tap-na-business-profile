@@ -43,9 +43,20 @@ void main() {
     expect(find.text('Tap Na QR'), findsOneWidget);
     expect(find.text('Tap Na Card'), findsOneWidget);
     expect(find.text('Tap Na Profile'), findsOneWidget);
+    expect(find.text('Ada'), findsWidgets);
+    expect(find.text('Director'), findsWidgets);
+    expect(find.text('Tap Na'), findsWidgets);
     await tester.scrollUntilVisible(find.text('Share Profile'), 400);
     expect(find.text('Share Details'), findsOneWidget);
-    expect(find.text('Share Details with NFC'), findsOneWidget);
+    expect(find.text('NFC'), findsOneWidget);
     expect(find.text('Edit Profile'), findsOneWidget);
+
+    await tester.tap(find.text('Share Profile'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Scan to open this profile.'), findsOneWidget);
+    expect(find.text('Copy profile link'), findsOneWidget);
+    expect(find.text('WhatsApp'), findsOneWidget);
+    expect(find.text('More'), findsOneWidget);
   });
 }
