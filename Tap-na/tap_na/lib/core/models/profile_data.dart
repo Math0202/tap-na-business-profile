@@ -36,6 +36,18 @@ class ProfileData {
   String get safeCompany => company.trim().isNotEmpty ? company : 'Tap Na';
   String get ownerHomeUrl => AppConstants.ownerHomeUrl(isVenue: isVenue);
 
+  String get phone => _fieldOrLink('phone');
+  String get email => _fieldOrLink('email');
+
+  String _fieldOrLink(String key) {
+    final fromRaw = (raw[key] as String? ?? '').trim();
+    if (fromRaw.isNotEmpty) return fromRaw;
+    for (final link in links) {
+      if (link.label == key) return link.url;
+    }
+    return '';
+  }
+
   ProfileData copyWith({
     String? name,
     String? title,

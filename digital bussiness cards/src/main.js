@@ -2,10 +2,29 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
 import './style.css'
-import { apiReportClientError } from './lib/api'
+import { apiReportClientError, setApiToken } from './lib/api'
 import { capturePosthogException, initPosthog } from './lib/posthog'
 
 initPosthog()
+
+try {
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search)
+    const appToken = params.get('appToken')
+    if (appToken) {
+      setApiToken(appToken)
+      params.delete('appToken')
+      const query = params.toString()
+      window.history.replaceState(
+        {},
+        '',
+        window.location.pathname + (query ? `?${query}` : '') + window.location.hash
+      )
+    }
+  }
+} catch {
+  /* ignore */
+}
 
 function reportUnhandled(message, stack, context = {}) {
   try {

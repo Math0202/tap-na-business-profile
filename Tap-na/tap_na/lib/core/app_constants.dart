@@ -27,6 +27,14 @@ class AppConstants {
   static const Color cream = Color(0xFFF4F1EA);
   static const Color mint = Color(0xFF5FDFC2);
   static const Color ink = Color(0xFF1A1A1A);
+  static const Color bg = Color(0xFF121212);
+  static const Color bgElevated = Color(0xFF1A1A1A);
+  static const Color card = Color(0xFF2A2A2A);
+  static const Color border = Color(0xFF3A3A3A);
+  static const Color textSecondary = Color(0xFFA1A1AA);
+  static const Color textMuted = Color(0xFF71717A);
+  static const Color btnSecondary = Color(0xFF3F3F46);
+  static const String logoUrl = '$baseUrl/tap-na_logo.png';
 
   static String ownerHomeUrl({required bool isVenue}) =>
       isVenue ? venueUrl : profileUrl;

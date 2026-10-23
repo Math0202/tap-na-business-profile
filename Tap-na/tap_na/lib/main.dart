@@ -22,10 +22,12 @@ class TapNaApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        scaffoldBackgroundColor: Colors.black,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: AppConstants.ink,
-          brightness: Brightness.dark,
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: AppConstants.bg,
+        colorScheme: const ColorScheme.dark(
+          surface: AppConstants.bg,
+          primary: Colors.white,
+          secondary: AppConstants.textSecondary,
         ),
       ),
       home: const SessionGate(),
