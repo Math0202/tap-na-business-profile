@@ -86,57 +86,67 @@ class OwnerHome extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                return WidgetPreviewOption(
-                  title: 'Tap Na Profile',
-                  onTap: () => _pinWidget(context, AppConstants.widgetProfileName),
-                  child: WidgetProfilePreview(
-                    width: constraints.maxWidth,
-                    height: _cell * 4,
-                    profile: profile,
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Expanded(
+                          child: _ActionTile(
+                            icon: Icons.qr_code_2,
+                            title: 'Share Profile',
+                            subtitle: 'QR and share link',
+                            onTap: () => showShareProfileSheet(
+                              context,
+                              url: profile.publicProfileUrl,
+                              name: profile.safeName,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Expanded(
+                          child: _ActionTile(
+                            icon: Icons.contact_page_outlined,
+                            title: 'Share Details',
+                            subtitle: 'QR saves the contact',
+                            onTap: () => _showDetailsQr(context, profile),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Expanded(
+                          child: _ActionTile(
+                            icon: Icons.nfc,
+                            title: 'NFC',
+                            subtitle: 'Phone-to-phone share',
+                            onTap: () => _showNfc(context, profile),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Expanded(
+                          child: _ActionTile(
+                            icon: Icons.edit_outlined,
+                            title: 'Edit Profile',
+                            subtitle: 'Opens tap-na in browser',
+                            onTap: () => _editProfile(profile),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                );
-              },
-            ),
-            const SizedBox(height: 28),
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 1.15,
-              children: [
-                _ActionTile(
-                  icon: Icons.qr_code_2,
-                  title: 'Share Profile',
-                  subtitle: 'QR and share link',
-                  onTap: () => showShareProfileSheet(
-                    context,
-                    url: profile.publicProfileUrl,
-                    name: profile.safeName,
+                  const SizedBox(width: 12),
+                  WidgetPreviewOption(
+                    title: 'Tap Na Profile',
+                    onTap: () => _pinWidget(context, AppConstants.widgetProfileName),
+                    child: WidgetProfilePreview(
+                      width: _cell * 2,
+                      height: _cell * 4,
+                      profile: profile,
+                    ),
                   ),
-                ),
-                _ActionTile(
-                  icon: Icons.contact_page_outlined,
-                  title: 'Share Details',
-                  subtitle: 'QR saves the contact',
-                  onTap: () => _showDetailsQr(context, profile),
-                ),
-                _ActionTile(
-                  icon: Icons.nfc,
-                  title: 'NFC',
-                  subtitle: 'Phone-to-phone share',
-                  onTap: () => _showNfc(context, profile),
-                ),
-                _ActionTile(
-                  icon: Icons.edit_outlined,
-                  title: 'Edit Profile',
-                  subtitle: 'Opens tap-na in browser',
-                  onTap: () => _editProfile(profile),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),
@@ -366,31 +376,34 @@ class _ActionTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CircleAvatar(
+                radius: 16,
                 backgroundColor: AppConstants.btnSecondary,
-                child: Icon(icon, color: Colors.white),
+                child: Icon(icon, color: Colors.white, size: 18),
               ),
               const Spacer(),
               Text(
                 title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 15,
+                  fontSize: 13,
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Text(
                 subtitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: AppConstants.textSecondary,
-                  fontSize: 12,
+                  fontSize: 11,
                 ),
               ),
             ],
