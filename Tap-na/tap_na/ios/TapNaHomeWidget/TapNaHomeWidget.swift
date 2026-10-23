@@ -2,9 +2,18 @@ import SwiftUI
 import UIKit
 import WidgetKit
 
-struct Provider: TimelineProvider {
+struct TapNaEntry: TimelineEntry {
+  let date: Date
+  let name: String
+  let title: String
+  let company: String
+  let qr: UIImage?
+  let avatar: UIImage?
+}
+
+struct TapNaProvider: TimelineProvider {
   func placeholder(in context: Context) -> TapNaEntry {
-    TapNaEntry(date: Date(), name: "Tap Na", title: "", company: "", qr: nil, avatar: nil)
+    TapNaEntry(date: Date(), name: "Name", title: "Title", company: "Company", qr: nil, avatar: nil)
   }
 
   func getSnapshot(in context: Context, completion: @escaping (TapNaEntry) -> Void) {
@@ -31,105 +40,202 @@ struct Provider: TimelineProvider {
   }
 
   private func image(named key: String, defaults: UserDefaults?) -> UIImage? {
-    guard let path = defaults?.string(forKey: key), !path.isEmpty else {
-      if let group = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.tapna.app") {
-        let file = group.appendingPathComponent(key)
-        return UIImage(contentsOfFile: file.path)
-      }
-      return nil
+    if let path = defaults?.string(forKey: key), !path.isEmpty, let image = UIImage(contentsOfFile: path) {
+      return image
     }
-    return UIImage(contentsOfFile: path)
+    if let group = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.tapna.app") {
+      return UIImage(contentsOfFile: group.appendingPathComponent(key).path)
+    }
+    return nil
   }
 }
 
-struct TapNaEntry: TimelineEntry {
-  let date: Date
-  let name: String
-  let title: String
-  let company: String
-  let qr: UIImage?
-  let avatar: UIImage?
+struct TapNaPalette {
+  static let shell = Color(red: 18 / 255, green: 18 / 255, blue: 18 / 255)
+  static let panel = Color(red: 42 / 255, green: 42 / 255, blue: 42 / 255)
+  static let muted = Color(red: 161 / 255, green: 161 / 255, blue: 170 / 255)
+  static let faint = Color(red: 113 / 255, green: 113 / 255, blue: 122 / 255)
 }
 
-struct TapNaHomeWidgetEntryView: View {
-  var entry: Provider.Entry
-  @Environment(\.widgetFamily) var family
+struct QrPlate: View {
+  let image: UIImage?
 
   var body: some View {
     Group {
-      switch family {
-      case .systemSmall:
-        qrView
-      case .systemMedium:
-        HStack(spacing: 12) {
-          avatarView
-          qrView
-        }
-      default:
-        VStack(spacing: 8) {
-          avatarView
-          Text(entry.name)
-            .font(.headline)
-            .foregroundColor(.white)
-            .lineLimit(1)
-          if !entry.title.isEmpty {
-            Text(entry.title)
-              .font(.caption)
-              .foregroundColor(Color(red: 0.37, green: 0.87, blue: 0.76))
-              .lineLimit(1)
-          }
-          if !entry.company.isEmpty {
-            Text(entry.company)
-              .font(.caption)
-              .foregroundColor(.white.opacity(0.7))
-              .lineLimit(1)
-          }
-          qrView
-        }
-      }
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .padding(8)
-    .containerBackground(for: .widget) {
-      Color.black
-    }
-  }
-
-  private var qrView: some View {
-    Group {
-      if let qr = entry.qr {
-        Image(uiImage: qr)
+      if let image {
+        Image(uiImage: image)
           .resizable()
           .scaledToFit()
       } else {
-        Color.white
+        RoundedRectangle(cornerRadius: 16)
+          .fill(Color.white.opacity(0.12))
+          .overlay(
+            Image(systemName: "qrcode")
+              .font(.largeTitle)
+              .foregroundColor(.white.opacity(0.45))
+          )
       }
     }
+    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
   }
+}
 
-  private var avatarView: some View {
-    Group {
-      if let avatar = entry.avatar {
+struct IdentityColumn: View {
+  let entry: TapNaEntry
+  var showPhoto: Bool
+
+  var body: some View {
+    VStack(spacing: 6) {
+      if showPhoto, let avatar = entry.avatar {
         Image(uiImage: avatar)
           .resizable()
           .scaledToFill()
-          .frame(width: 52, height: 52)
+          .frame(width: 56, height: 56)
           .clipShape(Circle())
+      } else if showPhoto {
+        Circle().fill(Color(white: 0.25)).frame(width: 56, height: 56)
+      }
+      Text(entry.name)
+        .font(.headline)
+        .foregroundColor(.white)
+        .lineLimit(1)
+      if !entry.title.isEmpty {
+        Text(entry.title)
+          .font(.caption)
+          .foregroundColor(TapNaPalette.muted)
+          .lineLimit(1)
+      }
+      if !entry.company.isEmpty {
+        Text(entry.company)
+          .font(.caption)
+          .foregroundColor(TapNaPalette.faint)
+          .lineLimit(1)
       }
     }
+    .frame(maxWidth: .infinity)
+    .padding(10)
+    .background(TapNaPalette.panel)
+    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+  }
+}
+
+extension View {
+  @ViewBuilder
+  func tapNaWidgetChrome() -> some View {
+    if #available(iOSApplicationExtension 17.0, *) {
+      containerBackground(for: .widget) { TapNaPalette.shell }
+    } else {
+      background(TapNaPalette.shell)
+    }
+  }
+}
+
+struct TapNaQrView: View {
+  var entry: TapNaEntry
+
+  var body: some View {
+    QrPlate(image: entry.qr)
+      .padding(8)
+      .tapNaWidgetChrome()
+  }
+}
+
+struct TapNaCardView: View {
+  var entry: TapNaEntry
+
+  var body: some View {
+    ViewThatFits(in: .vertical) {
+      HStack(spacing: 8) {
+        IdentityColumn(entry: entry, showPhoto: true)
+        QrPlate(image: entry.qr)
+      }
+      HStack(spacing: 8) {
+        IdentityColumn(entry: entry, showPhoto: false)
+        QrPlate(image: entry.qr)
+      }
+      QrPlate(image: entry.qr)
+    }
+    .padding(8)
+    .tapNaWidgetChrome()
+  }
+}
+
+struct TapNaProfileView: View {
+  var entry: TapNaEntry
+
+  var body: some View {
+    ViewThatFits(in: .vertical) {
+      VStack(spacing: 10) {
+        IdentityColumn(entry: entry, showPhoto: true)
+        QrPlate(image: entry.qr)
+      }
+      VStack(spacing: 10) {
+        IdentityColumn(entry: entry, showPhoto: false)
+        QrPlate(image: entry.qr)
+      }
+      QrPlate(image: entry.qr)
+    }
+    .padding(10)
+    .tapNaWidgetChrome()
+  }
+}
+
+struct TapNaQrWidget: Widget {
+  let kind: String = "TapNaQrWidget"
+
+  var body: some WidgetConfiguration {
+    StaticConfiguration(kind: kind, provider: TapNaProvider()) { entry in
+      TapNaQrView(entry: entry)
+    }
+    .configurationDisplayName("Tap Na QR")
+    .description("QR code only. People scan this to open your profile.")
+    .supportedFamilies([.systemSmall])
+  }
+}
+
+struct TapNaCardWidget: Widget {
+  let kind: String = "TapNaCardWidget"
+
+  var body: some WidgetConfiguration {
+    StaticConfiguration(kind: kind, provider: TapNaProvider()) { entry in
+      TapNaCardView(entry: entry)
+    }
+    .configurationDisplayName("Tap Na Card")
+    .description("Landscape business card with your details and QR code.")
+    .supportedFamilies([.systemMedium])
+  }
+}
+
+struct TapNaProfileWidget: Widget {
+  let kind: String = "TapNaProfileWidget"
+
+  var body: some WidgetConfiguration {
+    StaticConfiguration(kind: kind, provider: TapNaProvider()) { entry in
+      TapNaProfileView(entry: entry)
+    }
+    .configurationDisplayName("Tap Na Profile")
+    .description("Tall profile card with photo, details, and QR code.")
+    .supportedFamilies([.systemLarge])
   }
 }
 
 @main
-struct TapNaHomeWidget: Widget {
-  let kind: String = "TapNaHomeWidget"
-
-  var body: some WidgetConfiguration {
-    StaticConfiguration(kind: kind, provider: Provider()) { entry in
-      TapNaHomeWidgetEntryView(entry: entry)
-    }
-    .configurationDisplayName("Tap Na")
-    .description("QR code for your Tap Na profile.")
-    .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+struct TapNaWidgets: WidgetBundle {
+  var body: some Widget {
+    TapNaQrWidget()
+    TapNaCardWidget()
+    TapNaProfileWidget()
   }
+}
+
+#Preview("Tap Na QR", as: .systemSmall) {
+  TapNaQrWidget()
+}
+
+#Preview("Tap Na Card", as: .systemMedium) {
+  TapNaCardWidget()
+}
+
+#Preview("Tap Na Profile", as: .systemLarge) {
+  TapNaProfileWidget()
 }

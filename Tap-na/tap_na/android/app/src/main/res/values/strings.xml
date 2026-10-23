@@ -2,4 +2,13 @@
 <resources>
     <string name="app_name">Tap Na</string>
     <string name="widget_description">QR code for your Tap Na profile</string>
+    <string name="widget_qr_description">QR code only. People scan this to open your Tap Na profile.</string>
+    <string name="widget_card_description">Landscape business card with your details and QR code.</string>
+    <string name="widget_profile_description">Tall profile card with photo, details, and QR code.</string>
+    <string name="widget_qr_label">Tap Na QR</string>
+    <string name="widget_card_label">Tap Na Card</string>
+    <string name="widget_profile_label">Tap Na Profile</string>
+    <string name="widget_preview_name">Name</string>
+    <string name="widget_preview_title">Title</string>
+    <string name="widget_preview_company">Company</string>
 </resources>

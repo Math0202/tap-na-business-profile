@@ -8,10 +8,11 @@ import android.os.Bundle
 import android.view.View
 import android.widget.RemoteViews
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
+import es.antonborri.home_widget.HomeWidgetPlugin
 import es.antonborri.home_widget.HomeWidgetProvider
 import java.io.File
 
-class TapNaHomeWidget : HomeWidgetProvider() {
+open class TapNaWidgetBase : HomeWidgetProvider() {
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,
@@ -30,8 +31,7 @@ class TapNaHomeWidget : HomeWidgetProvider() {
         newOptions: Bundle,
     ) {
         super.onAppWidgetOptionsChanged(context, appWidgetManager, appWidgetId, newOptions)
-        val prefs = es.antonborri.home_widget.HomeWidgetPlugin.getData(context)
-        render(context, appWidgetManager, appWidgetId, prefs)
+        render(context, appWidgetManager, appWidgetId, HomeWidgetPlugin.getData(context))
     }
 
     private fun render(
@@ -42,11 +42,17 @@ class TapNaHomeWidget : HomeWidgetProvider() {
     ) {
         val options = appWidgetManager.getAppWidgetOptions(widgetId)
         val minWidth = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 110)
+        val minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 110)
+        val qrOnly = minHeight < 70 || (minWidth < 110 && minHeight < 110)
+        val showPhoto = minHeight >= 110
+        val landscape = !qrOnly && minWidth > minHeight
+
         val layout =
             when {
-                minWidth < 110 -> R.layout.tap_na_widget_small
-                minWidth < 250 -> R.layout.tap_na_widget_medium
-                else -> R.layout.tap_na_widget_large
+                qrOnly -> R.layout.tap_na_widget_small
+                landscape -> R.layout.tap_na_widget_landscape
+                showPhoto -> R.layout.tap_na_widget_tall
+                else -> R.layout.tap_na_widget_details
             }
 
         val views = RemoteViews(context.packageName, layout)
@@ -54,16 +60,35 @@ class TapNaHomeWidget : HomeWidgetProvider() {
         views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
 
         bindImage(views, R.id.widget_qr, widgetData.getString("widget_qr", null))
-        if (layout != R.layout.tap_na_widget_small) {
-            bindImage(views, R.id.widget_avatar, widgetData.getString("widget_avatar", null))
+
+        if (layout == R.layout.tap_na_widget_small) {
+            appWidgetManager.updateAppWidget(widgetId, views)
+            return
         }
-        if (layout == R.layout.tap_na_widget_large) {
-            views.setTextViewText(R.id.widget_name, widgetData.getString("widget_name", "Tap Na"))
-            views.setTextViewText(R.id.widget_title, widgetData.getString("widget_title", "") ?: "")
-            views.setTextViewText(R.id.widget_company, widgetData.getString("widget_company", "") ?: "")
+
+        val name = widgetData.getString("widget_name", "Tap Na") ?: "Tap Na"
+        val title = widgetData.getString("widget_title", "") ?: ""
+        val company = widgetData.getString("widget_company", "") ?: ""
+        views.setTextViewText(R.id.widget_name, name)
+        setTextOrGone(views, R.id.widget_title, title)
+        setTextOrGone(views, R.id.widget_company, company)
+
+        if (showPhoto) {
+            bindImage(views, R.id.widget_avatar, widgetData.getString("widget_avatar", null))
+        } else {
+            views.setViewVisibility(R.id.widget_avatar, View.GONE)
         }
 
         appWidgetManager.updateAppWidget(widgetId, views)
+    }
+
+    private fun setTextOrGone(views: RemoteViews, viewId: Int, value: String) {
+        if (value.isBlank()) {
+            views.setViewVisibility(viewId, View.GONE)
+        } else {
+            views.setViewVisibility(viewId, View.VISIBLE)
+            views.setTextViewText(viewId, value)
+        }
     }
 
     private fun bindImage(views: RemoteViews, viewId: Int, path: String?) {
@@ -76,8 +101,7 @@ class TapNaHomeWidget : HomeWidgetProvider() {
             views.setViewVisibility(viewId, View.GONE)
             return
         }
-        val bitmap = BitmapFactory.decodeFile(file.absolutePath)
-        if (bitmap == null) {
+        val bitmap = BitmapFactory.decodeFile(file.absolutePath) ?: run {
             views.setViewVisibility(viewId, View.GONE)
             return
         }
@@ -85,3 +109,11 @@ class TapNaHomeWidget : HomeWidgetProvider() {
         views.setImageViewBitmap(viewId, bitmap)
     }
 }
+
+class TapNaQrWidget : TapNaWidgetBase()
+
+class TapNaCardWidget : TapNaWidgetBase()
+
+class TapNaProfileWidget : TapNaWidgetBase()
+
+class TapNaHomeWidget : TapNaCardWidget()

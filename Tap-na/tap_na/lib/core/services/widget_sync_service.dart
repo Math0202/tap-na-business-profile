@@ -28,11 +28,11 @@ class WidgetSyncService {
         profile.publicProfileUrl,
       );
 
-      if (profile.publicProfileUrl.isNotEmpty) {
+      if (profile.publicProfileUrl.trim().isNotEmpty) {
         await HomeWidget.renderFlutterWidget(
-          _QrTile(url: profile.publicProfileUrl),
+          _QrPlate(url: profile.publicProfileUrl.trim()),
           key: 'widget_qr',
-          logicalSize: const Size(720, 720),
+          logicalSize: const Size(672, 672),
         );
       }
 
@@ -45,13 +45,7 @@ class WidgetSyncService {
         );
       }
 
-      await HomeWidget.updateWidget(
-        name: AppConstants.widgetName,
-        androidName: AppConstants.widgetName,
-        iOSName: AppConstants.widgetName,
-        qualifiedAndroidName:
-            '${AppConstants.androidApplicationId}.${AppConstants.widgetName}',
-      );
+      await _updateAll();
     } catch (_) {}
   }
 
@@ -61,38 +55,55 @@ class WidgetSyncService {
       await HomeWidget.saveWidgetData<String>('widget_title', '');
       await HomeWidget.saveWidgetData<String>('widget_company', '');
       await HomeWidget.saveWidgetData<String>('widget_url', '');
-      await HomeWidget.updateWidget(
-        name: AppConstants.widgetName,
-        androidName: AppConstants.widgetName,
-        iOSName: AppConstants.widgetName,
-      );
+      await _updateAll();
     } catch (_) {}
+  }
+
+  Future<void> _updateAll() async {
+    for (final name in AppConstants.androidWidgetNames) {
+      try {
+        await HomeWidget.updateWidget(
+          name: name,
+          androidName: name,
+          iOSName: name,
+          qualifiedAndroidName: '${AppConstants.androidApplicationId}.$name',
+        );
+      } catch (_) {}
+    }
   }
 }
 
-class _QrTile extends StatelessWidget {
-  const _QrTile({required this.url});
+class _QrPlate extends StatelessWidget {
+  const _QrPlate({required this.url});
 
   final String url;
 
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: Colors.white,
+      color: const Color(0xFF121212),
       child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: CustomPaint(
-          painter: QrPainter(
-            data: url,
-            version: QrVersions.auto,
-            gapless: true,
-            eyeStyle: const QrEyeStyle(
-              eyeShape: QrEyeShape.square,
-              color: Colors.black,
-            ),
-            dataModuleStyle: const QrDataModuleStyle(
-              dataModuleShape: QrDataModuleShape.square,
-              color: Colors.black,
+        padding: const EdgeInsets.all(12),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: ColoredBox(
+            color: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: QrImageView(
+                data: url,
+                size: 576,
+                padding: EdgeInsets.zero,
+                backgroundColor: Colors.white,
+                eyeStyle: const QrEyeStyle(
+                  eyeShape: QrEyeShape.square,
+                  color: Colors.black,
+                ),
+                dataModuleStyle: const QrDataModuleStyle(
+                  dataModuleShape: QrDataModuleShape.square,
+                  color: Colors.black,
+                ),
+              ),
             ),
           ),
         ),

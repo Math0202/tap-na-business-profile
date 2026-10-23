@@ -13,7 +13,15 @@ class AppConstants {
   static const String profileApiFallbackEndpoint = '$baseUrl/api/me';
 
   static const String appGroupId = 'group.tapna.app';
-  static const String widgetName = 'TapNaHomeWidget';
+  static const String widgetName = 'TapNaCardWidget';
+  static const String widgetQrName = 'TapNaQrWidget';
+  static const String widgetCardName = 'TapNaCardWidget';
+  static const String widgetProfileName = 'TapNaProfileWidget';
+  static const List<String> androidWidgetNames = [
+    widgetQrName,
+    widgetCardName,
+    widgetProfileName,
+  ];
   static const String androidApplicationId = 'com.tapna.app';
 
   static const Color cream = Color(0xFFF4F1EA);

@@ -24,15 +24,37 @@
             </intent-filter>
         </activity>
         <receiver
-            android:name=".TapNaHomeWidget"
+            android:name=".TapNaQrWidget"
             android:exported="true"
-            android:label="@string/app_name">
+            android:label="@string/widget_qr_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/tap_na_widget_info" />
+                android:resource="@xml/tap_na_widget_qr_info" />
+        </receiver>
+        <receiver
+            android:name=".TapNaCardWidget"
+            android:exported="true"
+            android:label="@string/widget_card_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/tap_na_widget_card_info" />
+        </receiver>
+        <receiver
+            android:name=".TapNaProfileWidget"
+            android:exported="true"
+            android:label="@string/widget_profile_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/tap_na_widget_profile_info" />
         </receiver>
         <meta-data
             android:name="flutterEmbedding"
