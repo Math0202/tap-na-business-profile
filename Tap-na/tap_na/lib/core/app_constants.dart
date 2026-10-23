@@ -17,10 +17,12 @@ class AppConstants {
   static const String widgetQrName = 'TapNaQrWidget';
   static const String widgetCardName = 'TapNaCardWidget';
   static const String widgetProfileName = 'TapNaProfileWidget';
+  static const String widgetProfileLargeName = 'TapNaProfileLargeWidget';
   static const List<String> androidWidgetNames = [
     widgetQrName,
     widgetCardName,
     widgetProfileName,
+    widgetProfileLargeName,
   ];
   static const String androidApplicationId = 'com.tapna.app';
 

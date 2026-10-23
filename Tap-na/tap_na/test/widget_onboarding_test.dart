@@ -20,6 +20,7 @@ void main() {
       'TapNaQrWidget',
       'TapNaCardWidget',
       'TapNaProfileWidget',
+      'TapNaProfileLargeWidget',
     ]);
   });
 }

@@ -43,6 +43,8 @@ void main() {
     expect(find.text('Tap Na QR'), findsOneWidget);
     expect(find.text('Tap Na Card'), findsOneWidget);
     expect(find.text('Tap Na Profile'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Tap Na Profile 4x4'), 400);
+    expect(find.text('Tap Na Profile 4x4'), findsOneWidget);
     expect(find.text('Ada'), findsWidgets);
     expect(find.text('Director'), findsWidgets);
     expect(find.text('Tap Na'), findsWidgets);

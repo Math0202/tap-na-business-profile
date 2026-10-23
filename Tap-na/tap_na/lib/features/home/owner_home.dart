@@ -94,42 +94,54 @@ class OwnerHome extends StatelessWidget {
                     child: Column(
                       children: [
                         Expanded(
-                          child: _ActionTile(
-                            icon: Icons.qr_code_2,
-                            title: 'Share Profile',
-                            subtitle: 'QR and share link',
-                            onTap: () => showShareProfileSheet(
-                              context,
-                              url: profile.publicProfileUrl,
-                              name: profile.safeName,
-                            ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _ActionTile(
+                                  icon: Icons.qr_code_2,
+                                  title: 'Share Profile',
+                                  subtitle: 'QR and share link',
+                                  onTap: () => showShareProfileSheet(
+                                    context,
+                                    url: profile.publicProfileUrl,
+                                    name: profile.safeName,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _ActionTile(
+                                  icon: Icons.contact_page_outlined,
+                                  title: 'Share Details',
+                                  subtitle: 'QR saves the contact',
+                                  onTap: () => _showDetailsQr(context, profile),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 8),
                         Expanded(
-                          child: _ActionTile(
-                            icon: Icons.contact_page_outlined,
-                            title: 'Share Details',
-                            subtitle: 'QR saves the contact',
-                            onTap: () => _showDetailsQr(context, profile),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Expanded(
-                          child: _ActionTile(
-                            icon: Icons.nfc,
-                            title: 'NFC',
-                            subtitle: 'Phone-to-phone share',
-                            onTap: () => _showNfc(context, profile),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Expanded(
-                          child: _ActionTile(
-                            icon: Icons.edit_outlined,
-                            title: 'Edit Profile',
-                            subtitle: 'Opens tap-na in browser',
-                            onTap: () => _editProfile(profile),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _ActionTile(
+                                  icon: Icons.nfc,
+                                  title: 'NFC',
+                                  subtitle: 'Phone-to-phone share',
+                                  onTap: () => _showNfc(context, profile),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _ActionTile(
+                                  icon: Icons.edit_outlined,
+                                  title: 'Edit Profile',
+                                  subtitle: 'Opens tap-na in browser',
+                                  onTap: () => _editProfile(profile),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -147,6 +159,23 @@ class OwnerHome extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: 16),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                return WidgetPreviewOption(
+                  title: 'Tap Na Profile 4x4',
+                  onTap: () => _pinWidget(
+                    context,
+                    AppConstants.widgetProfileLargeName,
+                  ),
+                  child: WidgetProfilePreview(
+                    width: constraints.maxWidth,
+                    height: _cell * 4,
+                    profile: profile,
+                  ),
+                );
+              },
             ),
           ],
         ),

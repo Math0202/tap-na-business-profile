@@ -116,4 +116,6 @@ class TapNaCardWidget : TapNaWidgetBase()
 
 class TapNaProfileWidget : TapNaWidgetBase()
 
+class TapNaProfileLargeWidget : TapNaWidgetBase()
+
 class TapNaHomeWidget : TapNaWidgetBase()

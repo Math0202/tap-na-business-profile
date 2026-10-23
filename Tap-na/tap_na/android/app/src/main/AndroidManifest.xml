@@ -59,6 +59,17 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/tap_na_widget_profile_info" />
         </receiver>
+        <receiver
+            android:name=".TapNaProfileLargeWidget"
+            android:exported="true"
+            android:label="@string/widget_profile_large_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/tap_na_widget_profile_large_info" />
+        </receiver>
         <service
             android:name=".NdefHostApduService"
             android:exported="true"

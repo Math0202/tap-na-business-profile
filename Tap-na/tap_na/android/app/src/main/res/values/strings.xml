@@ -8,6 +8,8 @@
     <string name="widget_qr_label">Tap Na QR</string>
     <string name="widget_card_label">Tap Na Card</string>
     <string name="widget_profile_label">Tap Na Profile</string>
+    <string name="widget_profile_large_label">Tap Na Profile 4x4</string>
+    <string name="widget_profile_large_description">Square profile card with photo, details, and QR code.</string>
     <string name="widget_preview_name">Name</string>
     <string name="widget_preview_title">Title</string>
     <string name="widget_preview_company">Company</string>
