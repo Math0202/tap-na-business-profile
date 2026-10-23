@@ -5,14 +5,15 @@ const CLIENTS = [
   { src: '/clients/cchub.png', alt: 'CCHub' },
   { src: '/clients/Cash Crusaders.png', alt: 'Cash Crusaders' },
   { src: '/clients/nestaudio.png', alt: 'Nest Audio' },
-  { src: '/clients/whk law.png', alt: 'WKH Law' }
+  { src: '/clients/whk law.png', alt: 'WKH Law' },
+  { src: '/clients/indongo.png', alt: 'Indongo Auto' }
 ]
 </script>
 
 <template>
-  <div class="client-marquee bg-surface-charcoal rounded-xl py-6 md:py-7" aria-label="Happy clients">
+  <div class="client-marquee bg-surface-charcoal rounded-xl py-6 md:py-7" aria-label="Our Happy Clients">
     <p class="font-label-caps text-[10px] uppercase tracking-widest text-on-primary/50 text-center mb-5 px-4">
-      Happy clients
+      Our Happy Clients
     </p>
     <div class="client-marquee__viewport">
       <div class="client-marquee__track">
