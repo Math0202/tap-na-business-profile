@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:home_widget/home_widget.dart';
@@ -38,11 +39,7 @@ class WidgetSyncService {
 
       final avatar = profile.localImagePath;
       if (avatar != null && File(avatar).existsSync()) {
-        await HomeWidget.renderFlutterWidget(
-          ClipOval(child: Image.file(File(avatar), fit: BoxFit.cover)),
-          key: 'widget_avatar',
-          logicalSize: const Size(240, 240),
-        );
+        await _renderAvatar(avatar);
       }
 
       await _updateAll();
@@ -57,6 +54,37 @@ class WidgetSyncService {
       await HomeWidget.saveWidgetData<String>('widget_url', '');
       await _updateAll();
     } catch (_) {}
+  }
+
+  Future<void> _renderAvatar(String path) async {
+    final bytes = await File(path).readAsBytes();
+    if (bytes.isEmpty) return;
+    final codec = await ui.instantiateImageCodec(
+      bytes,
+      targetWidth: 240,
+      targetHeight: 240,
+    );
+    final frame = await codec.getNextFrame();
+    try {
+      await HomeWidget.renderFlutterWidget(
+        SizedBox(
+          width: 240,
+          height: 240,
+          child: ClipOval(
+            child: RawImage(
+              image: frame.image,
+              fit: BoxFit.cover,
+              width: 240,
+              height: 240,
+            ),
+          ),
+        ),
+        key: 'widget_avatar',
+        logicalSize: const Size(240, 240),
+      );
+    } finally {
+      frame.image.dispose();
+    }
   }
 
   Future<void> _updateAll() async {

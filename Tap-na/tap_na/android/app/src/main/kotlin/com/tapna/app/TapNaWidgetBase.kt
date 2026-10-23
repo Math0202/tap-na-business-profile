@@ -44,8 +44,8 @@ open class TapNaWidgetBase : HomeWidgetProvider() {
         val minWidth = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 110)
         val minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 110)
         val qrOnly = minHeight < 70 || (minWidth < 110 && minHeight < 110)
-        val showPhoto = minHeight >= 110
         val landscape = !qrOnly && minWidth > minHeight
+        val showPhoto = !qrOnly && (landscape || minHeight >= 110)
 
         val layout =
             when {

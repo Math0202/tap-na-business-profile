@@ -46,6 +46,7 @@ void main() {
     });
 
     expect(profile.publicProfileUrl, 'https://tapnam.com/c/abc123');
+    expect(profile.profileImageUrl, 'https://tapnam.com/images/personal.png');
     expect(profile.isVenue, isTrue);
     expect(profile.ownerHomeUrl, AppConstants.venueUrl);
   });

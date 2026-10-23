@@ -100,6 +100,9 @@ class _SessionGateState extends State<SessionGate> {
       }
     });
 
+    if (cached != null) {
+      await _widgetSync.sync(cached);
+    }
     if (hasSession && online) {
       await _refreshProfile(loadHomeIfLogin: true);
     }

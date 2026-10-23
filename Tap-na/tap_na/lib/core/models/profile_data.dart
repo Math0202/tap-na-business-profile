@@ -122,11 +122,13 @@ class ProfileData {
           : (shareSlug.isEmpty
                 ? ''
                 : '${AppConstants.baseUrl}/c/$shareSlug'),
-      profileImageUrl: _firstNonEmpty([
-        profile['avatar'] as String?,
-        profile['profileImageUrl'] as String?,
-        profile['logo'] as String?,
-      ]),
+      profileImageUrl: _absoluteImageUrl(
+        _firstNonEmpty([
+          profile['avatar'] as String?,
+          profile['profileImageUrl'] as String?,
+          profile['logo'] as String?,
+        ]),
+      ),
       bio: (profile['bio'] as String? ?? '').trim(),
       links: _extractLinks(profile),
       raw: Map<String, dynamic>.from(profile),
@@ -179,6 +181,17 @@ String? _firstNonEmpty(List<String?> values) {
     if (value != null && value.trim().isNotEmpty) return value.trim();
   }
   return null;
+}
+
+String? _absoluteImageUrl(String? raw) {
+  if (raw == null) return null;
+  var value = raw.trim();
+  if (value.isEmpty || value.startsWith('data:')) return null;
+  if (value == 'personal.png') value = '/images/personal.png';
+  if (value.startsWith('//')) return 'https:$value';
+  if (value.startsWith('http://') || value.startsWith('https://')) return value;
+  if (value.startsWith('/')) return '${AppConstants.baseUrl}$value';
+  return '${AppConstants.baseUrl}/$value';
 }
 
 List<ProfileLink> _extractLinks(Map<String, dynamic> profile) {
