@@ -40,25 +40,16 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.text('Tap Na QR'), findsOneWidget);
-    expect(find.text('Tap Na Card'), findsOneWidget);
-    expect(find.text('Tap Na Profile'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Tap Na Profile 4x4'), 400);
-    expect(find.text('Tap Na Profile 4x4'), findsOneWidget);
+    expect(find.text('Add 2x2 Widget'), findsOneWidget);
+    expect(find.text('Add 4x2 Widget'), findsOneWidget);
+    expect(find.text('Add 2x4 Widget'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Add 4x4 Widget'), 400);
+    expect(find.text('Add 4x4 Widget'), findsOneWidget);
     expect(find.text('Ada'), findsWidgets);
     expect(find.text('Director'), findsWidgets);
     expect(find.text('Tap Na'), findsWidgets);
-    await tester.scrollUntilVisible(find.text('Share Profile'), 400);
-    expect(find.text('Share Details'), findsOneWidget);
-    expect(find.text('NFC'), findsOneWidget);
+    expect(find.text('Share Contacts'), findsOneWidget);
+    expect(find.text('Phone-to-Phone'), findsOneWidget);
     expect(find.text('Edit Profile'), findsOneWidget);
-
-    await tester.tap(find.text('Share Profile'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('Scan to open this profile.'), findsOneWidget);
-    expect(find.text('Copy profile link'), findsOneWidget);
-    expect(find.text('WhatsApp'), findsOneWidget);
-    expect(find.text('More'), findsOneWidget);
   });
 }

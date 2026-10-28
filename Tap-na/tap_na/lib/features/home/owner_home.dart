@@ -10,7 +10,6 @@ import '../../core/models/vcard.dart';
 import '../../core/services/session_service.dart';
 import '../nfc/nfc_share.dart';
 import '../widget/widget_previews.dart';
-import 'share_profile_sheet.dart';
 
 class OwnerHome extends StatelessWidget {
   const OwnerHome({
@@ -63,7 +62,7 @@ class OwnerHome extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 WidgetPreviewOption(
-                  title: 'Tap Na QR',
+                  title: 'Add 2x2 Widget',
                   onTap: () => _pinWidget(context, AppConstants.widgetQrName),
                   child: WidgetQrPreview(size: _cell * 2, profile: profile),
                 ),
@@ -72,7 +71,7 @@ class OwnerHome extends StatelessWidget {
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       return WidgetPreviewOption(
-                        title: 'Tap Na Card',
+                        title: 'Add 4x2 Widget',
                         onTap: () => _pinWidget(context, AppConstants.widgetCardName),
                         child: WidgetCardPreview(
                           width: constraints.maxWidth,
@@ -91,58 +90,30 @@ class OwnerHome extends StatelessWidget {
               children: [
                 Expanded(
                   child: SizedBox(
-                    height: _cell * 4 * 0.7,
+                    height: _cell * 4,
                     child: Column(
                       children: [
                         Expanded(
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: _ActionTile(
-                                  icon: Icons.qr_code_2,
-                                  title: 'Share Profile',
-                                  subtitle: 'QR and share link',
-                                  onTap: () => showShareProfileSheet(
-                                    context,
-                                    url: profile.publicProfileUrl,
-                                    name: profile.safeName,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _ActionTile(
-                                  icon: Icons.contact_page_outlined,
-                                  title: 'Share Details',
-                                  subtitle: 'QR saves the contact',
-                                  onTap: () => _showDetailsQr(context, profile),
-                                ),
-                              ),
-                            ],
+                          child: _ActionTile(
+                            icon: Icons.contact_page_outlined,
+                            title: 'Share Contacts',
+                            onTap: () => _showDetailsQr(context, profile),
                           ),
                         ),
                         const SizedBox(height: 8),
                         Expanded(
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: _ActionTile(
-                                  icon: Icons.nfc,
-                                  title: 'NFC',
-                                  subtitle: 'Phone-to-phone share',
-                                  onTap: () => _showNfc(context, profile),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _ActionTile(
-                                  icon: Icons.edit_outlined,
-                                  title: 'Edit Profile',
-                                  subtitle: 'Opens tap-na in browser',
-                                  onTap: () => _editProfile(profile),
-                                ),
-                              ),
-                            ],
+                          child: _ActionTile(
+                            icon: Icons.nfc,
+                            title: 'Phone-to-Phone',
+                            onTap: () => _showNfc(context, profile),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Expanded(
+                          child: _ActionTile(
+                            icon: Icons.edit_outlined,
+                            title: 'Edit Profile',
+                            onTap: () => _editProfile(profile),
                           ),
                         ),
                       ],
@@ -151,21 +122,21 @@ class OwnerHome extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 WidgetPreviewOption(
-                    title: 'Tap Na Profile',
-                    onTap: () => _pinWidget(context, AppConstants.widgetProfileName),
-                    child: WidgetProfilePreview(
-                      width: _cell * 2,
-                      height: _cell * 4,
-                      profile: profile,
-                    ),
+                  title: 'Add 2x4 Widget',
+                  onTap: () => _pinWidget(context, AppConstants.widgetProfileName),
+                  child: WidgetProfilePreview(
+                    width: _cell * 2,
+                    height: _cell * 4,
+                    profile: profile,
                   ),
+                ),
               ],
             ),
             const SizedBox(height: 16),
             LayoutBuilder(
               builder: (context, constraints) {
                 return WidgetPreviewOption(
-                  title: 'Tap Na Profile 4x4',
+                  title: 'Add 4x4 Widget',
                   onTap: () => _pinWidget(
                     context,
                     AppConstants.widgetProfileLargeName,
@@ -385,13 +356,11 @@ class _ActionTile extends StatelessWidget {
   const _ActionTile({
     required this.icon,
     required this.title,
-    required this.subtitle,
     required this.onTap,
   });
 
   final IconData icon;
   final String title;
-  final String subtitle;
   final VoidCallback onTap;
 
   @override
@@ -406,34 +375,25 @@ class _ActionTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
             children: [
               CircleAvatar(
-                radius: 22,
+                radius: 20,
                 backgroundColor: AppConstants.btnSecondary,
-                child: Icon(icon, color: Colors.white, size: 26),
+                child: Icon(icon, color: Colors.white, size: 22),
               ),
-              const Spacer(),
-              Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 1),
-              Text(
-                subtitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppConstants.textSecondary,
-                  fontSize: 9,
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ],
