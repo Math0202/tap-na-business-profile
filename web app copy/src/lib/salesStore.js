@@ -124,7 +124,7 @@ export const COMPANY = {
   name: 'tap-na',
   legalName: 'Auckmund Investment CC',
   email: 'welcome@tapnam.com',
-  phone: '+264 85 811 7337',
+  phone: '+264 81 803 1157',
   address: 'Erf: 62, Hosea Kutako Drive, Windhoek North',
   currency: 'NAD',
   fromName: 'tap-na',

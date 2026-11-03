@@ -8576,7 +8576,7 @@ async function handleApi(request, env, url) {
     <div style="font-size:13px;color:#555;line-height:1.45;">
       Auckmund Investment CC<br>
       Erf: 62, Hosea Kutako Drive, Windhoek North<br>
-      +264 85 811 7337 | welcome@tapnam.com
+      +264 81 803 1157 | welcome@tapnam.com
     </div>
   </div>
   <h2 style="font-size:18px;margin:0 0 4px;font-weight:700;">Quote ${escapeHtml(quoteRef)}</h2>
@@ -8612,7 +8612,7 @@ async function handleApi(request, env, url) {
       'tap-na',
       'Auckmund Investment CC',
       'Erf: 62, Hosea Kutako Drive, Windhoek North',
-      '+264 85 811 7337 | welcome@tapnam.com',
+      '+264 81 803 1157 | welcome@tapnam.com',
       '',
       `Quote ${quoteRef}`,
       `Issued ${issued}`,
@@ -8643,7 +8643,7 @@ async function handleApi(request, env, url) {
     const pdfLines = [
       'Auckmund Investment CC',
       'Erf: 62, Hosea Kutako Drive, Windhoek North',
-      '+264 85 811 7337 | welcome@tapnam.com',
+      '+264 81 803 1157 | welcome@tapnam.com',
       '',
       `Quote ${quoteRef}`,
       `Issued ${issued}`,
