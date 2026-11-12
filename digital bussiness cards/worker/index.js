@@ -2280,6 +2280,28 @@ async function getOrCreateOwnedTeam(env, profile) {
   return rows?.[0]
 }
 
+/** Active/invited membership on a non-deleted team. Prefers a team this profile owns. */
+async function resolveExistingTeamForProfile(env, profileId) {
+  const memberships = await sb(
+    env,
+    `team_members?profile_id=eq.${encodeURIComponent(profileId)}&deleted=eq.false&status=in.(active,invited,pending_claim)&select=team_id`
+  )
+  const teamIds = [...new Set((memberships || []).map((m) => m.team_id).filter(Boolean))]
+  if (!teamIds.length) return null
+  const teams = await sb(
+    env,
+    `teams?id=in.(${teamIds.map(encodeURIComponent).join(',')})&deleted=eq.false&select=*`
+  )
+  return (teams || []).find((t) => t.owner_profile_id === profileId) || teams?.[0] || null
+}
+
+async function getTeamForProfile(env, profile, { createIfMissing = false } = {}) {
+  const existing = await resolveExistingTeamForProfile(env, profile.id)
+  if (existing) return existing
+  if (!createIfMissing) return null
+  return getOrCreateOwnedTeam(env, profile)
+}
+
 /** Link provisional shop teams (owner_email set, no owner yet) to this profile. */
 async function claimProvisionalTeamsForProfile(env, profile) {
   const email = String(profile?.login_email || profile?.email || '')
@@ -4572,7 +4594,7 @@ async function handleApi(request, env, url) {
     if (!profile) return bad('Unauthorized', 401)
     if (profile.card_type === 'table') return bad('Teams are for personal cards only', 403)
     const body = await readJson(request)
-    const team = await getOrCreateOwnedTeam(env, profile)
+    const team = await getTeamForProfile(env, profile, { createIfMissing: true })
     if (team.owner_profile_id !== profile.id) return bad('Only the team owner can update the team', 403)
     const ownerType = await getProfilePersonalType(env, profile.id)
     if (!canActAsTeamManager(ownerType, true)) {
@@ -4649,7 +4671,7 @@ async function handleApi(request, env, url) {
     const slug = String(body?.slug || '').trim()
     if (!slug) return bad('Card slug is required')
 
-    const team = await getOrCreateOwnedTeam(env, profile)
+    const team = await getTeamForProfile(env, profile, { createIfMissing: true })
     const isOwner = team.owner_profile_id === profile.id
     const actorMembership = await getActorTeamMembership(env, profile.id, team.id)
     const memberRows = await sb(
