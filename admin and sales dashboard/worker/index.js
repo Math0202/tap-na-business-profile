@@ -6885,68 +6885,96 @@ async function handleApi(request, env, url) {
     const name = String(body?.name || '').trim().slice(0, 120)
     if (!name) return bad('Team name is required')
     const ownerProfileId = String(body?.ownerProfileId || body?.owner_profile_id || '').trim()
-    if (!ownerProfileId) return bad('Team leader/owner profile is required')
-    const ownerRows = await sb(
-      env,
-      `profiles?id=eq.${encodeURIComponent(ownerProfileId)}&deleted=eq.false&select=id,name,company,login_email,email,card_type`
-    )
-    const ownerProfile = ownerRows?.[0]
-    if (!ownerProfile) return bad('Selected profile not found', 404)
-    if (ownerProfile.card_type === 'table') {
-      return bad('Only personal card holders can be team owners', 400)
+    const ownerSlug = String(body?.ownerSlug || body?.owner_slug || '').trim()
+    if (!ownerProfileId && !ownerSlug) return bad('Team leader/owner profile or card is required')
+
+    let ownerProfile = null
+    let ownerCard = null
+    if (ownerProfileId) {
+      const ownerRows = await sb(
+        env,
+        `profiles?id=eq.${encodeURIComponent(ownerProfileId)}&deleted=eq.false&select=id,name,company,login_email,email,card_type`
+      )
+      ownerProfile = ownerRows?.[0]
+      if (!ownerProfile) return bad('Selected profile not found', 404)
+      if (ownerProfile.card_type === 'table') {
+        return bad('Only personal card holders can be team owners', 400)
+      }
+    }
+    if (ownerSlug) {
+      const cards = await sb(
+        env,
+        `cards?slug=eq.${encodeURIComponent(ownerSlug)}&deleted=eq.false&select=*`
+      )
+      ownerCard = cards?.[0]
+      if (!ownerCard) return bad('Lead card not found', 404)
+      if (ownerCard.kind !== 'personal') return bad('Only personal cards can be team owners', 400)
+      if (!ownerProfile && ownerCard.profile_id) {
+        const linked = await sb(
+          env,
+          `profiles?id=eq.${encodeURIComponent(ownerCard.profile_id)}&deleted=eq.false&select=id,name,company,login_email,email,card_type`
+        )
+        ownerProfile = linked?.[0] || null
+        if (ownerProfile?.card_type === 'table') {
+          return bad('Only personal card holders can be team owners', 400)
+        }
+      }
     }
 
-    const ownerEmail = String(ownerProfile.login_email || ownerProfile.email || '').trim().toLowerCase()
-    const ceiling = normalizePersonalType(body?.packageCeiling || 'business')
+    const ownerEmail = String(
+      ownerProfile?.login_email || ownerProfile?.email || ownerCard?.contact_email || ''
+    )
+      .trim()
+      .toLowerCase()
+    const ceiling = normalizePersonalType(body?.packageCeiling || ownerCard?.personal_type || 'business')
     const teamId = uid('team')
     const now = new Date().toISOString()
+    const shareFlags = {
+      share_catalog: !!body?.shareCatalog,
+      share_bio: !!body?.shareBio,
+      share_banner: !!body?.shareBanner,
+      share_website: !!body?.shareWebsite,
+      share_social_links: !!body?.shareSocialLinks,
+      share_contacts: !!body?.shareContacts,
+      share_calendar_crm: !!(body?.shareCalendarCrm ?? body?.share_calendar_crm)
+    }
     await sb(env, 'teams', {
       method: 'POST',
       body: {
         id: teamId,
         name,
-        owner_profile_id: ownerProfile.id,
+        owner_profile_id: ownerProfile?.id || null,
+        owner_card_id: ownerCard?.id || null,
         owner_email: ownerEmail,
         package_ceiling: ceiling,
-        share_catalog: !!body?.shareCatalog,
-        share_bio: !!body?.shareBio,
-        share_banner: !!body?.shareBanner,
-        share_website: !!body?.shareWebsite,
-        share_social_links: !!body?.shareSocialLinks,
-        share_contacts: !!body?.shareContacts,
-        share_calendar_crm: !!(body?.shareCalendarCrm ?? body?.share_calendar_crm),
+        ...shareFlags,
         created_at: now,
         updated_at: now
       },
       prefer: 'return=minimal'
     })
-    // Insert owner as active team_member
-    await sb(env, 'team_members', {
-      method: 'POST',
-      body: {
-        id: uid('tmem'),
-        team_id: teamId,
-        profile_id: ownerProfile.id,
-        card_id: null,
-        slug: '',
-        role: ceiling,
-        status: 'active',
-        share_catalog: !!body?.shareCatalog,
-        share_bio: !!body?.shareBio,
-        share_banner: !!body?.shareBanner,
-        share_website: !!body?.shareWebsite,
-        share_social_links: !!body?.shareSocialLinks,
-        share_contacts: !!body?.shareContacts,
-        share_calendar_crm: !!(body?.shareCalendarCrm ?? body?.share_calendar_crm),
-        invite_email: ownerEmail,
-        invited_by_profile_id: ownerProfile.id,
-        invite_token: '',
-        joined_at: now,
-        created_at: now,
-        updated_at: now
-      },
-      prefer: 'return=minimal'
-    })
+    if (ownerProfile) {
+      await sb(env, 'team_members', {
+        method: 'POST',
+        body: {
+          id: uid('tmem'),
+          team_id: teamId,
+          profile_id: ownerProfile.id,
+          card_id: ownerCard?.id || null,
+          slug: ownerCard?.slug || '',
+          role: ceiling,
+          status: 'active',
+          ...shareFlags,
+          invite_email: ownerEmail,
+          invited_by_profile_id: ownerProfile.id,
+          invite_token: '',
+          joined_at: now,
+          created_at: now,
+          updated_at: now
+        },
+        prefer: 'return=minimal'
+      })
+    }
     const created = await sb(env, `teams?id=eq.${encodeURIComponent(teamId)}&select=*`)
     return json({ ok: true, team: mapTeamRow(created?.[0]) })
   }
