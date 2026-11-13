@@ -2085,6 +2085,18 @@ async function syncPersonalTypeAcrossDb(env, { profileId = '', cardId = '', pers
   }
 }
 
+function teamIntegrationsFromRow(row) {
+  if (!row) {
+    return { meetingTool: '', usesCrm: false, crmProvider: '', crmOther: '' }
+  }
+  return {
+    meetingTool: String(row.meeting_tool || '').trim().toLowerCase(),
+    usesCrm: row.uses_crm === true,
+    crmProvider: String(row.crm_provider || '').trim().toLowerCase(),
+    crmOther: String(row.crm_other || '').trim()
+  }
+}
+
 function mapTeamRow(row) {
   return {
     id: row.id,
@@ -2599,7 +2611,8 @@ async function findPendingTeamInviteForCard(env, cardId, profileId = '') {
     teamName: team.name || 'Team',
     ownerName,
     role: normalizePersonalType(row.role),
-    status: row.status
+    status: row.status,
+    ...teamIntegrationsFromRow(team)
   }
 }
 
@@ -4008,6 +4021,28 @@ async function handleApi(request, env, url) {
       const profiles = await sb(env, `profiles?id=eq.${encodeURIComponent(card.profile_id)}&select=*`)
       profile = profiles?.[0] || null
     }
+    const pendingTeamInvite =
+      card.status === 'unlinked'
+        ? await findPendingTeamInviteForCard(env, card.id)
+        : null
+    let ownerTeam = null
+    if (card.status === 'unlinked' && card.id) {
+      const owned = await sb(
+        env,
+        `teams?owner_card_id=eq.${encodeURIComponent(card.id)}&deleted=eq.false&select=*&limit=1`
+      )
+      ownerTeam = owned?.[0] || null
+    }
+    const teamIntegrations = ownerTeam
+      ? teamIntegrationsFromRow(ownerTeam)
+      : pendingTeamInvite
+        ? {
+            meetingTool: pendingTeamInvite.meetingTool || '',
+            usesCrm: pendingTeamInvite.usesCrm === true,
+            crmProvider: pendingTeamInvite.crmProvider || '',
+            crmOther: pendingTeamInvite.crmOther || ''
+          }
+        : teamIntegrationsFromRow(null)
     return json({
       ok: true,
       card: {
@@ -4020,10 +4055,9 @@ async function handleApi(request, env, url) {
       },
       profile: await publicProfile(env, profile),
       destination: destinationFor(card, profile),
-      pendingTeamInvite:
-        card.status === 'unlinked'
-          ? await findPendingTeamInviteForCard(env, card.id)
-          : null
+      pendingTeamInvite,
+      isDesignatedLead: !!ownerTeam,
+      teamIntegrations
     })
   }
 

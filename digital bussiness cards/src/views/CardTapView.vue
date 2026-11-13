@@ -24,6 +24,7 @@ import { singleBusinessDestinationHref } from '../lib/businessLinks'
 import { personalTypeLabel, normalizePersonalType, DEFAULT_PERSONAL_TYPE } from '../lib/teamRoles'
 import {
   isConnectTeamPersonalType,
+  normalizeMeetingTool,
   validateTeamIntegrations
 } from '../lib/teamIntegrations'
 import BusinessView from './BusinessView.vue'
@@ -40,6 +41,8 @@ const cardKind = ref('personal')
 const personalType = ref(DEFAULT_PERSONAL_TYPE)
 const linkedType = ref('personal')
 const pendingTeamInvite = ref(null)
+const isDesignatedLead = ref(false)
+const teamHasCalendarDefault = ref(false)
 const joinTeamOpen = ref(false)
 
 const firstName = ref('')
@@ -66,11 +69,22 @@ const serial = computed(() => {
 const isPersonalCard = computed(() => cardKind.value === 'personal')
 
 const showTeamIntegrations = computed(
-  () =>
-    isPersonalCard.value &&
-    isConnectTeamPersonalType(personalType.value) &&
-    !pendingTeamInvite.value
+  () => isPersonalCard.value && isConnectTeamPersonalType(personalType.value)
 )
+
+function applyTeamIntegrationDefaults(src) {
+  if (!src || typeof src !== 'object') return
+  const tool = normalizeMeetingTool(src.meetingTool || src.meeting_tool)
+  if (tool) {
+    meetingTool.value = tool
+    teamHasCalendarDefault.value = true
+  }
+  if (src.usesCrm === true || src.uses_crm === true) {
+    usesCrm.value = true
+    crmProvider.value = String(src.crmProvider || src.crm_provider || '').trim()
+    crmOther.value = String(src.crmOther || src.crm_other || '').trim()
+  }
+}
 
 const claimCardImage = computed(() =>
   cardImageSrc({
@@ -171,11 +185,15 @@ async function createProfile(e) {
       crmProvider: crmProvider.value,
       crmOther: crmOther.value
     })
+    const joiningMember = !!pendingTeamInvite.value && !isDesignatedLead.value
     if (!check.ok) {
-      error.value = check.error
-      return
+      if (!joiningMember && !teamHasCalendarDefault.value) {
+        error.value = check.error
+        return
+      }
+    } else {
+      integrations = check.value
     }
-    integrations = check.value
   }
 
   submitting.value = true
@@ -295,6 +313,8 @@ onMounted(async () => {
         ? normalizePersonalType(remote.card.personalType || remote.card.personal_type || remote.profile?.personalType || DEFAULT_PERSONAL_TYPE)
         : ''
     if (remote.pendingTeamInvite) pendingTeamInvite.value = remote.pendingTeamInvite
+    isDesignatedLead.value = !!remote.isDesignatedLead
+    applyTeamIntegrationDefaults(remote.teamIntegrations || remote.pendingTeamInvite)
     if (remote.card.status !== 'linked' || remote.profile?.isClaimed === false) {
       applyClaimPreset(remote.preset)
     }

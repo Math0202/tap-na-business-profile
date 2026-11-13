@@ -2159,6 +2159,18 @@ async function syncPersonalTypeAcrossDb(env, { profileId = '', cardId = '', pers
   }
 }
 
+function teamIntegrationsFromRow(row) {
+  if (!row) {
+    return { meetingTool: '', usesCrm: false, crmProvider: '', crmOther: '' }
+  }
+  return {
+    meetingTool: String(row.meeting_tool || '').trim().toLowerCase(),
+    usesCrm: row.uses_crm === true,
+    crmProvider: String(row.crm_provider || '').trim().toLowerCase(),
+    crmOther: String(row.crm_other || '').trim()
+  }
+}
+
 function mapTeamRow(row) {
   return {
     id: row.id,
@@ -2794,7 +2806,8 @@ async function findPendingTeamInviteForCard(env, cardId, profileId = '') {
     teamName: team.name || 'Team',
     ownerName,
     role: normalizePersonalType(row.role),
-    status: row.status
+    status: row.status,
+    ...teamIntegrationsFromRow(team)
   }
 }
 
@@ -4204,6 +4217,24 @@ async function handleApi(request, env, url) {
       const profiles = await sb(env, `profiles?id=eq.${encodeURIComponent(card.profile_id)}&select=*`)
       profile = profiles?.[0] || null
     }
+    const pendingTeamInvite =
+      !redirectSlug && card.status === 'unlinked'
+        ? await findPendingTeamInviteForCard(env, card.id)
+        : null
+    const ownerTeam =
+      !redirectSlug && card.status === 'unlinked'
+        ? await findTeamByOwnerCard(env, card.id)
+        : null
+    const teamIntegrations = ownerTeam
+      ? teamIntegrationsFromRow(ownerTeam)
+      : pendingTeamInvite
+        ? {
+            meetingTool: pendingTeamInvite.meetingTool || '',
+            usesCrm: pendingTeamInvite.usesCrm === true,
+            crmProvider: pendingTeamInvite.crmProvider || '',
+            crmOther: pendingTeamInvite.crmOther || ''
+          }
+        : teamIntegrationsFromRow(null)
     return json({
       ok: true,
       card: {
@@ -4218,10 +4249,9 @@ async function handleApi(request, env, url) {
       destination: destinationFor(card, profile),
       redirectSlug,
       preset: cardContactPreset(card, profile),
-      pendingTeamInvite:
-        !redirectSlug && card.status === 'unlinked'
-          ? await findPendingTeamInviteForCard(env, card.id)
-          : null
+      pendingTeamInvite,
+      isDesignatedLead: !!ownerTeam,
+      teamIntegrations
     })
   }
 
@@ -5185,17 +5215,31 @@ async function handleApi(request, env, url) {
     let ownerIntegrations = null
     if (isTeamOwnerClaim) {
       ownerIntegrations = parseTeamIntegrationsFromBody(body || {})
-      const existingMeeting = String(provisionalLeadTeam?.meeting_tool || '')
-        .trim()
-        .toLowerCase()
+      const existing = teamIntegrationsFromRow(provisionalLeadTeam)
+      const existingMeetingOk =
+        existing.meetingTool === 'google' ||
+        existing.meetingTool === 'microsoft' ||
+        existing.meetingTool === 'apple'
+      if (!ownerIntegrations.meetingOk && existingMeetingOk) {
+        ownerIntegrations = {
+          ...ownerIntegrations,
+          meetingTool: existing.meetingTool,
+          meetingOk: true
+        }
+      }
       if (
-        !ownerIntegrations.meetingOk &&
-        (existingMeeting === 'google' || existingMeeting === 'microsoft' || existingMeeting === 'apple')
+        body?.usesCrm === undefined &&
+        body?.uses_crm === undefined &&
+        existing.usesCrm
       ) {
         ownerIntegrations = {
           ...ownerIntegrations,
-          meetingTool: existingMeeting,
-          meetingOk: true
+          usesCrm: true,
+          crmProvider: existing.crmProvider,
+          crmOther: existing.crmOther,
+          crmOk:
+            !existing.usesCrm ||
+            ['salesforce', 'zoho', 'hubspot', 'odoo', 'sage', 'other'].includes(existing.crmProvider)
         }
       }
       if (!ownerIntegrations.meetingOk) return bad('Choose Google Meet or Microsoft')
