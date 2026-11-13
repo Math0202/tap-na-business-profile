@@ -6348,6 +6348,47 @@ async function handleApi(request, env, url) {
     })
   }
 
+  const precreateProfileMatch = pathname.match(/^\/api\/admin\/cards\/([^/]+)\/precreate-profile$/)
+  if (precreateProfileMatch && method === 'POST') {
+    const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
+    if (gate.error) return gate.error
+    const slug = decodeURIComponent(precreateProfileMatch[1] || '').trim()
+    if (!slug) return bad('Card ID is required')
+    const cards = await sb(
+      env,
+      `cards?slug=eq.${encodeURIComponent(slug)}&deleted=eq.false&select=*`
+    )
+    const card = cards?.[0]
+    if (!card) return bad('Card not found', 404)
+    const existingId = String(card.profile_id || '').trim()
+    if (existingId) {
+      return json({ ok: true, profileId: existingId, slug: card.slug, created: false })
+    }
+    const profileId = uid('prof')
+    const cardType = card.kind === 'personal' ? 'personal' : 'table'
+    await sb(env, 'profiles', {
+      method: 'POST',
+      body: {
+        id: profileId,
+        card_type: cardType,
+        name: String(card.contact_name || '').trim(),
+        title: String(card.contact_title || '').trim(),
+        company: String(card.contact_company || '').trim(),
+        email: String(card.contact_email || '').trim(),
+        phone: String(card.contact_phone || '').trim(),
+        is_claimed: false,
+        checkin_form: { _tap_is_claimed: false }
+      },
+      prefer: 'return=minimal'
+    })
+    await sb(env, `cards?slug=eq.${encodeURIComponent(card.slug)}`, {
+      method: 'PATCH',
+      body: { profile_id: profileId },
+      prefer: 'return=minimal'
+    })
+    return json({ ok: true, profileId, slug: card.slug, created: true })
+  }
+
   const batchRenameMatch = pathname.match(/^\/api\/admin\/card-batches\/([^/]+)$/)
   if (batchRenameMatch && method === 'PATCH') {
     const gate = await requireStaff(env, request, { roles: ['admin', 'manager', 'sales'] })
