@@ -5185,6 +5185,19 @@ async function handleApi(request, env, url) {
     let ownerIntegrations = null
     if (isTeamOwnerClaim) {
       ownerIntegrations = parseTeamIntegrationsFromBody(body || {})
+      const existingMeeting = String(provisionalLeadTeam?.meeting_tool || '')
+        .trim()
+        .toLowerCase()
+      if (
+        !ownerIntegrations.meetingOk &&
+        (existingMeeting === 'google' || existingMeeting === 'microsoft' || existingMeeting === 'apple')
+      ) {
+        ownerIntegrations = {
+          ...ownerIntegrations,
+          meetingTool: existingMeeting,
+          meetingOk: true
+        }
+      }
       if (!ownerIntegrations.meetingOk) return bad('Choose Google Meet or Microsoft')
       if (ownerIntegrations.usesCrm && !ownerIntegrations.crmOk) return bad('Choose the CRM you use')
     }
@@ -7302,6 +7315,22 @@ async function handleApi(request, env, url) {
     if (body?.shareSocialLinks !== undefined) patch.share_social_links = !!body.shareSocialLinks
     if (body?.shareContacts !== undefined) patch.share_contacts = !!body.shareContacts
     if (body?.shareCalendarCrm !== undefined) patch.share_calendar_crm = !!body.shareCalendarCrm
+    if (body?.meetingTool !== undefined || body?.meeting_tool !== undefined) {
+      const integ = parseTeamIntegrationsFromBody({
+        meetingTool: body.meetingTool ?? body.meeting_tool,
+        usesCrm: body.usesCrm ?? body.uses_crm,
+        crmProvider: body.crmProvider ?? body.crm_provider,
+        crmOther: body.crmOther ?? body.crm_other
+      })
+      if (!integ.meetingOk) return bad('Choose Google Meet or Microsoft')
+      patch.meeting_tool = integ.meetingTool
+      if (body?.usesCrm !== undefined || body?.uses_crm !== undefined) {
+        if (integ.usesCrm && !integ.crmOk) return bad('Choose the CRM you use')
+        patch.uses_crm = integ.usesCrm
+        patch.crm_provider = integ.crmProvider
+        patch.crm_other = integ.crmOther
+      }
+    }
 
     if (body?.ownerProfileId !== undefined && body.ownerProfileId !== team.owner_profile_id) {
       const newOwnerId = String(body.ownerProfileId || '').trim()
