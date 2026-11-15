@@ -6,6 +6,7 @@ import { LOCAL_ID } from './adminStore'
 import { loadProfile, saveProfile, isTableBusiness } from './profileStore'
 import { publicOriginForKind } from './hosts'
 import { PERSONAL_CARD_IMAGES, personalCardImageSrc } from './teamRoles'
+import { normalizeIndustry } from './vehicleFinance'
 
 const CARDS_KEY = 'tapna_linked_cards'
 
@@ -181,6 +182,7 @@ function normalizeCard(c) {
     id: c.id || uid('card'),
     serial: String(c.serial || '').trim(),
     kind,
+    industry: normalizeIndustry(c.industry),
     personalType,
     productId: c.productId || '',
     productName: c.productName || kindLabel(kind),
@@ -258,6 +260,7 @@ export function hydrateLinkedCardsFromApi(profileId, remoteCards = []) {
       ...prev,
       serial,
       kind: remote.kind || prev.kind || 'personal',
+      industry: remote.industry || prev.industry || '',
       personalType: remote.personalType || remote.personal_type || prev.personalType || '',
       productId: remote.productId || remote.product_id || prev.productId || '',
       profileId: pid,
@@ -362,6 +365,7 @@ export function provisionSlugs({
   count = 1,
   kind = 'table',
   personalType = '',
+  industry = '',
   productId = '',
   productName = '',
   saleId = '',
@@ -383,6 +387,7 @@ export function provisionSlugs({
         id: remote.id,
         serial,
         kind: remote.kind || kind,
+        industry: remote.industry || '',
         personalType: remote.personalType || personalType || '',
         productId: productId || remote.productId || '',
         productName: productName || kindLabel(remote.kind || kind),
@@ -407,6 +412,7 @@ export function provisionSlugs({
       const card = normalizeCard({
         serial,
         kind,
+        industry,
         personalType: kind === 'personal' ? personalType || 'business' : '',
         productId,
         productName: productName || kindLabel(kind),

@@ -23,6 +23,7 @@ import {
 } from '../lib/profileStore'
 import { downloadVcard, profileShareUrl, vcardPhotoLine } from '../lib/shareHelpers'
 import { preferredShareSlug } from '../lib/cardLinkStore'
+import { vehicleFinanceEnabled } from '../lib/vehicleFinance'
 import { trackVisit, trackShare, trackClick, LOCAL_ID } from '../lib/adminStore'
 import { apiLogCardEvent } from '../lib/api'
 import { normalizeLinkOrder, businessLinkDef } from '../lib/businessLinks'
@@ -462,6 +463,13 @@ onUnmounted(() => {
             :href="tile.href"
             :external="!!tile.external"
             @track="onLinkTrack"
+          />
+          <LinkRow
+            v-if="vehicleFinanceEnabled(profile) && shareSlug"
+            icon="payments"
+            label="Vehicle financing"
+            detail="Estimate a monthly payment"
+            :href="`/c/${encodeURIComponent(shareSlug)}/finance`"
           />
         </section>
 

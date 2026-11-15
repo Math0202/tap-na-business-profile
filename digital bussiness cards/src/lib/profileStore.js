@@ -49,6 +49,8 @@ export const DEFAULT_PROFILE = {
   shareSlug: '',
   remoteProfileId: '',
   personalType: '',
+  industry: '',
+  vehicleFinance: {},
   assistantProfileId: '',
   assistantName: '',
   standinProfileId: '',
@@ -93,6 +95,9 @@ export function setViewedProfile(profile) {
     sessionStorage.setItem(VIEW_KEY, JSON.stringify({ profile, at: Date.now() }))
   } catch {
     /* ignore */
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('tapna-view-profile-changed'))
   }
 }
 

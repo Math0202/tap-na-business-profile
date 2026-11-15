@@ -1739,6 +1739,7 @@ function mapPublicCardRow(c) {
   return {
     slug: c.slug || '',
     kind,
+    industry: normalizeIndustry(c.industry),
     personalType: kind === 'personal' ? normalizePersonalType(c.personal_type || 'business') : '',
     productId: c.product_id || '',
     status: c.status || ''
@@ -1751,7 +1752,7 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
   const cardRows =
     (await sb(
       env,
-      `cards?profile_id=eq.${encodeURIComponent(row.id)}&deleted=eq.false&select=slug,kind,personal_type,product_id,status,linked_at&order=linked_at.desc.nullslast`
+      `cards?profile_id=eq.${encodeURIComponent(row.id)}&deleted=eq.false&select=slug,kind,industry,personal_type,product_id,status,linked_at&order=linked_at.desc.nullslast`
     )) || []
   const mapped = cardRows.map(mapPublicCardRow)
   const linked = mapped.filter((c) => !c.status || c.status === 'linked')
@@ -1829,6 +1830,8 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
     id: row.id,
     cardType: row.card_type === 'table' ? 'table' : 'personal',
     personalType,
+    industry: normalizeIndustry(shareHit?.industry),
+    vehicleFinance: normalizeVehicleFinance(row.vehicle_finance),
     name: row.name,
     title: row.title,
     company: row.company,
@@ -1996,6 +1999,45 @@ function normalizePersonalType(raw, fallback = 'business') {
   if (key === 'executive' || key === 'exclusive' || key === 'exec') return 'executive_exclusive'
   if (PERSONAL_TYPE_RANKS[key]) return key
   return fallback || ''
+}
+
+const DEFAULT_VEHICLE_FINANCE_REQUIREMENTS = [
+  'Valid Namibian ID or foreign passport with work permit',
+  'Valid driver’s license',
+  'Proof of residence (utility bill or lease agreement not older than 3 months)',
+  'Latest payslip (or 3–6 months of payslips if earning commission/overtime)',
+  '3–6 months of bank statements',
+  'Marriage certificate and antenuptial contract (if applicable)',
+  'Comprehensive vehicle insurance confirmation'
+]
+
+function normalizeIndustry(raw) {
+  const key = String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_')
+  if (key === 'auto_dealer' || key === 'autodealer' || key === 'auto') return 'auto_dealer'
+  return ''
+}
+
+function normalizeVehicleFinance(raw) {
+  const src = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
+  const rate = Number(src.annualRatePercent ?? src.annual_rate_percent)
+  const term = Number(src.termMonths ?? src.term_months)
+  const listed = Array.isArray(src.requirements) ? src.requirements : null
+  let requirements = (listed || [])
+    .map((line) => String(line || '').trim())
+    .filter(Boolean)
+    .slice(0, 24)
+  if (!requirements.length) requirements = [...DEFAULT_VEHICLE_FINANCE_REQUIREMENTS]
+  const allowRaw = src.allowBalloon !== undefined ? src.allowBalloon : src.allow_balloon
+  return {
+    enabled: src.enabled === true,
+    annualRatePercent: Number.isFinite(rate) ? Math.min(100, Math.max(0, rate)) : 12,
+    termMonths: Number.isFinite(term) ? Math.min(360, Math.max(1, Math.round(term))) : 60,
+    allowBalloon: allowRaw !== false,
+    requirements
+  }
 }
 
 function personalTypeRank(role) {
@@ -4101,6 +4143,7 @@ async function handleApi(request, env, url) {
     const batchName = String(body?.name || body?.batchName || '').trim().slice(0, 80)
     const existingBatchId = String(body?.batchId || body?.batch_id || '').trim()
     const includeVcard = body?.includeVcard === true || body?.include_vcard === true
+    const industry = normalizeIndustry(body?.industry)
     const rawContacts = Array.isArray(body?.contacts) ? body.contacts : []
     const normalizeContact = (raw) => {
       const c = raw && typeof raw === 'object' ? raw : {}
@@ -4171,6 +4214,7 @@ async function handleApi(request, env, url) {
         id,
         slug,
         kind,
+        industry,
         personal_type: personalType,
         product_id: body?.productId || '',
         status: 'unlinked',
@@ -4190,6 +4234,7 @@ async function handleApi(request, env, url) {
         id,
         slug,
         kind,
+        industry,
         personalType,
         batchId: batch?.id || '',
         batchName: batch?.name || '',
@@ -4241,6 +4286,7 @@ async function handleApi(request, env, url) {
         id: card.id,
         slug: card.slug,
         kind: card.kind,
+        industry: normalizeIndustry(card.industry),
         personalType: card.kind === 'personal' ? normalizePersonalType(card.personal_type || 'business') : '',
         status: card.status,
         profileId: card.profile_id
@@ -4366,11 +4412,15 @@ async function handleApi(request, env, url) {
     const body = await readJson(request)
     const cards = await sb(
       env,
-      `cards?slug=eq.${encodeURIComponent(slug)}&select=id,kind,personal_type,profile_id,contact_name,contact_company,contact_phone,contact_email,contact_title`
+      `cards?slug=eq.${encodeURIComponent(slug)}&select=id,kind,industry,personal_type,profile_id,contact_name,contact_company,contact_phone,contact_email,contact_title`
     )
     if (!cards?.length) return bad('Card not found', 404)
     const cardRow = cards[0]
     const patch = {}
+
+    if (body?.industry !== undefined) {
+      patch.industry = normalizeIndustry(body.industry)
+    }
 
     if (body?.kind !== undefined) {
       const kind = body.kind === 'personal' ? 'personal' : 'table'
@@ -4441,6 +4491,7 @@ async function handleApi(request, env, url) {
       ok: true,
       slug,
       kind: kindOut,
+      industry: patch.industry !== undefined ? patch.industry : normalizeIndustry(cardRow.industry),
       personalType: personalOut || '',
       contactName: patch.contact_name !== undefined ? patch.contact_name : cardRow.contact_name || '',
       contactCompany:
@@ -6763,7 +6814,7 @@ async function handleApi(request, env, url) {
     if (gate.error) return gate.error
     const [profiles, cards, batches] = await Promise.all([
       sb(env, 'profiles?deleted=eq.false&select=id,card_type,name,title,company,email,phone,address,avatar,logo,disabled,created_at,updated_at&order=created_at.desc&limit=500'),
-      sb(env, 'cards?select=slug,kind,personal_type,product_id,status,profile_id,linked_at,created_at,deleted,deleted_at,deleted_by,batch_id,contact_name,contact_company,contact_phone,contact_email,contact_title&order=created_at.desc&limit=2000'),
+      sb(env, 'cards?select=slug,kind,industry,personal_type,product_id,status,profile_id,linked_at,created_at,deleted,deleted_at,deleted_by,batch_id,contact_name,contact_company,contact_phone,contact_email,contact_title&order=created_at.desc&limit=2000'),
       sb(env, 'card_batches?select=id,name,kind,personal_type,created_by,created_at&order=created_at.desc&limit=500')
     ])
     const cardsByProfile = {}
@@ -6804,6 +6855,7 @@ async function handleApi(request, env, url) {
         slugs: (cardsByProfile[p.id] || []).map((c) => ({
           slug: c.slug,
           kind: c.kind === 'personal' ? 'personal' : 'table',
+          industry: normalizeIndustry(c.industry),
           personalType:
             c.kind === 'personal'
               ? normalizePersonalType(c.personal_type || 'business')
@@ -6815,6 +6867,7 @@ async function handleApi(request, env, url) {
       cards: (cards || []).map((c) => ({
         slug: c.slug,
         kind: c.kind === 'personal' ? 'personal' : 'table',
+        industry: normalizeIndustry(c.industry),
         personalType:
           c.kind === 'personal'
             ? normalizePersonalType(c.personal_type || 'business')
@@ -6994,6 +7047,7 @@ async function handleApi(request, env, url) {
         slugs: (cards || []).map((c) => ({
           slug: c.slug,
           kind: c.kind === 'personal' ? 'personal' : 'table',
+          industry: normalizeIndustry(c.industry),
           personalType:
             c.kind === 'personal'
               ? normalizePersonalType(c.personal_type || 'business')
@@ -7035,7 +7089,7 @@ async function handleApi(request, env, url) {
     if (!profile) return bad('Profile not found', 404)
     const cards = await sb(
       env,
-      `cards?profile_id=eq.${encodeURIComponent(profileId)}&select=slug,kind,personal_type,product_id,status,linked_at&order=slug.asc`
+      `cards?profile_id=eq.${encodeURIComponent(profileId)}&select=slug,kind,industry,personal_type,product_id,status,linked_at&order=slug.asc`
     )
     const pub = await publicProfile(env, profile)
     return json({
@@ -7049,6 +7103,7 @@ async function handleApi(request, env, url) {
         slugs: (cards || []).map((c) => ({
           slug: c.slug,
           kind: c.kind === 'personal' ? 'personal' : 'table',
+          industry: normalizeIndustry(c.industry),
           personalType:
             c.kind === 'personal'
               ? normalizePersonalType(c.personal_type || 'business')
@@ -7132,7 +7187,7 @@ async function handleApi(request, env, url) {
     const next = nextRows?.[0]
     const cards = await sb(
       env,
-      `cards?profile_id=eq.${encodeURIComponent(profileId)}&select=slug,kind,personal_type,product_id,status,linked_at&order=slug.asc`
+      `cards?profile_id=eq.${encodeURIComponent(profileId)}&select=slug,kind,industry,personal_type,product_id,status,linked_at&order=slug.asc`
     )
     const pub = await publicProfile(env, next)
     return json({
@@ -7146,6 +7201,7 @@ async function handleApi(request, env, url) {
         slugs: (cards || []).map((c) => ({
           slug: c.slug,
           kind: c.kind === 'personal' ? 'personal' : 'table',
+          industry: normalizeIndustry(c.industry),
           personalType:
             c.kind === 'personal'
               ? normalizePersonalType(c.personal_type || 'business')
@@ -8014,6 +8070,10 @@ async function handleApi(request, env, url) {
           : Array.isArray(profile.catalog_items)
             ? profile.catalog_items
             : [],
+        vehicle_finance:
+          body.vehicleFinance !== undefined
+            ? normalizeVehicleFinance(body.vehicleFinance)
+            : profile.vehicle_finance || {},
         avatar: body.avatar ?? profile.avatar,
         logo: body.logo ?? profile.logo,
         banner: body.banner !== undefined ? String(body.banner || '').trim() : (profile.banner || ''),

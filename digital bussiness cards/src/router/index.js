@@ -214,6 +214,11 @@ const routes = [
     component: () => import('../views/ProfileCatalogCartView.vue')
   },
   {
+    path: '/finance',
+    name: 'finance',
+    component: () => import('../views/VehicleFinanceView.vue')
+  },
+  {
     path: '/team',
     name: 'team',
     component: () => import('../views/TeamView.vue'),
@@ -228,6 +233,11 @@ const routes = [
     path: '/c/:serial/catalog-cart',
     name: 'card-catalog-cart',
     component: () => import('../views/ProfileCatalogCartView.vue')
+  },
+  {
+    path: '/c/:serial/finance',
+    name: 'card-finance',
+    component: () => import('../views/VehicleFinanceView.vue')
   },
   {
     path: '/c/:serial',
@@ -260,11 +270,17 @@ router.beforeEach((to, from) => {
     return '/business'
   }
 
-  if (to.path === '/me' || to.path === '/catalog' || to.path === '/catalog-cart') {
+  if (to.path === '/me' || to.path === '/catalog' || to.path === '/catalog-cart' || to.path === '/finance') {
     const slug = slugForLegacyPersonalRedirect(to.path)
     if (slug) {
       const page =
-        to.path === '/catalog' ? 'catalog' : to.path === '/catalog-cart' ? 'catalog-cart' : 'profile'
+        to.path === '/catalog'
+          ? 'catalog'
+          : to.path === '/catalog-cart'
+            ? 'catalog-cart'
+            : to.path === '/finance'
+              ? 'finance'
+              : 'profile'
       return { path: personalPagePath(slug, page), query: to.query, hash: to.hash }
     }
   }

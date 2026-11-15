@@ -13,6 +13,7 @@ import { apiGetMyTeam, apiPublicCatalog, setApiToken } from '../lib/api'
 import { anyCatalogCartCount, catalogCartCount } from '../lib/profileCatalogCart'
 import { hideFloatingChrome } from '../lib/uiChrome'
 import { browsingPersonalSlug, personalPagePath } from '../lib/profilePaths'
+import { vehicleFinanceEnabled } from '../lib/vehicleFinance'
 
 const route = useRoute()
 const router = useRouter()
@@ -22,6 +23,7 @@ const viewedIsTable = ref(isTableBusiness(loadViewedProfile()))
 const guestCartCount = ref(anyCatalogCartCount())
 const canUseTeam = ref(false)
 const hasCatalog = ref(false)
+const financeOn = ref(false)
 let catalogCheckSeq = 0
 
 function activeCatalogItems(list) {
@@ -76,6 +78,8 @@ function refreshAuth() {
   isTableOwner.value = isTableBusiness(loadProfile())
   viewedIsTable.value = isTableBusiness(loadViewedProfile())
   guestCartCount.value = anyCatalogCartCount()
+  const source = route.path === '/profile' ? loadProfile() : loadPublicProfile()
+  financeOn.value = vehicleFinanceEnabled(source)
   refreshCatalogVisibility()
 }
 
@@ -118,6 +122,10 @@ const visible = computed(() => {
   ) {
     return true
   }
+  if (p === '/finance') {
+    if (loadViewedProfile()) return !viewedIsTable.value
+    return !isTableOwner.value
+  }
   if (p.startsWith('/c/')) {
     if (loadViewedProfile()) return !viewedIsTable.value
     return !isTableOwner.value
@@ -140,7 +148,8 @@ const isOwnPersonalNav = computed(() => {
     p === '/catalog' ||
     p === '/catalog-cart' ||
     p === '/connections' ||
-    p === '/team'
+    p === '/team' ||
+    p === '/finance'
   ) {
     return true
   }
@@ -150,6 +159,8 @@ const isOwnPersonalNav = computed(() => {
 })
 
 const showCatalogNav = computed(() => hasCatalog.value || isOwnPersonalNav.value)
+
+const showFinanceNav = computed(() => financeOn.value)
 
 const navItems = computed(() => {
   const slug = browsingPersonalSlug(route)
@@ -171,6 +182,15 @@ const navItems = computed(() => {
       label: 'Catalog',
       icon: 'inventory_2',
       match: (p) => p === '/catalog' || /\/c\/[^/]+\/catalog$/.test(p)
+    })
+  }
+
+  if (showFinanceNav.value) {
+    items.push({
+      to: personalPagePath(slug, 'finance'),
+      label: 'Finance',
+      icon: 'payments',
+      match: (p) => p === '/finance' || /\/c\/[^/]+\/finance$/.test(p)
     })
   }
 

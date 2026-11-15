@@ -185,12 +185,20 @@ export function apiBulkDeleteCards(slugs = []) {
 }
 
 /** Change a card's kind (admin) */
-export function apiUpdateCardKind(slug, kind, { personalType } = {}) {
+export function apiUpdateCardKind(slug, kind, { personalType, industry } = {}) {
   const body = { kind }
   if (personalType) body.personalType = personalType
+  if (industry !== undefined) body.industry = industry
   return request(`/api/cards/${encodeURIComponent(slug)}`, {
     method: 'PATCH',
     body
+  })
+}
+
+export function apiUpdateCardIndustry(slug, industry) {
+  return request(`/api/cards/${encodeURIComponent(slug)}`, {
+    method: 'PATCH',
+    body: { industry: industry || '' }
   })
 }
 
@@ -216,12 +224,13 @@ export function apiProvisionCards({
   kind = 'table',
   productId = '',
   personalType = '',
+  industry = '',
   name = '',
   batchId = '',
   includeVcard = false,
   contacts = null
 } = {}) {
-  const body = { count, kind, productId, personalType }
+  const body = { count, kind, productId, personalType, industry }
   const existingBatchId = String(batchId || '').trim()
   const batchName = String(name || '').trim()
   if (existingBatchId) body.batchId = existingBatchId

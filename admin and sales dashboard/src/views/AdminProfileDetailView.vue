@@ -19,9 +19,11 @@ import {
 import {
   apiAdminGetProfile,
   apiAdminUpdateProfile,
+  apiUpdateCardIndustry,
   apiAdminDeleteProfile,
   apiAdminProfileActivities
 } from '../lib/api'
+import { INDUSTRY_OPTIONS } from '../lib/vehicleFinance'
 
 const route = useRoute()
 const router = useRouter()
@@ -131,6 +133,7 @@ function applyProfile(p) {
   linkedCards.value = (p.slugs || []).map((s) => ({
     serial: s.slug,
     kind: s.kind === 'personal' ? 'personal' : 'table',
+    industry: s.industry || '',
     personalType: s.personalType || '',
     productId: s.productId || '',
     status: s.status || 'linked'
@@ -244,6 +247,14 @@ async function toggleStatus() {
   }
   applyProfile(res.data.profile)
   toast.value = entry.value.disabled ? 'Profile disabled' : 'Profile enabled'
+  setTimeout(() => { toast.value = '' }, 2000)
+}
+
+async function changeCardIndustry(card, industry) {
+  const next = industry === 'auto_dealer' ? 'auto_dealer' : ''
+  card.industry = next
+  const res = await apiUpdateCardIndustry(card.serial, next)
+  toast.value = res.ok ? 'Industry updated' : (res.error || 'Could not update industry')
   setTimeout(() => { toast.value = '' }, 2000)
 }
 
@@ -406,6 +417,16 @@ onMounted(load)
               <div class="min-w-0 flex-1">
                 <p class="text-sm font-mono font-semibold">{{ c.serial }}</p>
                 <p class="text-[11px] text-gray-500 mt-0.5">{{ kindLabel(c.kind) }}</p>
+                <select
+                  :value="c.industry || ''"
+                  class="mt-1 bg-transparent text-xs text-gray-300 border border-[var(--border)] rounded-full px-2 py-1 outline-none"
+                  aria-label="Industry"
+                  @change="changeCardIndustry(c, $event.target.value)"
+                >
+                  <option v-for="industry in INDUSTRY_OPTIONS" :key="industry.id || 'general'" :value="industry.id">
+                    {{ industry.label }}
+                  </option>
+                </select>
               </div>
               <button
                 type="button"

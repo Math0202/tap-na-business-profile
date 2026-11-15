@@ -11,10 +11,18 @@ import {
 /** Public personal-card URLs stay on the slug the visitor is browsing. */
 export function personalPagePath(slug, page = 'profile') {
   const code = String(slug || '').trim()
-  const suffix = page === 'catalog' ? '/catalog' : page === 'catalog-cart' ? '/catalog-cart' : ''
+  const suffix =
+    page === 'catalog'
+      ? '/catalog'
+      : page === 'catalog-cart'
+        ? '/catalog-cart'
+        : page === 'finance'
+          ? '/finance'
+          : ''
   if (!code) {
     if (page === 'catalog') return '/catalog'
     if (page === 'catalog-cart') return '/catalog-cart'
+    if (page === 'finance') return '/finance'
     return '/me'
   }
   return `/c/${encodeURIComponent(code)}${suffix}`
@@ -75,6 +83,8 @@ export async function ensureViewedProfileFromSlug(serial) {
         ? {
             ...remote.profile,
             ...mine,
+            industry: remote.profile.industry || mine.industry || '',
+            vehicleFinance: remote.profile.vehicleFinance || mine.vehicleFinance,
             banner: mine.banner || remote.profile.banner,
             bio: mine.bio || remote.profile.bio,
             shareSlug: remote.card?.slug || code

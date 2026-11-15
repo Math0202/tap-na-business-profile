@@ -348,6 +348,8 @@ onMounted(async () => {
             ...remote.profile,
             ...mine,
             cardType: linkedType.value,
+            industry: remote.profile.industry || mine.industry || '',
+            vehicleFinance: remote.profile.vehicleFinance || mine.vehicleFinance,
             banner: mine.banner || remote.profile.banner,
             bio: mine.bio || remote.profile.bio,
             shareSlug: remote.card.slug || serial.value,
@@ -373,6 +375,8 @@ onMounted(async () => {
           if (remote.profile.personalType || personalType.value) {
             patch.personalType = remote.profile.personalType || personalType.value
           }
+          if (remote.profile.industry) patch.industry = remote.profile.industry
+          if (remote.profile.vehicleFinance) patch.vehicleFinance = remote.profile.vehicleFinance
           if (remote.profile.cardType && mine.cardType !== remote.profile.cardType) {
             patch.cardType = remote.profile.cardType === 'table' ? 'table' : 'personal'
           }

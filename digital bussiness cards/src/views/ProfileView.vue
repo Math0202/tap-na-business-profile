@@ -39,6 +39,9 @@ import {
   moveLinkOrder
 } from '../lib/businessLinks'
 import {
+  normalizeVehicleFinance
+} from '../lib/vehicleFinance'
+import {
   DEFAULT_CHECKIN_FORM,
   DEFAULT_FEEDBACK_FORM,
   normalizeCheckinForm,
@@ -143,6 +146,12 @@ const hasVideo = computed(() => !!(videoData.value && String(videoData.value).tr
 const isDataVideo = computed(() => String(videoData.value || '').startsWith('data:video'))
 const shareSlug = ref('')
 const personalType = ref('')
+const industry = ref('')
+const financeEnabled = ref(false)
+const financeRate = ref(12)
+const financeTerm = ref(60)
+const financeAllowBalloon = ref(true)
+const financeRequirements = ref([])
 const cardsTick = ref(0)
 const linkedCards = computed(() => {
   cardsTick.value
@@ -217,6 +226,7 @@ function fillForm(profile) {
     cardType.value = 'personal'
     shareSlug.value = ''
     personalType.value = ''
+    applyFinance(null)
   } else {
     name.value = profile.name || ''
     title.value = profile.title || ''
@@ -259,8 +269,39 @@ function fillForm(profile) {
     cardType.value = profile.cardType === 'table' ? 'table' : 'personal'
     shareSlug.value = profile.shareSlug || ''
     personalType.value = profile.personalType || ''
+    applyFinance(profile)
   }
   updateVideoUI()
+}
+
+const isAutoDealer = computed(() => industry.value === 'auto_dealer')
+
+function applyFinance(profile) {
+  industry.value = profile?.industry || ''
+  const finance = normalizeVehicleFinance(profile?.vehicleFinance)
+  financeEnabled.value = finance.enabled
+  financeRate.value = finance.annualRatePercent
+  financeTerm.value = finance.termMonths
+  financeAllowBalloon.value = finance.allowBalloon
+  financeRequirements.value = [...finance.requirements]
+}
+
+function financePayload() {
+  return normalizeVehicleFinance({
+    enabled: financeEnabled.value,
+    annualRatePercent: Number(financeRate.value),
+    termMonths: Number(financeTerm.value),
+    allowBalloon: financeAllowBalloon.value,
+    requirements: financeRequirements.value
+  })
+}
+
+function addFinanceRequirement() {
+  financeRequirements.value = [...financeRequirements.value, '']
+}
+
+function removeFinanceRequirement(index) {
+  financeRequirements.value = financeRequirements.value.filter((_, i) => i !== index)
 }
 
 function updateVideoUI() {
@@ -853,7 +894,9 @@ async function onSave(e) {
       video: videoData.value || '',
       disabled: disabled.value,
       loginEmail: loginEmail.value.trim(),
-      loginPhone: loginPhone.value.trim()
+      loginPhone: loginPhone.value.trim(),
+      industry: industry.value,
+      vehicleFinance: financePayload()
     })
     clearViewedProfile()
 
@@ -895,7 +938,8 @@ async function onSave(e) {
         banner: cloudSafe(saved.banner, cloudSafe(previous.banner, '')),
         bio: saved.bio || '',
         video: cloudSafe(saved.video, cloudSafe(previous.video, '')),
-        disabled: saved.disabled
+        disabled: saved.disabled,
+        vehicleFinance: saved.vehicleFinance || financePayload()
       })
       if (!sync.ok) {
         alert(sync.error || 'Saved on this device, but cloud sync failed. Try again.')
@@ -937,7 +981,12 @@ onMounted(async () => {
     const me = await apiGetMe()
     if (me.ok && me.data?.profile) {
       const p = me.data.profile
-      if (p.personalType) saveProfile({ personalType: p.personalType })
+      saveProfile({
+        personalType: p.personalType || loadProfile().personalType,
+        industry: p.industry || '',
+        vehicleFinance: p.vehicleFinance || {}
+      })
+      window.dispatchEvent(new CustomEvent('tapna-view-profile-changed'))
       if (p.id && Array.isArray(p.cards) && p.cards.length) {
         hydrateLinkedCardsFromApi(p.id, p.cards)
       }
@@ -1706,6 +1755,52 @@ onMounted(async () => {
             @click="moveTile(tile.key, 1)"
           >
             <span class="material-symbols-outlined text-[18px]">keyboard_arrow_down</span>
+          </button>
+        </div>
+      </section>
+
+      <section v-if="isAutoDealer" class="space-y-4">
+        <div>
+          <p class="text-sm font-semibold">Vehicle financing</p>
+          <p class="text-xs text-gray-500 mt-0.5">Optional. Visitors only see Finance when this is on.</p>
+        </div>
+        <label class="flex items-center gap-3 card-item-bg rounded-2xl px-4 py-3 cursor-pointer">
+          <input v-model="financeEnabled" type="checkbox" class="rounded border-zinc-600" />
+          <span class="text-sm font-semibold">Show vehicle financing</span>
+        </label>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="field-group">
+            <label class="field-label" for="field-finance-rate">Annual rate %</label>
+            <div class="field-shell">
+              <input id="field-finance-rate" v-model="financeRate" inputmode="decimal" class="field-input" />
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="field-finance-term">Term (months)</label>
+            <div class="field-shell">
+              <input id="field-finance-term" v-model="financeTerm" inputmode="numeric" class="field-input" />
+            </div>
+          </div>
+        </div>
+        <label class="flex items-center gap-3 card-item-bg rounded-2xl px-4 py-3 cursor-pointer">
+          <input v-model="financeAllowBalloon" type="checkbox" class="rounded border-zinc-600" />
+          <span class="min-w-0">
+            <span class="block text-sm font-semibold">Allow a balloon payment</span>
+            <span class="block text-xs text-gray-500 mt-0.5">Visitors can enter a residual lump sum</span>
+          </span>
+        </label>
+        <div class="space-y-2">
+          <p class="text-xs font-semibold uppercase tracking-wide text-gray-400">Applicant requirements</p>
+          <div v-for="(line, index) in financeRequirements" :key="'req-' + index" class="flex gap-2">
+            <div class="field-shell flex-1">
+              <input v-model="financeRequirements[index]" type="text" class="field-input" :aria-label="`Requirement ${index + 1}`" />
+            </div>
+            <button type="button" class="px-3 rounded-2xl border border-[var(--border)] text-xs text-gray-300" @click="removeFinanceRequirement(index)">
+              Remove
+            </button>
+          </div>
+          <button type="button" class="text-xs font-semibold text-sky-300" @click="addFinanceRequirement">
+            Add requirement
           </button>
         </div>
       </section>

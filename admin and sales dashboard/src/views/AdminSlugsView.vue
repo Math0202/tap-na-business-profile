@@ -29,6 +29,7 @@ import {
   apiBulkDeleteCards,
   apiRestoreCard,
   apiUpdateCardKind,
+  apiUpdateCardIndustry,
   apiRenameCardBatch,
   apiCreateCardBatch,
   apiMoveCardsToBatch,
@@ -37,6 +38,7 @@ import {
   apiAdminUpdateProfile,
   apiUploadAsset
 } from '../lib/api'
+import { INDUSTRY_OPTIONS, industryLabel } from '../lib/vehicleFinance'
 import {
   downloadSlugQrPng,
   downloadSlugsQrZip,
@@ -66,7 +68,7 @@ const moveMenuOpen = ref(false)
 const cardExportOpen = ref(false)
 const cardExportRows = ref([])
 const cardExportZipName = ref('')
-const slugForm = ref({ count: 10, kind: 'table', personalType: 'business', name: '', includeVcard: false })
+const slugForm = ref({ count: 10, kind: 'table', personalType: 'business', industry: '', name: '', includeVcard: false })
 const contactRows = ref([])
 const dateFrom = ref('')
 const dateTo = ref('')
@@ -350,6 +352,7 @@ async function refresh() {
     ...(local[c.slug] || {}),
     serial: c.slug,
     kind: c.kind,
+    industry: c.industry || local[c.slug]?.industry || '',
     personalType: c.personalType || local[c.slug]?.personalType || '',
     productId: c.productId || local[c.slug]?.productId || '',
     profileId: c.profileId || '',
@@ -454,6 +457,7 @@ async function generateSlugs() {
       count,
       kind,
       personalType,
+      industry: slugForm.value.industry,
       name: intoId ? '' : name,
       batchId: intoId,
       includeVcard,
@@ -487,6 +491,7 @@ async function generateSlugs() {
         count,
         kind,
         personalType,
+        industry: slugForm.value.industry,
         batchId,
         batchName,
         remoteCards: remote.data.cards
@@ -499,6 +504,7 @@ async function generateSlugs() {
         count,
         kind,
         personalType,
+        industry: slugForm.value.industry,
         batchId: batchId || `local-${Date.now().toString(36)}`,
         batchName
       })
@@ -620,6 +626,16 @@ async function changeSlugKind(card, kind) {
   await refresh()
   flash(res.ok
     ? `Updated ${card.serial} → ${kindLabel(next)}`
+    : `Updated locally (${res.error || 'offline'})`)
+}
+
+async function changeSlugIndustry(card, industry) {
+  const next = industry === 'auto_dealer' ? 'auto_dealer' : ''
+  updateCard(card.serial, { industry: next })
+  const res = await apiUpdateCardIndustry(card.serial, next)
+  await refresh()
+  flash(res.ok
+    ? `Updated ${card.serial} → ${industryLabel(next)}`
     : `Updated locally (${res.error || 'offline'})`)
 }
 
@@ -1135,6 +1151,20 @@ watch(filteredSlugs, (rows) => {
               {{ k.label }}
             </button>
           </div>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="industry in INDUSTRY_OPTIONS"
+              :key="industry.id || 'general'"
+              type="button"
+              class="px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-colors"
+              :class="slugForm.industry === industry.id
+                ? 'bg-white text-black border-transparent'
+                : 'border-[var(--border)] text-gray-400 hover:border-zinc-500'"
+              @click="slugForm.industry = industry.id"
+            >
+              {{ industry.label }}
+            </button>
+          </div>
           <div v-if="slugForm.kind === 'personal'" class="flex flex-wrap gap-2">
             <button
               v-for="t in newPersonalTypeOptions"
@@ -1531,6 +1561,16 @@ watch(filteredSlugs, (rows) => {
                   @change="changeSlugKind(c, $event.target.value)"
                 >
                   <option v-for="k in kindOptions" :key="k.id" :value="k.id">{{ k.label }}</option>
+                </select>
+                <select
+                  :value="c.industry || ''"
+                  class="bg-transparent text-xs text-gray-300 border-none outline-none cursor-pointer"
+                  aria-label="Change industry"
+                  @change="changeSlugIndustry(c, $event.target.value)"
+                >
+                  <option v-for="industry in INDUSTRY_OPTIONS" :key="industry.id || 'general'" :value="industry.id">
+                    {{ industry.label }}
+                  </option>
                 </select>
                 <select
                   v-if="c.kind === 'personal'"
