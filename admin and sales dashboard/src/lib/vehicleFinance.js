@@ -71,9 +71,9 @@ export function monthlyVehiclePayment({ principal, annualRatePercent, termMonths
 
 export function formatNad(amount) {
   const value = Number(amount) || 0
-  return new Intl.NumberFormat('en-NA', {
-    style: 'currency',
-    currency: 'NAD',
+  const formatted = new Intl.NumberFormat('en-NA', {
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2
-  }).format(value)
+  }).format(Math.abs(value))
+  return `${value < 0 ? '-' : ''}N$${formatted}`
 }
