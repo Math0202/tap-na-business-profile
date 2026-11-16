@@ -17,7 +17,6 @@ const loading = ref(true)
 const profile = ref(null)
 const price = ref('')
 const deposit = ref('')
-const tradeIn = ref('')
 const fees = ref('')
 const balloon = ref('')
 const rate = ref(12)
@@ -32,21 +31,31 @@ const backTo = computed(() => {
 })
 
 const principal = computed(() => {
-  const amount =
-    num(price.value) - num(deposit.value) - num(tradeIn.value) + num(fees.value)
+  const amount = num(price.value) - num(deposit.value) + num(fees.value)
   return Math.max(0, amount)
 })
 
 const balloonAmount = computed(() => (finance.value.allowBalloon ? num(balloon.value) : 0))
+const paymentCount = computed(() => Math.max(1, Math.round(num(term.value))))
 
 const monthly = computed(() =>
   monthlyVehiclePayment({
     principal: principal.value,
     annualRatePercent: num(rate.value),
-    termMonths: num(term.value),
+    termMonths: paymentCount.value,
     balloon: balloonAmount.value
   })
 )
+
+const totalRepayment = computed(() => {
+  if (principal.value <= 0) return 0
+  return monthly.value * paymentCount.value + balloonAmount.value
+})
+
+const totalInterest = computed(() => {
+  if (principal.value <= 0) return 0
+  return Math.max(0, totalRepayment.value - principal.value)
+})
 
 function num(value) {
   const n = Number(String(value ?? '').replace(/,/g, ''))
@@ -104,25 +113,16 @@ onMounted(load)
 
     <template v-else>
       <h1 class="text-2xl font-bold tracking-tight">Vehicle financing</h1>
-      <p class="text-sm text-gray-400 mt-1">
-        Estimate a monthly installment. The dealer’s rate and term are filled in, and you can adjust them.
-      </p>
 
       <section class="mt-6 space-y-3">
         <label class="block">
           <span class="text-xs font-semibold uppercase tracking-wide text-gray-400">Vehicle price</span>
           <input v-model="price" inputmode="decimal" class="field-input mt-1 w-full rounded-2xl bg-zinc-900 border border-[var(--border)] px-4 py-3" placeholder="0">
         </label>
-        <div class="grid grid-cols-2 gap-3">
-          <label class="block">
-            <span class="text-xs font-semibold uppercase tracking-wide text-gray-400">Deposit</span>
-            <input v-model="deposit" inputmode="decimal" class="field-input mt-1 w-full rounded-2xl bg-zinc-900 border border-[var(--border)] px-4 py-3" placeholder="0">
-          </label>
-          <label class="block">
-            <span class="text-xs font-semibold uppercase tracking-wide text-gray-400">Trade-in</span>
-            <input v-model="tradeIn" inputmode="decimal" class="field-input mt-1 w-full rounded-2xl bg-zinc-900 border border-[var(--border)] px-4 py-3" placeholder="0">
-          </label>
-        </div>
+        <label class="block">
+          <span class="text-xs font-semibold uppercase tracking-wide text-gray-400">Deposit</span>
+          <input v-model="deposit" inputmode="decimal" class="field-input mt-1 w-full rounded-2xl bg-zinc-900 border border-[var(--border)] px-4 py-3" placeholder="0">
+        </label>
         <label class="block">
           <span class="text-xs font-semibold uppercase tracking-wide text-gray-400">Financed fees</span>
           <input v-model="fees" inputmode="decimal" class="field-input mt-1 w-full rounded-2xl bg-zinc-900 border border-[var(--border)] px-4 py-3" placeholder="0">
@@ -148,16 +148,20 @@ onMounted(load)
         <p class="text-lg font-semibold mt-1">{{ formatNad(principal) }}</p>
         <p class="text-[11px] uppercase tracking-wide text-gray-500 mt-4">Monthly payment</p>
         <p class="text-3xl font-bold tracking-tight mt-1">{{ formatNad(monthly) }}</p>
+        <div class="grid grid-cols-2 gap-3 mt-4">
+          <div>
+            <p class="text-[11px] uppercase tracking-wide text-gray-500">Total repayment</p>
+            <p class="text-lg font-semibold mt-1">{{ formatNad(totalRepayment) }}</p>
+          </div>
+          <div>
+            <p class="text-[11px] uppercase tracking-wide text-gray-500">Total interest</p>
+            <p class="text-lg font-semibold mt-1">{{ formatNad(totalInterest) }}</p>
+          </div>
+        </div>
         <p class="text-xs text-gray-500 mt-2">
-          {{ num(rate) }}% per year for {{ Math.max(1, Math.round(num(term))) }} months
+          {{ num(rate) }}% per year for {{ paymentCount }} months
           <template v-if="balloonAmount"> · balloon {{ formatNad(balloonAmount) }}</template>
         </p>
-      </section>
-
-      <section class="mt-6 space-y-2 text-sm text-gray-300">
-        <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">How it works</h2>
-        <p>Early in the loan, more of each payment goes to interest because the balance is still high. As the balance drops, more of the payment reduces the principal.</p>
-        <p v-if="finance.allowBalloon">A balloon payment lowers the monthly amount by leaving part of the principal until the final month. Interest is still charged on that deferred amount throughout the term.</p>
       </section>
 
       <section class="mt-6">
