@@ -407,6 +407,28 @@ input.field-input:focus,
   background: transparent !important;
   color: var(--text) !important;
 }
+.finance-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--field-bg);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 0.75rem;
+  padding: 0.7rem 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  line-height: 1.3;
+  min-width: 0;
+  outline: none;
+}
+.finance-input:focus {
+  border-color: var(--text);
+  box-shadow: 0 0 0 3px rgba(127, 127, 127, 0.15);
+}
+.finance-input::placeholder {
+  color: var(--text-muted);
+  font-weight: 400;
+}
 input.field-input:-webkit-autofill,
 input.field-input:-webkit-autofill:hover,
 input.field-input:-webkit-autofill:focus {

@@ -13,7 +13,7 @@ import { apiGetMyTeam, apiPublicCatalog, setApiToken } from '../lib/api'
 import { anyCatalogCartCount, catalogCartCount } from '../lib/profileCatalogCart'
 import { hideFloatingChrome } from '../lib/uiChrome'
 import { browsingPersonalSlug, personalPagePath } from '../lib/profilePaths'
-import { vehicleFinanceEnabled } from '../lib/vehicleFinance'
+import { normalizeIndustry, vehicleFinanceEnabled } from '../lib/vehicleFinance'
 
 const route = useRoute()
 const router = useRouter()
@@ -73,13 +73,32 @@ async function refreshTeamAccess() {
   }
 }
 
+function ownsViewedCard() {
+  if (!isLoggedIn()) return false
+  const mine = loadProfile()
+  const slug = browsingPersonalSlug(route)
+  const mineSlug = String(mine.shareSlug || '').trim()
+  if (slug && mineSlug && slug.toLowerCase() === mineSlug.toLowerCase()) return true
+  if (
+    !slug &&
+    ['/me', '/profile', '/catalog', '/catalog-cart', '/connections', '/team', '/finance', '/cards'].includes(route.path)
+  ) {
+    return true
+  }
+  const source = loadPublicProfile()
+  const myId = String(mine.remoteProfileId || '').trim()
+  const theirId = String(source?.remoteProfileId || source?.id || '').trim()
+  return !!(myId && theirId && myId === theirId)
+}
+
 function refreshAuth() {
   loggedIn.value = isLoggedIn()
   isTableOwner.value = isTableBusiness(loadProfile())
   viewedIsTable.value = isTableBusiness(loadViewedProfile())
   guestCartCount.value = anyCatalogCartCount()
   const source = route.path === '/profile' ? loadProfile() : loadPublicProfile()
-  financeOn.value = vehicleFinanceEnabled(source)
+  const ownIndustry = normalizeIndustry(loadProfile()?.industry) === 'auto_dealer'
+  financeOn.value = vehicleFinanceEnabled(source) || (ownsViewedCard() && ownIndustry)
   refreshCatalogVisibility()
 }
 
@@ -195,12 +214,6 @@ const navItems = computed(() => {
   }
 
   if (loggedIn.value) {
-    items.splice(1, 0, {
-      to: '/profile',
-      label: 'Edit Profile',
-      icon: 'edit',
-      match: (p) => p === '/profile'
-    })
     if (canUseTeam.value) {
       items.push({
         to: '/team',
@@ -209,12 +222,6 @@ const navItems = computed(() => {
         match: (p) => p === '/team'
       })
     }
-    items.push({
-      to: '/connections',
-      label: 'Contacts',
-      icon: 'contacts',
-      match: (p) => p === '/connections'
-    })
   } else {
     if (showCartNav.value) {
       const cartIndex = items.findIndex((i) => i.label === 'Catalog')

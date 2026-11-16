@@ -215,9 +215,18 @@ async function refresh() {
   }
 }
 
+function isOwnerRow(member) {
+  const ownerId = String(team.value?.ownerProfileId || '').trim()
+  return !!(ownerId && String(member?.profileId || '').trim() === ownerId)
+}
+
+const hasOtherMembers = computed(() => members.value.some((m) => !isOwnerRow(m) && !m.deleted))
+
+const showMembers = computed(() => canManage.value && hasOtherMembers.value)
+
 const visibleMembers = computed(() => {
-  if (showDeleted.value) return members.value
-  return members.value.filter((m) => !m.deleted)
+  const list = showDeleted.value ? members.value : members.value.filter((m) => !m.deleted)
+  return list.filter((m) => !isOwnerRow(m))
 })
 
 function canEditMember(member) {
@@ -660,9 +669,6 @@ onMounted(() => {
       <header class="pb-4">
         <BrandMark size="sm" class="mb-3" />
         <h1 class="text-2xl font-bold tracking-tight">Team</h1>
-        <p class="text-gray-400 text-sm mt-1">
-          Business and Executive seats, roles, and ownership. Members claim their cards to join.
-        </p>
       </header>
 
       <p v-if="loading" class="text-sm text-gray-500 py-8 text-center">Loading…</p>
@@ -696,69 +702,6 @@ onMounted(() => {
             </div>
             <p class="text-[11px] text-gray-500 mt-2">After you accept, you cannot leave the team yourself.</p>
           </div>
-        </div>
-
-        <div class="card-item-bg rounded-2xl p-4 mb-4 space-y-3">
-          <label class="field-label" for="team-name">Team name</label>
-          <input
-            id="team-name"
-            v-model="teamName"
-            type="text"
-            class="field-input w-full"
-            :disabled="!canManage || saving"
-            maxlength="120"
-          >
-          <button
-            v-if="canManage"
-            type="button"
-            class="w-full py-2.5 rounded-full bg-zinc-800 text-sm font-semibold disabled:opacity-50"
-            :disabled="saving"
-            @click="saveTeamName"
-          >
-            Save name
-          </button>
-
-          <p v-if="canManage" class="text-xs text-gray-300 font-medium pt-1">
-            You are the Executive team lead (1 lead at a time).
-          </p>
-          <div
-            v-else-if="isOwner"
-            class="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 space-y-1"
-          >
-            <p class="text-xs text-amber-200 font-semibold">Executive Exclusive required for team manager tools</p>
-            <p class="text-[11px] text-amber-200/80 leading-relaxed">
-              Deactivate profiles, company details, invites, and sharing are Executive lead features.
-              Upgrade your card or transfer leadership to an Executive teammate.
-            </p>
-          </div>
-          <p v-else class="text-xs text-gray-500 pt-1">
-            Your role: <span class="text-gray-300">{{ personalTypeLabel(myRole) }}</span>
-            · Package: <span class="text-gray-300">{{ personalTypeLabel(packageCeiling) }}</span>
-          </p>
-        </div>
-
-        <div v-if="canManage" class="card-item-bg rounded-2xl p-4 mb-4 space-y-3">
-          <h2 class="text-sm font-semibold">Company details</h2>
-          <p class="text-xs text-gray-500 leading-relaxed">
-            Shared company name for your team. Logo and bio stay on your profile and can be shared with members below.
-          </p>
-          <label class="field-label" for="company-name">Company name</label>
-          <input
-            id="company-name"
-            v-model="companyName"
-            type="text"
-            class="field-input w-full"
-            :disabled="saving"
-            maxlength="160"
-          >
-          <button
-            type="button"
-            class="w-full py-2.5 rounded-full bg-zinc-800 text-sm font-semibold disabled:opacity-50"
-            :disabled="saving"
-            @click="saveCompanyDetails"
-          >
-            Save company details
-          </button>
         </div>
 
         <div v-if="canUseAssist" class="card-item-bg rounded-2xl p-4 mb-4 space-y-3">
@@ -855,74 +798,7 @@ onMounted(() => {
           </button>
         </div>
 
-        <div v-if="canManage" class="card-item-bg rounded-2xl p-4 mb-6 space-y-3">
-          <h2 class="text-sm font-semibold">Add member by {{ CARD_ID_LABEL.toLowerCase() }}</h2>
-          <p class="text-xs text-gray-500">{{ CARD_ID_HINT }}</p>
-          <input v-model="addSlug" type="text" class="field-input w-full" :placeholder="CARD_ID_LABEL" autocomplete="off">
-          <input v-model="addEmail" type="email" class="field-input w-full" placeholder="Email (required if unclaimed)">
-          <select v-model="addRole" class="field-input w-full bg-transparent">
-            <option v-for="r in roleOptions" :key="r.id" :value="r.id">{{ r.label }}</option>
-          </select>
-
-          <!-- Member My Choice Toggle Button for Add Member -->
-          <div class="pt-1">
-            <button
-              type="button"
-              class="w-full py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-between border transition"
-              :class="addMyChoiceOpen ? 'bg-zinc-800 text-sky-300 border-zinc-700' : 'bg-zinc-900/60 text-gray-400 border-zinc-800 hover:text-gray-200'"
-              @click="addMyChoiceOpen = !addMyChoiceOpen"
-            >
-              <span class="flex items-center gap-1.5">
-                <span class="material-symbols-outlined text-[16px]">tune</span>
-                <span>Member sharing: {{ addMyChoiceOpen ? 'My choice (custom)' : 'All shared (default)' }}</span>
-              </span>
-              <span class="material-symbols-outlined text-[16px]">{{ addMyChoiceOpen ? 'expand_less' : 'expand_more' }}</span>
-            </button>
-            <div v-if="addMyChoiceOpen" class="mt-2.5 p-3 rounded-xl bg-zinc-900/90 border border-zinc-800 space-y-2">
-              <p class="text-[11px] text-gray-400">Choose what to share with this new member:</p>
-              <div class="grid grid-cols-2 gap-1.5 text-xs">
-                <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-zinc-800/60 border border-zinc-700/60">
-                  <input v-model="addSharing.shareCatalog" type="checkbox" class="rounded border-zinc-600 text-sky-500">
-                  <span class="text-gray-200">Catalog</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-zinc-800/60 border border-zinc-700/60">
-                  <input v-model="addSharing.shareBio" type="checkbox" class="rounded border-zinc-600 text-sky-500">
-                  <span class="text-gray-200">Company Bio</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-zinc-800/60 border border-zinc-700/60">
-                  <input v-model="addSharing.shareBanner" type="checkbox" class="rounded border-zinc-600 text-sky-500">
-                  <span class="text-gray-200">Profile Banner</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-zinc-800/60 border border-zinc-700/60">
-                  <input v-model="addSharing.shareWebsite" type="checkbox" class="rounded border-zinc-600 text-sky-500">
-                  <span class="text-gray-200">Website</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-zinc-800/60 border border-zinc-700/60">
-                  <input v-model="addSharing.shareSocialLinks" type="checkbox" class="rounded border-zinc-600 text-sky-500">
-                  <span class="text-gray-200">Social Links</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-zinc-800/60 border border-zinc-700/60">
-                  <input v-model="addSharing.shareContacts" type="checkbox" class="rounded border-zinc-600 text-sky-500">
-                  <span class="text-gray-200">Team Contacts</span>
-                </label>
-                <label class="col-span-2 flex items-center gap-2 cursor-pointer p-2 rounded-lg bg-zinc-800/60 border border-zinc-700/60">
-                  <input v-model="addSharing.shareCalendarCrm" type="checkbox" class="rounded border-zinc-600 text-sky-500">
-                  <span class="text-gray-200">Calendar &amp; CRM</span>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            class="w-full py-3 rounded-full bg-white text-black text-sm font-bold disabled:opacity-50"
-            :disabled="saving"
-            @click="addMember"
-          >
-            Add to team
-          </button>
-        </div>
-
+        <template v-if="showMembers">
         <div class="flex items-center justify-between gap-3 mb-2">
           <p class="text-[10px] uppercase tracking-wide text-gray-500">Members</p>
           <label class="inline-flex items-center gap-2 text-[11px] text-gray-400">
@@ -1144,6 +1020,7 @@ onMounted(() => {
             </div>
           </li>
         </ul>
+        </template>
       </template>
 
       <Teleport to="body">
