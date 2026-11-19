@@ -249,16 +249,12 @@ export function logout() {
 }
 
 /**
- * Returns true if access is allowed. Does NOT navigate —
- * router guard handles redirects when this returns false.
+ * Returns true if a real session exists. Does NOT navigate —
+ * router guard redirects to login when this returns false.
+ * Never invents a setup session; guests must sign in.
  */
 export function requireLogin() {
-  if (isLoggedIn()) return true
-  if (!hasCredentials()) {
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ loggedIn: true, at: Date.now(), setup: true }))
-    return true
-  }
-  return false
+  return isLoggedIn()
 }
 
 export function deleteProfile() {

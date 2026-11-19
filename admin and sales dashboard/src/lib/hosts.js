@@ -34,6 +34,23 @@ export function adminAppUrl(path = '/admin') {
   return ADMIN_ORIGIN + (p.startsWith('/') ? p : `/${p}`)
 }
 
+/** Canonical login for every role lives on the public apex. */
+export function publicLoginUrl(next = '') {
+  const raw = String(next || '').trim()
+  const safe =
+    raw &&
+    raw.startsWith('/') &&
+    !raw.startsWith('//') &&
+    raw !== '/login' &&
+    raw !== '/shop/login' &&
+    raw !== '/admin/login'
+      ? raw
+      : ''
+  const q = safe ? `?next=${encodeURIComponent(safe)}` : ''
+  if (typeof window !== 'undefined' && isLocalHost()) return `/login${q}`
+  return `${TABLE_ORIGIN}/login${q}`
+}
+
 /** @deprecated Subdomains are no longer used for cards — always false. */
 export function isPersonalHost(_hostname = currentHostname()) {
   return false

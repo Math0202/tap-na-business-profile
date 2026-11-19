@@ -16,7 +16,7 @@ import {
   isStaffLoggedIn,
   staffLogin
 } from '../lib/staffAuth'
-import { navigateAfterLogin, staffHomePath, profileHomePath } from '../lib/authRedirect'
+import { continueIfAlreadyLoggedIn, navigateAfterLogin, staffHomePath, profileHomePath } from '../lib/authRedirect'
 import { hydrateLinkedCardsFromApi } from '../lib/cardLinkStore'
 
 const route = useRoute()
@@ -46,21 +46,10 @@ onMounted(() => {
     resetMode.value = true
   }
 
-  // Stay on this host until login succeeds. Profile owners remain on apex;
-  // staff are sent to admin.tapnam.com only after staffLogin confirms them.
+  // Already signed in? Continue by role (staff → admin host, owners → profile/venue).
   const next = typeof route.query.next === 'string' ? route.query.next : ''
-  const staff = isStaffLoggedIn()
-  const profile = isLoggedIn()
-
-  if ((profile || staff) && route.query.claimed !== '1') {
-    if (staff) navigateAfterLogin(router, 'staff', { next })
-    else {
-      const p = loadProfile()
-      navigateAfterLogin(router, 'profile', {
-        cardType: isTableBusiness(p) ? 'table' : 'personal',
-        next
-      })
-    }
+  if (route.query.claimed !== '1') {
+    continueIfAlreadyLoggedIn(router, next)
   }
 })
 

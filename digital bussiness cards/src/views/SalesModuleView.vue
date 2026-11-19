@@ -2184,7 +2184,8 @@ async function quickUpdateClientField(field, value) {
 
 async function logoutStaff() {
   await staffLogout()
-  router.replace('/login')
+  const { goToLogin } = await import('../lib/authRedirect')
+  goToLogin()
 }
 
 onMounted(async () => {

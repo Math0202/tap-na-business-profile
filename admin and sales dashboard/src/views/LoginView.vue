@@ -16,7 +16,7 @@ import {
   isStaffLoggedIn,
   staffLogin
 } from '../lib/staffAuth'
-import { navigateAfterLogin, staffHomePath, profileHomePath } from '../lib/authRedirect'
+import { continueIfAlreadyLoggedIn, navigateAfterLogin, staffHomePath, profileHomePath } from '../lib/authRedirect'
 import { hydrateLinkedCardsFromApi } from '../lib/cardLinkStore'
 
 const route = useRoute()
@@ -46,25 +46,10 @@ onMounted(() => {
     resetMode.value = true
   }
 
-  // Stay on this host until login succeeds. Profile owners remain on apex;
-  // staff are sent to admin.tapnam.com only after staffLogin confirms them.
+  // Already signed in? Continue by role (staff → admin host, owners → profile/venue).
   const next = typeof route.query.next === 'string' ? route.query.next : ''
-  const staff = isStaffLoggedIn()
-  const profile = isLoggedIn()
-
-  // #region agent log
-  fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b5200b'},body:JSON.stringify({sessionId:'b5200b',runId:'post-fix',hypothesisId:'A',location:'admin/LoginView.vue:onMounted',message:'admin login auto-nav decision',data:{host:window.location.hostname,path:route.fullPath,next,staff,profile,willAutoNav:(staff||profile)&&route.query.claimed!=='1',hasToken:!!localStorage.getItem('tapna.apiToken')},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-
-  if ((profile || staff) && route.query.claimed !== '1') {
-    if (staff) navigateAfterLogin(router, 'staff', { next })
-    else {
-      const p = loadProfile()
-      navigateAfterLogin(router, 'profile', {
-        cardType: isTableBusiness(p) ? 'table' : 'personal',
-        next
-      })
-    }
+  if (route.query.claimed !== '1') {
+    continueIfAlreadyLoggedIn(router, next)
   }
 })
 

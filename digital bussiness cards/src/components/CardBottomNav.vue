@@ -263,7 +263,7 @@ function onLogout() {
   logout()
   setApiToken('')
   canUseTeam.value = false
-  router.replace('/login')
+  import('../lib/authRedirect').then((m) => m.goToLogin())
 }
 
 onUnmounted(() => {

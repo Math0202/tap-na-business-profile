@@ -5,7 +5,6 @@ import BrandMark from '../components/BrandMark.vue'
 import LazyMore from '../components/LazyMore.vue'
 import AdminBottomNav from '../components/AdminBottomNav.vue'
 import SalesPerformanceCharts from '../components/SalesPerformanceCharts.vue'
-import AgentPerformancePanel from '../components/AgentPerformancePanel.vue'
 import {
   listAgents,
   saveAgent,
@@ -66,8 +65,6 @@ import {
   formatSalesStatus,
   cashCategoryLabel,
   listClients,
-  clientAddedDirectly,
-  getClient,
   saveClient,
   deleteClient,
   canDeleteCrmClient,
@@ -84,6 +81,7 @@ import {
   deleteClientTodo,
   formatTodoDue,
   todoIsDueOrOverdue,
+  getClient,
   clientCrmSummary,
   clientActivityLog,
   sampleCardStatusLabel,
@@ -176,7 +174,7 @@ function reloadTodos() {
 }
 function nextFollowUpLabel(clientId) {
   const next = todos.value.find((t) => t.clientId === clientId && t.status === 'open')
-  return next ? formatTodoDue(next.dueAt) : '—'
+  return next ? formatTodoDue(next.dueAt) : ''
 }
 function clientTodoList(clientId) {
   const rows = todos.value.filter((t) => t.clientId === clientId)
@@ -300,43 +298,10 @@ const crmSampleFilter = ref('all')
 const crmStageFilter = ref('all')
 const crmOwnerFilter = ref('all')
 const crmReferralFilter = ref('all')
-const crmVisitFilter = ref('all')
 const clientForm = ref(emptyClient())
 const noteDraft = ref('')
 const meetingForm = ref({ meetingAt: '', title: '', summary: '' })
 const showMeetingForm = ref(false)
-/** After creating a quote/sale from CRM, reopen this client detail. */
-const reopenClientIdAfterDoc = ref('')
-
-/** Only one Sales dialog visible at a time. */
-function closeAllDialogs() {
-  showSaleForm.value = false
-  showQuoteForm.value = false
-  showProductForm.value = false
-  showCashForm.value = false
-  showAgentForm.value = false
-  showInvoice.value = false
-  showQuoteEmail.value = false
-  showCardsModal.value = false
-  showClientForm.value = false
-  showClientDetail.value = false
-  showMeetingForm.value = false
-}
-
-function openDialog(name) {
-  closeAllDialogs()
-  if (name === 'sale') showSaleForm.value = true
-  else if (name === 'quote') showQuoteForm.value = true
-  else if (name === 'product') showProductForm.value = true
-  else if (name === 'cash') showCashForm.value = true
-  else if (name === 'agent') showAgentForm.value = true
-  else if (name === 'invoice') showInvoice.value = true
-  else if (name === 'quoteEmail') showQuoteEmail.value = true
-  else if (name === 'cards') showCardsModal.value = true
-  else if (name === 'clientForm') showClientForm.value = true
-  else if (name === 'clientDetail') showClientDetail.value = true
-  else if (name === 'meeting') showMeetingForm.value = true
-}
 
 function emptyClient() {
   return {
@@ -349,24 +314,9 @@ function emptyClient() {
     sampleCardStatus: 'none',
     pipelineStatus: 'pending',
     saleStage: 'no_sale',
-    visited: false,
     ownerAgentId: '',
-    createdByAgentId: '',
     isReferral: false,
     referredByClientId: ''
-  }
-}
-
-/** Resolve creator name/email from an agent id for admin "Added by" edits. */
-function creatorFieldsFromAgentId(agentId) {
-  const aid = String(agentId || '').trim()
-  if (!aid) return { createdByAgentId: '', createdByName: '', createdByEmail: '' }
-  const a =
-    agents.value.find((x) => x.id === aid) || listAgents({ includeDeleted: true }).find((x) => x.id === aid)
-  return {
-    createdByAgentId: aid,
-    createdByName: a?.name || agentName(aid),
-    createdByEmail: a?.email || ''
   }
 }
 
@@ -374,7 +324,6 @@ function emptySale() {
   return {
     id: '',
     agentId: '',
-    clientId: '',
     customerName: '',
     customerPhone: '',
     customerEmail: '',
@@ -397,7 +346,6 @@ function emptyQuote() {
   return {
     id: '',
     agentId: '',
-    clientId: '',
     customerName: '',
     customerPhone: '',
     customerEmail: '',
@@ -547,6 +495,7 @@ async function refresh() {
     // Agents see all CRM clients; Quotes/Invoices amounts stay private via detail API + local finance scope
     clients.value = listClients({ includeDeleted: false })
     reloadTodos()
+    reloadTodos()
   } else {
     const visible = (list) => (includeDeleted ? list : list.filter((x) => !x.deleted))
     agents.value = visible(allAgents)
@@ -562,6 +511,7 @@ async function refresh() {
     products.value = visible(products.value)
     stats.value = getSalesStats()
     clients.value = listClients({ includeDeleted: false })
+    reloadTodos()
     reloadTodos()
   }
 
@@ -834,6 +784,7 @@ const agentRows = computed(() =>
 const LAZY_PAGE = 24
 const lazyLimit = reactive({
   overview: LAZY_PAGE,
+  overviewAgents: LAZY_PAGE,
   sales: LAZY_PAGE,
   quotes: LAZY_PAGE,
   invoices: LAZY_PAGE,
@@ -854,6 +805,7 @@ function loadMore(key, total) {
 }
 
 const visibleDueTodos = computed(() => dueTodos.value.slice(0, lazyLimit.overview))
+const visibleOverviewAgents = computed(() => agentRows.value.slice(0, lazyLimit.overviewAgents))
 const visibleSales = computed(() => filteredSales.value.slice(0, lazyLimit.sales))
 const visibleQuotes = computed(() => filteredQuotes.value.slice(0, lazyLimit.quotes))
 const visibleInvoices = computed(() => filteredInvoices.value.slice(0, lazyLimit.invoices))
@@ -866,15 +818,10 @@ watch([query, agentFilter, salesListMode], () => {
   resetLazy('sales', 'quotes', 'invoices', 'products', 'cash')
 })
 watch(
-  [crmQuery, crmPipelineFilter, crmSampleFilter, crmStageFilter, crmOwnerFilter, crmReferralFilter, crmVisitFilter],
+  [crmQuery, crmPipelineFilter, crmSampleFilter, crmStageFilter, crmOwnerFilter, crmReferralFilter],
   () => resetLazy('crm')
 )
 watch([cashTypeFilter, cashCategoryFilter, cashFrom, cashTo], () => resetLazy('cash'))
-
-const performanceMeetings = computed(() => {
-  clients.value
-  return listClientMeetings({ includeDeleted: false })
-})
 
 const openQuotes = computed(() =>
   quotes.value.filter((q) => q.status === 'draft' || q.status === 'sent' || q.status === 'accepted')
@@ -1011,26 +958,7 @@ function openNewSale() {
     const active = agents.value.find((a) => a.active)
     if (active) saleForm.value.agentId = active.id
   }
-  openDialog('sale')
-}
-
-function openNewSaleFromClient(client) {
-  if (!client?.id) return
-  reopenClientIdAfterDoc.value = client.id
-  openNewSale()
-  saleForm.value = {
-    ...saleForm.value,
-    clientId: client.id,
-    customerName: client.name || '',
-    customerEmail: client.email || '',
-    customerPhone: client.phone || '',
-    customerAddress: client.location || '',
-    agentId: isSalesScoped.value
-      ? myAgentId.value
-      : client.ownerAgentId || saleForm.value.agentId
-  }
-  tab.value = 'sales'
-  salesListMode.value = 'orders'
+  showSaleForm.value = true
 }
 
 function openEditSale(s) {
@@ -1038,7 +966,6 @@ function openEditSale(s) {
   saleForm.value = {
     id: s.id,
     agentId: s.agentId,
-    clientId: s.clientId || '',
     customerName: s.customerName,
     customerPhone: s.customerPhone,
     customerEmail: s.customerEmail,
@@ -1054,7 +981,7 @@ function openEditSale(s) {
     quoteId: s.quoteId || ''
   }
   resetSaleProductPicker(saleForm.value.lines)
-  openDialog('sale')
+  showSaleForm.value = true
 }
 
 function openInvoiceModal(invoice) {
@@ -1064,7 +991,7 @@ function openInvoiceModal(invoice) {
   const remaining = invoiceRemaining(invoice)
   invoicePaymentAmount.value = remaining > 0.004 ? String(remaining) : ''
   invoicePaymentDate.value = new Date().toISOString().slice(0, 16)
-  openDialog('invoice')
+  showInvoice.value = true
 }
 
 function openInvoiceForSale(sale) {
@@ -1097,7 +1024,7 @@ async function refreshSaleCards(sale) {
 
 async function openCardsForSale(sale) {
   cardsSale.value = sale
-  openDialog('cards')
+  showCardsModal.value = true
   await refreshSaleCards(sale)
 }
 
@@ -1172,7 +1099,6 @@ async function submitSale(e) {
     ...saleForm.value,
     lines,
     id: editingSaleId.value || undefined,
-    clientId: saleForm.value.clientId || undefined,
     agentId: isSalesScoped.value ? myAgentId.value : saleForm.value.agentId,
     soldAt: saleForm.value.soldAt
       ? new Date(saleForm.value.soldAt).toISOString()
@@ -1185,25 +1111,12 @@ async function submitSale(e) {
       flash(result.error || 'Sale saved locally, but cloud sync failed')
     }
     showSaleForm.value = false
-    if (saleForm.value.clientId && !wasEdit) {
-      await saveClient({
-        id: saleForm.value.clientId,
-        saleStage: 'invoice'
-      })
-    }
     await refresh()
     if (!wasEdit && result.sale) {
       provisionCardsForSale(result.sale)
       flash(result.ok ? 'Sale recorded · invoice & card codes ready' : 'Sale saved (sync issue — retry refresh)')
-      if (result.invoice) {
-        // Prefer invoice dialog alone — reopen CRM after they close it via list
-        reopenClientIdAfterDoc.value = ''
-        openInvoiceModal(result.invoice)
-      } else {
-        await reopenCrmClientIfNeeded()
-      }
+      if (result.invoice) openInvoiceModal(result.invoice)
     } else {
-      await reopenCrmClientIfNeeded()
       flash(wasEdit ? (result.ok ? 'Sale updated' : 'Sale updated locally') : 'Sale recorded')
     }
   } finally {
@@ -1240,33 +1153,7 @@ function openNewQuote() {
   }
   salesListMode.value = 'quotes'
   tab.value = 'sales'
-  openDialog('quote')
-}
-
-function openNewQuoteFromClient(client) {
-  if (!client?.id) return
-  reopenClientIdAfterDoc.value = client.id
-  openNewQuote()
-  quoteForm.value = {
-    ...quoteForm.value,
-    clientId: client.id,
-    customerName: client.name || '',
-    customerEmail: client.email || '',
-    customerPhone: client.phone || '',
-    customerAddress: client.location || '',
-    agentId: isSalesScoped.value
-      ? myAgentId.value
-      : client.ownerAgentId || quoteForm.value.agentId
-  }
-}
-
-async function reopenCrmClientIfNeeded() {
-  const id = String(reopenClientIdAfterDoc.value || '').trim()
-  reopenClientIdAfterDoc.value = ''
-  if (!id) return
-  tab.value = 'crm'
-  const c = clients.value.find((x) => x.id === id) || getClient(id)
-  if (c) await openClientDetail(c)
+  showQuoteForm.value = true
 }
 
 function openEditQuote(q) {
@@ -1274,7 +1161,6 @@ function openEditQuote(q) {
   quoteForm.value = {
     id: q.id,
     agentId: q.agentId,
-    clientId: q.clientId || '',
     customerName: q.customerName,
     customerPhone: q.customerPhone,
     customerEmail: q.customerEmail,
@@ -1288,7 +1174,7 @@ function openEditQuote(q) {
     extraAmount: Number(q.extraAmount) || 0
   }
   resetQuoteProductPicker(quoteForm.value.lines)
-  openDialog('quote')
+  showQuoteForm.value = true
 }
 
 function submitQuote(e) {
@@ -1302,27 +1188,18 @@ function submitQuote(e) {
     flash('Add at least one product with quantity')
     return
   }
-  const wasEdit = Boolean(editingQuoteId.value)
-  const clientId = String(quoteForm.value.clientId || '').trim()
   saveQuote({
     ...quoteForm.value,
     lines,
     id: editingQuoteId.value || undefined,
-    clientId: clientId || undefined,
     agentId: isSalesScoped.value ? myAgentId.value : quoteForm.value.agentId,
     validUntil: quoteForm.value.validUntil
       ? new Date(quoteForm.value.validUntil + 'T23:59:59').toISOString()
       : ''
   })
   showQuoteForm.value = false
-  ;(async () => {
-    if (clientId && !wasEdit) {
-      await saveClient({ id: clientId, saleStage: 'quote' })
-    }
-    await refresh()
-    await reopenCrmClientIfNeeded()
-    flash(wasEdit ? 'Quote updated' : 'Quote created')
-  })()
+  refresh()
+  flash(editingQuoteId.value ? 'Quote updated' : 'Quote created')
 }
 
 function removeQuote(id) {
@@ -1376,7 +1253,7 @@ function openEditProduct(p) {
   }
   productVideoUrl.value = p.video && !String(p.video).startsWith('data:') ? p.video : ''
   productMediaFeedback.value = ''
-  openDialog('product')
+  showProductForm.value = true
 }
 
 function openNewProduct() {
@@ -1388,7 +1265,7 @@ function openNewProduct() {
   productForm.value = emptyProduct()
   productVideoUrl.value = ''
   productMediaFeedback.value = ''
-  openDialog('product')
+  showProductForm.value = true
 }
 
 const productImageInput = ref(null)
@@ -1637,7 +1514,7 @@ async function markInvoicePaid() {
 function openQuoteEmail(q) {
   activeQuote.value = q
   quoteEmailTo.value = q.customerEmail || ''
-  openDialog('quoteEmail')
+  showQuoteEmail.value = true
 }
 
 async function sendActiveQuote() {
@@ -1665,7 +1542,7 @@ function openNewCash() {
   if (isSalesScoped.value && myAgentId.value) {
     cashForm.value.agentId = myAgentId.value
   }
-  openDialog('cash')
+  showCashForm.value = true
 }
 
 function openEditCash(c) {
@@ -1681,7 +1558,7 @@ function openEditCash(c) {
     saleId: c.saleId || '',
     at: toDatetimeLocalValue(c.at)
   }
-  openDialog('cash')
+  showCashForm.value = true
 }
 
 async function submitCash(e) {
@@ -1751,7 +1628,7 @@ function openNewAgent() {
   if (!canManageAgents.value) return
   editingAgentId.value = ''
   agentForm.value = emptyAgent()
-  openDialog('agent')
+  showAgentForm.value = true
 }
 
 function openEditAgent(a) {
@@ -1771,7 +1648,7 @@ function openEditAgent(a) {
     loginEmail: a.loginEmail || a.email || '',
     loginPassword: ''
   }
-  openDialog('agent')
+  showAgentForm.value = true
 }
 
 async function submitAgent(e) {
@@ -1896,36 +1773,11 @@ function statusClass(status) {
   return 'bg-red-500/15 text-red-300'
 }
 
-function isDirectCrmClient(client) {
-  return clientAddedDirectly(client, {
-    quotes: quotes.value,
-    invoices: invoices.value,
-    orders: sales.value,
-    cash: cash.value
-  })
-}
-
-function showVisitedOnClientForm() {
-  if (!editingClientId.value) return true
-  const existing = clients.value.find((c) => c.id === editingClientId.value)
-  return existing ? isDirectCrmClient(existing) : false
-}
-
-const funnelClients = computed(() =>
-  clients.value.map((client) => ({
-    ...client,
-    addedDirectly: isDirectCrmClient(client)
-  }))
-)
-
 const filteredClients = computed(() => {
   const q = crmQuery.value.trim().toLowerCase()
   const list = clients.value.filter((c) => {
     if (crmPipelineFilter.value !== 'all' && c.pipelineStatus !== crmPipelineFilter.value) return false
     if (crmSampleFilter.value !== 'all' && c.sampleCardStatus !== crmSampleFilter.value) return false
-    const directCrm = isDirectCrmClient(c)
-    if (crmVisitFilter.value === 'visited' && (!directCrm || !c.visited)) return false
-    if (crmVisitFilter.value === 'not_visited' && (!directCrm || c.visited)) return false
     if (crmStageFilter.value !== 'all') {
       // Prefer enriched saleStage from finance refresh (shared issuance); fall back to own docs
       const stage =
@@ -2038,7 +1890,7 @@ function openNewClient({ asReferral = false } = {}) {
     ownerAgentId: myAgentId.value || '',
     isReferral: !!asReferral
   }
-  openDialog('clientForm')
+  showClientForm.value = true
 }
 
 function openEditClient(c) {
@@ -2057,13 +1909,11 @@ function openEditClient(c) {
     sampleCardStatus: c.sampleCardStatus || 'none',
     pipelineStatus: c.pipelineStatus || 'pending',
     saleStage: c.saleStage || 'no_sale',
-    visited: c.visited === true,
     ownerAgentId: c.ownerAgentId || '',
-    createdByAgentId: c.createdByAgentId || '',
     isReferral: !!c.isReferral,
     referredByClientId: c.referredByClientId || ''
   }
-  openDialog('clientForm')
+  showClientForm.value = true
 }
 
 async function submitClientForm() {
@@ -2086,32 +1936,17 @@ async function submitClientForm() {
   clientSaving.value = true
   try {
     const staff = getStaffUser()
-    const isEdit = !!editingClientId.value
-    const adminReassign = isEdit && canManageSalesOrg()
-    const creatorPatch = adminReassign
-      ? { ...creatorFieldsFromAgentId(clientForm.value.createdByAgentId), replaceCreator: true }
-      : isEdit
-        ? {}
-        : {
-            createdByAgentId: myAgentId.value || '',
-            createdByName: staff?.name || staff?.email || '',
-            createdByEmail: staff?.email || ''
-          }
-    const res = await saveClient({
+    saveClient({
       ...clientForm.value,
       name,
-      ownerAgentId: canManageSalesOrg()
-        ? clientForm.value.ownerAgentId || ''
-        : clientForm.value.ownerAgentId || myAgentId.value || '',
-      ...creatorPatch
+      ownerAgentId: clientForm.value.ownerAgentId || myAgentId.value || '',
+      createdByAgentId: editingClientId.value ? undefined : myAgentId.value || '',
+      createdByName: editingClientId.value ? undefined : staff?.name || staff?.email || '',
+      createdByEmail: editingClientId.value ? undefined : staff?.email || ''
     })
-    if (res && res.ok === false) {
-      flash(res.error || 'Saved locally — could not sync online')
-      return
-    }
     showClientForm.value = false
     await refresh()
-    flash(isEdit ? 'Client updated' : 'Client added')
+    flash(editingClientId.value ? 'Client updated' : 'Client added')
   } finally {
     clientSaving.value = false
   }
@@ -2123,7 +1958,7 @@ async function removeClient(c) {
     return
   }
   if (!confirm(`Remove ${c.name || 'this client'} from CRM?`)) return
-  const result = await deleteClient(c.id)
+  const result = deleteClient(c.id)
   if (result && result.ok === false) {
     flash(result.error || 'Could not remove client')
     return
@@ -2138,7 +1973,7 @@ async function removeClient(c) {
 
 async function openClientDetail(c) {
   activeClient.value = c
-  openDialog('clientDetail')
+  showClientDetail.value = true
   clientDetailLoading.value = true
   const scope = { agentId: clientFinanceScope() }
   clientActivity.value = clientActivityLog(c.id, scope)
@@ -2216,17 +2051,13 @@ async function addClientNote() {
   const body = noteDraft.value.trim()
   if (!body || !activeClient.value) return
   const staff = getStaffUser()
-  const res = await saveClientNote({
+  saveClientNote({
     clientId: activeClient.value.id,
     body,
     createdByAgentId: myAgentId.value || '',
     createdByName: staff?.name || staff?.email || '',
     createdByEmail: staff?.email || ''
   })
-  if (res && res.ok === false) {
-    flash(res.error || 'Saved locally — could not sync online')
-    return
-  }
   noteDraft.value = ''
   await refresh()
   await openClientDetail(activeClient.value)
@@ -2235,60 +2066,10 @@ async function addClientNote() {
 
 async function removeClientNote(noteId) {
   if (!confirm('Delete this note?')) return
-  const res = await deleteClientNote(noteId)
-  if (res && res.ok === false) {
-    flash(res.error || 'Could not delete note online')
-    return
-  }
+  deleteClientNote(noteId)
   await refresh()
   if (activeClient.value) await openClientDetail(activeClient.value)
   flash('Note deleted')
-}
-
-function openAddMeeting() {
-  meetingForm.value = {
-    meetingAt: new Date().toISOString().slice(0, 16),
-    title: '',
-    summary: ''
-  }
-  openDialog('meeting')
-}
-
-async function submitMeeting() {
-  if (!activeClient.value?.id) return
-  const staff = getStaffUser()
-  const at = meetingForm.value.meetingAt
-    ? new Date(meetingForm.value.meetingAt).toISOString()
-    : new Date().toISOString()
-  const res = await saveClientMeeting({
-    clientId: activeClient.value.id,
-    meetingAt: at,
-    title: meetingForm.value.title || 'Meeting',
-    summary: meetingForm.value.summary || '',
-    createdByAgentId: myAgentId.value || '',
-    createdByName: staff?.name || staff?.email || '',
-    createdByEmail: staff?.email || ''
-  })
-  if (res && res.ok === false) {
-    flash(res.error || 'Saved locally — could not sync online')
-    return
-  }
-  showMeetingForm.value = false
-  await refresh()
-  await openClientDetail(activeClient.value)
-  flash('Meeting logged')
-}
-
-async function removeClientMeeting(meetingId) {
-  if (!confirm('Delete this meeting?')) return
-  const res = await deleteClientMeeting(meetingId)
-  if (res && res.ok === false) {
-    flash(res.error || 'Could not delete meeting online')
-    return
-  }
-  await refresh()
-  if (activeClient.value) await openClientDetail(activeClient.value)
-  flash('Meeting deleted')
 }
 
 async function addClientTodo() {
@@ -2341,10 +2122,48 @@ async function rescheduleClientTodo(todo, value) {
   if (!dueAt) return
   const res = await saveClientTodo({ ...todo, dueAt, status: todo.status })
   if (res && res.ok === false) {
-    flash(res.error || 'Could not change the date')
+    flash(res.error || 'Could not update todo')
     return
   }
   reloadTodos()
+}
+
+function openAddMeeting() {
+  meetingForm.value = {
+    meetingAt: new Date().toISOString().slice(0, 16),
+    title: '',
+    summary: ''
+  }
+  showMeetingForm.value = true
+}
+
+async function submitMeeting() {
+  if (!activeClient.value) return
+  const staff = getStaffUser()
+  const at = meetingForm.value.meetingAt
+    ? new Date(meetingForm.value.meetingAt).toISOString()
+    : new Date().toISOString()
+  saveClientMeeting({
+    clientId: activeClient.value.id,
+    meetingAt: at,
+    title: meetingForm.value.title || 'Meeting',
+    summary: meetingForm.value.summary || '',
+    createdByAgentId: myAgentId.value || '',
+    createdByName: staff?.name || staff?.email || '',
+    createdByEmail: staff?.email || ''
+  })
+  showMeetingForm.value = false
+  await refresh()
+  await openClientDetail(activeClient.value)
+  flash('Meeting logged')
+}
+
+async function removeClientMeeting(meetingId) {
+  if (!confirm('Delete this meeting?')) return
+  deleteClientMeeting(meetingId)
+  await refresh()
+  if (activeClient.value) await openClientDetail(activeClient.value)
+  flash('Meeting deleted')
 }
 
 async function quickUpdateClientField(field, value) {
@@ -2353,11 +2172,7 @@ async function quickUpdateClientField(field, value) {
     flash('You can only edit your own contacts')
     return
   }
-  const res = await saveClient({ ...activeClient.value, [field]: value })
-  if (res && res.ok === false) {
-    flash(res.error || 'Saved locally — could not sync online')
-    return
-  }
+  saveClient({ ...activeClient.value, [field]: value })
   await refresh()
   const updated = clients.value.find((c) => c.id === activeClient.value.id)
   if (updated) {
@@ -2367,54 +2182,10 @@ async function quickUpdateClientField(field, value) {
   flash('Updated')
 }
 
-async function quickUpdateClientCreator(agentId) {
-  if (!activeClient.value || !canManageSalesOrg()) {
-    flash('Only admins can change who added a client')
-    return
-  }
-  const res = await saveClient({
-    ...activeClient.value,
-    ...creatorFieldsFromAgentId(agentId),
-    replaceCreator: true
-  })
-  if (res && res.ok === false) {
-    flash(res.error || 'Saved locally — could not sync online')
-    return
-  }
-  await refresh()
-  const updated = clients.value.find((c) => c.id === activeClient.value.id)
-  if (updated) {
-    activeClient.value = updated
-    await openClientDetail(updated)
-  }
-  flash('Added by updated')
-}
-
-async function quickUpdateClientOwner(agentId) {
-  if (!activeClient.value || !canManageSalesOrg()) {
-    flash('Only admins can change the owner agent')
-    return
-  }
-  const res = await saveClient({
-    ...activeClient.value,
-    ownerAgentId: String(agentId || '').trim()
-  })
-  if (res && res.ok === false) {
-    flash(res.error || 'Saved locally — could not sync online')
-    return
-  }
-  await refresh()
-  const updated = clients.value.find((c) => c.id === activeClient.value.id)
-  if (updated) {
-    activeClient.value = updated
-    await openClientDetail(updated)
-  }
-  flash('Owner updated')
-}
-
 async function logoutStaff() {
   await staffLogout()
-  router.replace('/login')
+  const { goToLogin } = await import('../lib/authRedirect')
+  goToLogin()
 }
 
 onMounted(async () => {
@@ -2437,11 +2208,6 @@ onMounted(async () => {
   }
   if (!sync?.financeOk) {
     flash('Could not sync sales data — check you are logged in')
-  }
-  const clientId = String(route.query.client || '')
-  if (clientId) {
-    const c = clients.value.find((x) => x.id === clientId) || getClient(clientId)
-    if (c) await openClientDetail(c)
   }
 })
 </script>
@@ -2553,17 +2319,47 @@ onMounted(async () => {
           :pending-amount="stats.pendingAmount"
         />
 
-        <AgentPerformancePanel
-          :clients="funnelClients"
-          :quotes="quotes"
-          :invoices="invoices"
-          :meetings="performanceMeetings"
-          :agents="agents"
-          :sales-scoped="isSalesScoped"
-          :locked-agent-id="myAgentId"
-          :can-filter="canManageAgents"
-          @open-client="openClientDetail"
-        />
+        <div v-if="!isSalesScoped || agentRows.length">
+          <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-400 mb-3">
+            {{ isSalesScoped ? 'Your performance' : 'Agent performance' }}
+          </h2>
+          <ul class="space-y-2">
+            <li
+              v-for="a in visibleOverviewAgents"
+              :key="a.id"
+              class="card-item-bg rounded-2xl p-4 flex items-center gap-3"
+            >
+              <div class="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shrink-0 font-bold text-sm">
+                {{ (a.name || '?').slice(0, 1) }}
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <p class="text-sm font-semibold truncate">{{ a.name }}</p>
+                  <span
+                    class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
+                    :class="a.active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-500/20 text-gray-400'"
+                  >
+                    {{ a.active ? 'Active' : 'Inactive' }}
+                  </span>
+                </div>
+                <p class="text-xs text-gray-400 mt-0.5">
+                  {{ a.region || 'No region' }} · {{ a.commissionRate }}% commission
+                </p>
+                <p class="text-[11px] text-gray-500 mt-1">
+                  {{ a.perf.salesCount }} sales · {{ formatMoney(a.perf.revenue) }} ·
+                  earned {{ formatMoney(a.perf.commission) }}
+                </p>
+              </div>
+            </li>
+          </ul>
+          <LazyMore
+            v-if="agentRows.length > visibleOverviewAgents.length"
+            :stamp="lazyLimit.overviewAgents"
+            :loaded="visibleOverviewAgents.length"
+            :total="agentRows.length"
+            @more="loadMore('overviewAgents', agentRows.length)"
+          />
+        </div>
 
         <div class="flex flex-wrap gap-2">
           <button type="button" class="px-4 py-2.5 rounded-full text-xs font-bold bg-white text-black" @click="tab = 'sales'; salesListMode = 'orders'; openNewSale()">
@@ -2725,78 +2521,69 @@ onMounted(async () => {
           <template v-else>No sales found.</template>
         </p>
 
-        <div v-if="salesListMode === 'quotes' && filteredQuotes.length" class="card-item-bg rounded-2xl overflow-x-auto">
-          <table class="w-full min-w-[820px] text-left text-xs border-collapse">
-            <thead>
-              <tr class="border-b border-zinc-700/80 text-[10px] uppercase tracking-wide text-gray-500">
-                <th class="px-3 py-2.5 font-semibold">Number</th>
-                <th class="px-3 py-2.5 font-semibold">Customer</th>
-                <th class="px-3 py-2.5 font-semibold">Lines</th>
-                <th class="px-3 py-2.5 font-semibold text-right">Amount</th>
-                <th class="px-3 py-2.5 font-semibold">Status</th>
-                <th class="px-3 py-2.5 font-semibold">Agent</th>
-                <th class="px-3 py-2.5 font-semibold">Valid</th>
-                <th class="px-3 py-2.5 font-semibold text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-zinc-800">
-              <tr v-for="q in visibleQuotes" :key="q.id" class="hover:bg-white/[0.03]">
-                <td class="px-3 py-2.5 align-middle">
-                  <div class="flex items-center gap-1.5 flex-wrap">
-                    <span class="font-semibold text-sm text-[var(--text)]">{{ q.quoteNumber }}</span>
-                    <span
-                      v-if="isShopQuote(q)"
-                      class="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300"
-                    >
-                      Shop
-                    </span>
-                  </div>
-                </td>
-                <td class="px-3 py-2.5 align-middle text-gray-300 max-w-[10rem] truncate">{{ q.customerName || '—' }}</td>
-                <td class="px-3 py-2.5 align-middle text-gray-400 max-w-[12rem] truncate">{{ docLinesLabel(q) }}</td>
-                <td class="px-3 py-2.5 align-middle text-right tabular-nums font-medium">{{ formatMoney(q.amount) }}</td>
-                <td class="px-3 py-2.5 align-middle">
+        <ul v-if="salesListMode === 'quotes'" class="space-y-2">
+          <li v-for="q in visibleQuotes" :key="q.id" class="card-item-bg rounded-2xl p-4">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-start gap-3 min-w-0">
+                <img
+                  v-if="productThumbFor(q.productId || q.lines?.[0]?.productId)"
+                  :src="productThumbFor(q.productId || q.lines?.[0]?.productId)"
+                  alt=""
+                  class="w-12 h-12 rounded-lg object-contain bg-zinc-900/80 p-0.5 shrink-0 border border-zinc-700"
+                >
+                <div class="min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <p class="text-sm font-semibold truncate">{{ q.quoteNumber }}</p>
+                  <span
+                    v-if="isShopQuote(q)"
+                    class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300"
+                  >
+                    Shop
+                  </span>
                   <span class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full" :class="statusClass(q.status)">
                     {{ q.status }}
                   </span>
-                </td>
-                <td class="px-3 py-2.5 align-middle text-gray-400 whitespace-nowrap">{{ agentName(q.agentId) }}</td>
-                <td class="px-3 py-2.5 align-middle text-gray-400 whitespace-nowrap">{{ formatDay(q.validUntil) }}</td>
-                <td class="px-3 py-2.5 align-middle text-right">
-                  <div class="inline-flex flex-wrap justify-end gap-x-2 gap-y-1">
-                    <button
-                      v-if="q.status !== 'converted'"
-                      type="button"
-                      class="font-semibold text-emerald-300 hover:text-emerald-200"
-                      @click="convertQuote(q)"
-                    >
-                      Convert
-                    </button>
-                    <button
-                      v-if="!isSalesScoped && q.status !== 'converted' && !q.agentId"
-                      type="button"
-                      class="font-semibold text-sky-300 hover:text-sky-200"
-                      @click="openEditQuote(q)"
-                    >
-                      Assign
-                    </button>
-                    <button
-                      v-if="q.status !== 'converted'"
-                      type="button"
-                      class="font-semibold text-gray-300 hover:text-white"
-                      @click="openQuoteEmail(q)"
-                    >
-                      Email
-                    </button>
-                    <button type="button" class="font-semibold text-gray-300 hover:text-white" @click="openEditQuote(q)">Edit</button>
-                    <button v-if="!q.deleted" type="button" class="font-semibold text-red-400" @click="removeQuote(q.id)">Delete</button>
-                    <button v-else-if="canManageAgents" type="button" class="font-semibold text-emerald-300" @click="undeleteQuote(q.id)">Restore</button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                </div>
+                <p class="text-xs text-gray-400 mt-0.5">
+                  {{ q.customerName }} · {{ docLinesLabel(q) }}
+                </p>
+                <p class="text-[11px] text-gray-500 mt-1">
+                  {{ formatMoney(q.amount) }} · {{ agentName(q.agentId) }} · valid {{ formatDay(q.validUntil) }}
+                </p>
+                </div>
+              </div>
+              <div class="flex flex-col gap-1 shrink-0 text-right">
+                <button
+                  v-if="q.status !== 'converted'"
+                  type="button"
+                  class="text-xs font-semibold text-emerald-300 hover:text-emerald-200"
+                  @click="convertQuote(q)"
+                >
+                  Convert
+                </button>
+                <button
+                  v-if="!isSalesScoped && q.status !== 'converted' && !q.agentId"
+                  type="button"
+                  class="text-xs font-semibold text-sky-300 hover:text-sky-200"
+                  @click="openEditQuote(q)"
+                >
+                  Assign
+                </button>
+                <button
+                  v-if="q.status !== 'converted'"
+                  type="button"
+                  class="text-xs font-semibold text-gray-300 hover:text-white"
+                  @click="openQuoteEmail(q)"
+                >
+                  Email
+                </button>
+                <button type="button" class="text-xs font-semibold text-gray-300 hover:text-white" @click="openEditQuote(q)">Edit</button>
+                <button v-if="!q.deleted" type="button" class="text-xs font-semibold text-red-400" @click="removeQuote(q.id)">Delete</button>
+                <button v-else-if="canManageAgents" type="button" class="text-xs font-semibold text-emerald-300" @click="undeleteQuote(q.id)">Restore</button>
+              </div>
+            </div>
+          </li>
+        </ul>
         <LazyMore
           v-if="salesListMode === 'quotes' && filteredQuotes.length > visibleQuotes.length"
           :stamp="lazyLimit.quotes"
@@ -2822,53 +2609,37 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div v-if="filteredInvoices.length" class="card-item-bg rounded-2xl overflow-x-auto">
-          <table class="w-full min-w-[780px] text-left text-xs border-collapse">
-            <thead>
-              <tr class="border-b border-zinc-700/80 text-[10px] uppercase tracking-wide text-gray-500">
-                <th class="px-3 py-2.5 font-semibold">Number</th>
-                <th class="px-3 py-2.5 font-semibold">Customer</th>
-                <th class="px-3 py-2.5 font-semibold">Lines</th>
-                <th class="px-3 py-2.5 font-semibold text-right">Amount</th>
-                <th class="px-3 py-2.5 font-semibold text-right">Paid / Due</th>
-                <th class="px-3 py-2.5 font-semibold">Status</th>
-                <th class="px-3 py-2.5 font-semibold">Issued</th>
-                <th class="px-3 py-2.5 font-semibold text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-zinc-800">
-              <tr v-for="inv in visibleInvoices" :key="inv.id" class="hover:bg-white/[0.03]">
-                <td class="px-3 py-2.5 align-middle font-semibold text-sm">{{ inv.invoiceNumber }}</td>
-                <td class="px-3 py-2.5 align-middle text-gray-300 max-w-[10rem] truncate">{{ inv.customerName || '—' }}</td>
-                <td class="px-3 py-2.5 align-middle text-gray-400 max-w-[12rem] truncate">{{ docLinesLabel(inv) }}</td>
-                <td class="px-3 py-2.5 align-middle text-right tabular-nums font-medium">{{ formatMoney(inv.amount) }}</td>
-                <td class="px-3 py-2.5 align-middle text-right text-gray-400 tabular-nums whitespace-nowrap">
+        <ul class="space-y-2">
+          <li v-for="inv in visibleInvoices" :key="inv.id" class="card-item-bg rounded-2xl p-4">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <p class="text-sm font-semibold truncate">{{ inv.invoiceNumber }}</p>
+                  <span class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full" :class="statusClass(inv.status)">
+                    {{ formatSalesStatus(inv.status) }}
+                  </span>
+                </div>
+                <p class="text-xs text-gray-400 mt-0.5">
+                  {{ inv.customerName }} · {{ docLinesLabel(inv) }}
+                </p>
+                <p class="text-[11px] text-gray-500 mt-1">
+                  {{ formatMoney(inv.amount) }}
                   <template v-if="invoiceRemaining(inv) > 0.004 && invoicePaidAmount(inv) > 0.004">
-                    {{ formatMoney(invoicePaidAmount(inv)) }} / {{ formatMoney(invoiceRemaining(inv)) }}
+                    · {{ formatMoney(invoicePaidAmount(inv)) }} paid
+                    · {{ formatMoney(invoiceRemaining(inv)) }} due
                   </template>
-                  <template v-else-if="invoicePaidAmount(inv) > 0.004">{{ formatMoney(invoicePaidAmount(inv)) }}</template>
-                  <template v-else>—</template>
-                </td>
-                <td class="px-3 py-2.5 align-middle">
-                  <div class="flex flex-col gap-0.5 items-start">
-                    <span class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full" :class="statusClass(inv.status)">
-                      {{ formatSalesStatus(inv.status) }}
-                    </span>
-                    <span v-if="inv.emailStatus && inv.emailStatus !== 'pending'" class="text-[10px] text-gray-500">
-                      email {{ inv.emailStatus }}
-                    </span>
-                  </div>
-                </td>
-                <td class="px-3 py-2.5 align-middle text-gray-400 whitespace-nowrap">{{ formatDay(inv.issuedAt) }}</td>
-                <td class="px-3 py-2.5 align-middle text-right">
-                  <button type="button" class="font-semibold text-emerald-300 hover:text-emerald-200" @click="openInvoiceModal(inv)">
-                    Open / Email
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                  · {{ formatDay(inv.issuedAt) }}
+                  <span v-if="inv.emailStatus && inv.emailStatus !== 'pending'"> · email {{ inv.emailStatus }}</span>
+                </p>
+              </div>
+              <div class="flex flex-col gap-1 shrink-0 text-right">
+                <button type="button" class="text-xs font-semibold text-emerald-300 hover:text-emerald-200" @click="openInvoiceModal(inv)">
+                  Open / Email
+                </button>
+              </div>
+            </div>
+          </li>
+        </ul>
         <LazyMore
           v-if="filteredInvoices.length > visibleInvoices.length"
           :stamp="lazyLimit.invoices"
@@ -2896,7 +2667,7 @@ onMounted(async () => {
           <div class="flex gap-2">
             <button
               type="button"
-              class="px-3.5 py-2.5 rounded-full text-xs font-bold bg-zinc-100 text-black hover:bg-white"
+              class="px-3.5 py-2.5 rounded-full text-xs font-bold border border-[var(--border)] text-gray-200"
               @click="openNewClient({ asReferral: true })"
             >
               Add referral
@@ -2916,7 +2687,7 @@ onMounted(async () => {
             <span class="material-symbols-outlined field-icon">search</span>
             <input v-model="crmQuery" type="search" class="field-input" placeholder="Search name, company, email, cell, owner…">
           </div>
-          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
             <select v-model="crmPipelineFilter" class="field-input bg-zinc-900 text-xs rounded-2xl">
               <option value="all">All pipeline</option>
               <option value="pending">Pending</option>
@@ -2935,11 +2706,6 @@ onMounted(async () => {
               <option value="accepted">Accepted</option>
               <option value="printed">Printed</option>
             </select>
-            <select v-model="crmVisitFilter" class="field-input bg-zinc-900 text-xs rounded-2xl">
-              <option value="all">All visits</option>
-              <option value="visited">Visited</option>
-              <option value="not_visited">Not visited</option>
-            </select>
             <select v-model="crmReferralFilter" class="field-input bg-zinc-900 text-xs rounded-2xl">
               <option value="all">All sources</option>
               <option value="direct">Direct</option>
@@ -2956,77 +2722,57 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div v-if="filteredClients.length" class="card-item-bg rounded-2xl overflow-x-auto">
-          <table class="w-full min-w-[640px] text-left text-xs border-collapse">
-            <thead>
-              <tr class="border-b border-zinc-700/80 text-[10px] uppercase tracking-wide text-gray-500">
-                <th class="px-3 py-2.5 font-semibold">Name</th>
-                <th class="px-3 py-2.5 font-semibold">Visited</th>
-                <th class="px-3 py-2.5 font-semibold">Stage</th>
-                <th class="px-3 py-2.5 font-semibold">Pipeline</th>
-                <th class="px-3 py-2.5 font-semibold">Owner</th>
-                <th class="px-3 py-2.5 font-semibold">Next follow-up</th>
-                <th class="px-3 py-2.5 font-semibold w-8"></th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-zinc-800">
-              <tr
-                v-for="c in visibleClients"
-                :key="c.id"
-                class="cursor-pointer hover:bg-white/[0.03] transition"
-                @click="openClientDetail(c)"
-              >
-                <td class="px-3 py-2.5 align-middle">
-                  <div class="flex items-center gap-1.5 flex-wrap min-w-0">
-                    <span class="font-semibold text-sm truncate">{{ c.name || 'Unnamed' }}</span>
-                    <span
-                      v-if="c.isReferral"
-                      class="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-300"
-                    >
-                      Referral
-                    </span>
-                  </div>
-                </td>
-                <td class="px-3 py-2.5 align-middle whitespace-nowrap">
+        <ul class="space-y-2">
+          <li
+            v-for="c in visibleClients"
+            :key="c.id"
+            class="card-item-bg rounded-2xl p-4 cursor-pointer hover:brightness-110 transition"
+            @click="openClientDetail(c)"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0 space-y-1.5">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <p class="text-sm font-semibold truncate">{{ c.name || 'Unnamed' }}</p>
                   <span
-                    v-if="isDirectCrmClient(c)"
-                    class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
-                    :class="c.visited ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-500/15 text-gray-400'"
+                    v-if="c.isReferral"
+                    class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300"
                   >
-                    {{ c.visited ? 'Visited' : 'Not visited' }}
+                    Referral
                   </span>
-                  <span v-else class="text-gray-600">—</span>
-                </td>
-                <td class="px-3 py-2.5 align-middle">
-                  <div class="flex flex-col gap-0.5 items-start">
-                    <span class="text-gray-300">{{ clientRowSummary(c).saleStageLabel }}</span>
-                    <span
-                      v-if="clientRowSummary(c).docsMissing"
-                      class="text-[10px] px-1.5 py-0.5 rounded border border-amber-700/60 text-amber-300"
-                      title="CRM stage has no matching quote or invoice in finance"
-                    >
-                      No documents
-                    </span>
-                  </div>
-                </td>
-                <td class="px-3 py-2.5 align-middle">
                   <span class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full" :class="statusClass(c.pipelineStatus)">
                     {{ pipelineStatusLabel(c.pipelineStatus) }}
                   </span>
-                </td>
-                <td class="px-3 py-2.5 align-middle text-gray-400 max-w-[8rem] truncate">
-                  {{ c.ownerAgentId ? agentName(c.ownerAgentId) : '—' }}
-                </td>
-                <td class="px-3 py-2.5 align-middle whitespace-nowrap text-gray-300">
-                  {{ nextFollowUpLabel(c.id) }}
-                </td>
-                <td class="px-3 py-2.5 align-middle text-right">
-                  <span class="material-symbols-outlined text-gray-500 text-[18px]">chevron_right</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                </div>
+                <p class="text-xs text-gray-400 truncate">
+                  {{ c.company || '—' }}
+                  <template v-if="c.email"> · {{ c.email }}</template>
+                  <template v-if="c.phone"> · {{ c.phone }}</template>
+                </p>
+                <p v-if="c.location" class="text-[11px] text-gray-500 truncate">{{ c.location }}</p>
+                <div class="flex flex-wrap gap-1.5 pt-1">
+                  <span class="text-[10px] px-2 py-0.5 rounded-md border border-zinc-700 text-gray-300">
+                    Sample: {{ sampleCardStatusLabel(c.sampleCardStatus) }}
+                  </span>
+                  <span class="text-[10px] px-2 py-0.5 rounded-md border border-zinc-700 text-gray-300">
+                    Meeting: {{ clientRowSummary(c).meetingLabel }}
+                    <template v-if="clientRowSummary(c).meetingCount > 1"> ({{ clientRowSummary(c).meetingCount }})</template>
+                  </span>
+                  <span class="text-[10px] px-2 py-0.5 rounded-md border border-zinc-700 text-gray-300">
+                    {{ clientRowSummary(c).saleStageLabel }}
+                  </span>
+                  <span class="text-[10px] px-2 py-0.5 rounded-md border border-zinc-700 text-gray-300">
+                    Next follow-up: {{ nextFollowUpLabel(c.id) }}
+                  </span>
+                </div>
+                <p class="text-[10px] text-gray-500 pt-0.5">
+                  Added by {{ clientAddedBy(c) }}
+                  <template v-if="c.ownerAgentId"> · Owner {{ agentName(c.ownerAgentId) }}</template>
+                </p>
+              </div>
+              <span class="material-symbols-outlined text-gray-500 shrink-0">chevron_right</span>
+            </div>
+          </li>
+        </ul>
         <LazyMore
           v-if="filteredClients.length > visibleClients.length"
           :stamp="lazyLimit.crm"
@@ -4537,22 +4283,13 @@ onMounted(async () => {
             </select>
           </div>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Sale stage</label>
-            <select v-model="clientForm.saleStage" class="field-input w-full bg-zinc-950 text-sm">
-              <option value="no_sale">No sale</option>
-              <option value="quote">Quote</option>
-              <option value="invoice">Invoice</option>
-            </select>
-          </div>
-          <div v-if="showVisitedOnClientForm()">
-            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Visited</label>
-            <select v-model="clientForm.visited" class="field-input w-full bg-zinc-950 text-sm">
-              <option :value="false">Not visited</option>
-              <option :value="true">Visited</option>
-            </select>
-          </div>
+        <div>
+          <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Sale stage</label>
+          <select v-model="clientForm.saleStage" class="field-input w-full bg-zinc-950 text-sm">
+            <option value="no_sale">No sale</option>
+            <option value="quote">Quote</option>
+            <option value="invoice">Invoice</option>
+          </select>
         </div>
         <div v-if="!isSalesScoped">
           <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Owner agent</label>
@@ -4560,14 +4297,6 @@ onMounted(async () => {
             <option value="">Unassigned</option>
             <option v-for="a in agents" :key="a.id" :value="a.id">{{ a.name }}</option>
           </select>
-        </div>
-        <div v-if="canManageAgents && editingClientId">
-          <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Added by</label>
-          <select v-model="clientForm.createdByAgentId" class="field-input w-full bg-zinc-950 text-sm">
-            <option value="">Unknown / none</option>
-            <option v-for="a in agents" :key="'creator-' + a.id" :value="a.id">{{ a.name }}</option>
-          </select>
-          <p class="text-[10px] text-gray-500 mt-1">Shown on the Activity log “Client added” entry</p>
         </div>
         <label class="flex items-center gap-2 text-sm">
           <input v-model="clientForm.isReferral" type="checkbox" class="rounded">
@@ -4604,44 +4333,14 @@ onMounted(async () => {
               <template v-if="activeClient.phone"> · {{ activeClient.phone }}</template>
             </p>
             <p v-if="activeClient.location" class="text-[11px] text-gray-500 mt-0.5">{{ activeClient.location }}</p>
-            <p class="text-[11px] text-gray-500 mt-1">
-              Added by {{ clientAddedBy(activeClient) }}
-              <template v-if="activeClient.ownerAgentId">
-                · Owner {{ agentName(activeClient.ownerAgentId) }}
-              </template>
-              <template v-else> · Owner Unassigned</template>
-            </p>
-            <div v-if="canManageAgents" class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-lg">
-              <div>
-                <label class="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Owner agent</label>
-                <select
-                  class="field-input w-full bg-zinc-950 text-xs"
-                  :value="activeClient.ownerAgentId || ''"
-                  @change="quickUpdateClientOwner($event.target.value)"
-                >
-                  <option value="">Unassigned</option>
-                  <option v-for="a in agents" :key="'detail-owner-' + a.id" :value="a.id">{{ a.name }}</option>
-                </select>
-              </div>
-              <div>
-                <label class="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Added by</label>
-                <select
-                  class="field-input w-full bg-zinc-950 text-xs"
-                  :value="activeClient.createdByAgentId || ''"
-                  @change="quickUpdateClientCreator($event.target.value)"
-                >
-                  <option value="">Unknown / none</option>
-                  <option v-for="a in agents" :key="'detail-creator-' + a.id" :value="a.id">{{ a.name }}</option>
-                </select>
-              </div>
-            </div>
+            <p class="text-[11px] text-gray-500 mt-1">Added by {{ clientAddedBy(activeClient) }}</p>
           </div>
           <button type="button" class="text-gray-400" @click="showClientDetail = false">
             <span class="material-symbols-outlined">close</span>
           </button>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <div>
             <label class="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Sample card</label>
             <select
@@ -4681,40 +4380,24 @@ onMounted(async () => {
               <option value="invoice">Invoice</option>
             </select>
           </div>
-          <div v-if="isDirectCrmClient(activeClient)">
-            <label class="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Visited</label>
-            <select
-              class="field-input w-full bg-zinc-950 text-xs"
-              :value="activeClient.visited ? 'yes' : 'no'"
-              :disabled="!canEditCrmClient(activeClient)"
-              @change="quickUpdateClientField('visited', $event.target.value === 'yes')"
-            >
-              <option value="no">Not visited</option>
-              <option value="yes">Visited</option>
-            </select>
-          </div>
         </div>
 
         <div class="flex flex-wrap gap-2">
           <button
             v-if="canEditCrmClient(activeClient)"
             type="button"
-            class="px-4 py-2.5 rounded-full text-xs font-bold bg-white text-black hover:bg-gray-100"
+            class="px-3 py-2 rounded-xl text-xs font-semibold border border-zinc-700 text-sky-300"
             @click="openEditClient(activeClient)"
           >
             Edit details
           </button>
-          <button
-            type="button"
-            class="px-4 py-2.5 rounded-full text-xs font-bold bg-emerald-500 text-black hover:bg-emerald-400"
-            @click="openAddMeeting"
-          >
+          <button type="button" class="px-3 py-2 rounded-xl text-xs font-semibold border border-zinc-700 text-emerald-300" @click="openAddMeeting">
             Log meeting
           </button>
           <button
             v-if="canDeleteCrmClient(activeClient)"
             type="button"
-            class="px-4 py-2.5 rounded-full text-xs font-bold bg-red-500/90 text-white hover:bg-red-500 ml-auto"
+            class="px-3 py-2 rounded-xl text-xs font-semibold border border-zinc-700 text-red-400 ml-auto"
             @click="removeClient(activeClient)"
           >
             Remove
@@ -4723,35 +4406,10 @@ onMounted(async () => {
 
         <!-- Quotes & invoices -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div class="rounded-2xl border border-zinc-800 p-3 space-y-3">
-            <div class="flex items-center justify-between gap-2">
-              <p class="text-[11px] font-bold uppercase tracking-wide text-gray-400">Quotes</p>
-              <button
-                v-if="clientQuotes.length"
-                type="button"
-                class="px-3 py-1.5 rounded-full text-[11px] font-bold bg-white text-black hover:bg-gray-100 shrink-0"
-                @click="openNewQuoteFromClient(activeClient)"
-              >
-                Create quote
-              </button>
-            </div>
-            <div v-if="!clientQuotes.length" class="space-y-2 py-1">
-              <p class="text-xs text-gray-500">No quotes yet</p>
-              <button
-                type="button"
-                class="w-full px-4 py-2.5 rounded-full text-xs font-bold bg-white text-black hover:bg-gray-100"
-                @click="openNewQuoteFromClient(activeClient)"
-              >
-                Create quote
-              </button>
-            </div>
-            <button
-              v-for="q in clientQuotes"
-              :key="q.id"
-              type="button"
-              class="w-full text-left text-xs flex justify-between gap-2 rounded-xl px-2 py-2 -mx-0.5 border border-transparent hover:border-zinc-700 hover:bg-white/[0.04] transition"
-              @click="openEditQuote(q)"
-            >
+          <div class="rounded-2xl border border-zinc-800 p-3 space-y-2">
+            <p class="text-[11px] font-bold uppercase tracking-wide text-gray-400">Quotes</p>
+            <div v-if="!clientQuotes.length" class="text-xs text-gray-500">No quotes</div>
+            <div v-for="q in clientQuotes" :key="q.id" class="text-xs flex justify-between gap-2">
               <span class="truncate">
                 {{ q.quoteNumber || q.id }}
                 <span v-if="q.agentId" class="text-gray-500"> · {{ agentName(q.agentId) }}</span>
@@ -4760,37 +4418,12 @@ onMounted(async () => {
                 <span class="text-gray-300 tabular-nums">{{ formatIssuanceAmount(q) }}</span>
                 <span class="ml-2" :class="statusClass(q.status)">{{ formatSalesStatus(q.status) }}</span>
               </span>
-            </button>
+            </div>
           </div>
-          <div class="rounded-2xl border border-zinc-800 p-3 space-y-3">
-            <div class="flex items-center justify-between gap-2">
-              <p class="text-[11px] font-bold uppercase tracking-wide text-gray-400">Invoices</p>
-              <button
-                v-if="clientInvoices.length"
-                type="button"
-                class="px-3 py-1.5 rounded-full text-[11px] font-bold bg-white text-black hover:bg-gray-100 shrink-0"
-                @click="openNewSaleFromClient(activeClient)"
-              >
-                Create invoice
-              </button>
-            </div>
-            <div v-if="!clientInvoices.length" class="space-y-2 py-1">
-              <p class="text-xs text-gray-500">No invoices yet</p>
-              <button
-                type="button"
-                class="w-full px-4 py-2.5 rounded-full text-xs font-bold bg-white text-black hover:bg-gray-100"
-                @click="openNewSaleFromClient(activeClient)"
-              >
-                Create invoice
-              </button>
-            </div>
-            <button
-              v-for="inv in clientInvoices"
-              :key="inv.id"
-              type="button"
-              class="w-full text-left text-xs flex justify-between gap-2 rounded-xl px-2 py-2 -mx-0.5 border border-transparent hover:border-zinc-700 hover:bg-white/[0.04] transition"
-              @click="openInvoiceModal(inv)"
-            >
+          <div class="rounded-2xl border border-zinc-800 p-3 space-y-2">
+            <p class="text-[11px] font-bold uppercase tracking-wide text-gray-400">Invoices</p>
+            <div v-if="!clientInvoices.length" class="text-xs text-gray-500">No invoices</div>
+            <div v-for="inv in clientInvoices" :key="inv.id" class="text-xs flex justify-between gap-2">
               <span class="truncate">
                 {{ inv.invoiceNumber || inv.id }}
                 <span v-if="inv.agentId" class="text-gray-500"> · {{ agentName(inv.agentId) }}</span>
@@ -4799,7 +4432,7 @@ onMounted(async () => {
                 <span class="text-gray-300 tabular-nums">{{ formatIssuanceAmount(inv) }}</span>
                 <span class="ml-2" :class="statusClass(inv.status)">{{ formatSalesStatus(inv.status) }}</span>
               </span>
-            </button>
+            </div>
           </div>
         </div>
 

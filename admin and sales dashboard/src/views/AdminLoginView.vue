@@ -2,7 +2,7 @@
 import { onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { isStaffLoggedIn } from '../lib/staffAuth'
-import { staffHomePath } from '../lib/authRedirect'
+import { goToLogin, staffHomePath } from '../lib/authRedirect'
 
 const route = useRoute()
 const router = useRouter()
@@ -12,8 +12,7 @@ onMounted(() => {
     router.replace(staffHomePath())
     return
   }
-  const q = { ...route.query }
-  router.replace({ path: '/login', query: q })
+  goToLogin(typeof route.query.next === 'string' ? route.query.next : '')
 })
 </script>
 
