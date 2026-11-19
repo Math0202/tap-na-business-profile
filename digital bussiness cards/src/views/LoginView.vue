@@ -18,6 +18,7 @@ import {
 } from '../lib/staffAuth'
 import { continueIfAlreadyLoggedIn, navigateAfterLogin, staffHomePath, profileHomePath } from '../lib/authRedirect'
 import { hydrateLinkedCardsFromApi } from '../lib/cardLinkStore'
+import { isAdminHost } from '../lib/hosts'
 
 const route = useRoute()
 const router = useRouter()
@@ -46,7 +47,7 @@ onMounted(() => {
     resetMode.value = true
   }
 
-  // Already signed in? Continue by role (staff → admin host, owners → profile/venue).
+  // Already signed in for this host? Continue without crossing domains.
   const next = typeof route.query.next === 'string' ? route.query.next : ''
   if (route.query.claimed !== '1') {
     continueIfAlreadyLoggedIn(router, next)
@@ -138,8 +139,23 @@ async function onSubmit(e) {
 
     const pw = password.value
     const passwordHash = hashPassword(pw)
+    const staffHost = isAdminHost()
 
-    // 1) Card owner (personal / business)
+    // Staff host: admin/sales only. Public host: card owners only.
+    if (staffHost) {
+      if (!id.includes('@') || !pw) {
+        error.value = 'Enter your staff email and password.'
+        return
+      }
+      const staff = await staffLogin(id, pw)
+      if (staff.ok) {
+        navigateAfterLogin(router, 'staff', { next })
+        return
+      }
+      error.value = staff.error || 'Staff login failed. Check your email and password.'
+      return
+    }
+
     const remote = await apiLogin({ identifier: id, passwordHash })
     if (remote.ok && remote.data?.profile) {
       const p = remote.data.profile
@@ -148,16 +164,6 @@ async function onSubmit(e) {
       return
     }
 
-    // 2) Staff (admin / sales) — email + password via Supabase
-    if (id.includes('@') && pw) {
-      const staff = await staffLogin(id, pw)
-      if (staff.ok) {
-        navigateAfterLogin(router, 'staff', { next })
-        return
-      }
-    }
-
-    // 3) Offline / local profile fallback
     const result = login(id, pw)
     if (result.ok) {
       const p = loadProfile()
@@ -171,7 +177,7 @@ async function onSubmit(e) {
     error.value =
       remote.error ||
       result.error ||
-      'Login failed. Check your email/phone and password.'
+      'Login failed. Check your email/phone and password. Staff should use admin.tapnam.com.'
   } finally {
     submitting.value = false
   }
@@ -202,7 +208,7 @@ function cancelReset() {
         Your card is claimed. Log in to finish setting up your profile.
       </template>
       <template v-else>
-        Sign in to your card, business dashboard, or staff account.
+        {{ isAdminHost() ? 'Sign in with your admin or sales account.' : 'Sign in to your card or business dashboard.' }}
       </template>
     </p>
 

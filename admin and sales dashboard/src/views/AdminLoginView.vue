@@ -2,7 +2,7 @@
 import { onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { isStaffLoggedIn } from '../lib/staffAuth'
-import { goToLogin, staffHomePath } from '../lib/authRedirect'
+import { staffHomePath } from '../lib/authRedirect'
 
 const route = useRoute()
 const router = useRouter()
@@ -12,7 +12,9 @@ onMounted(() => {
     router.replace(staffHomePath())
     return
   }
-  goToLogin(typeof route.query.next === 'string' ? route.query.next : '')
+  // Stay on this host — staff login is admin.tapnam.com/login
+  const q = { ...route.query }
+  router.replace({ path: '/login', query: q })
 })
 </script>
 

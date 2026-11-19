@@ -15,8 +15,6 @@ import { ROUTE_SEO, setPageSeo } from '../lib/seo'
 import { syncPosthogForRoute } from '../lib/posthog'
 import { personalPagePath, slugForLegacyPersonalRedirect } from '../lib/profilePaths'
 import { openLegalRequest } from '../lib/legalRequest'
-import { goToLogin } from '../lib/authRedirect'
-import { isAdminHost, isLocalHost } from '../lib/hosts'
 
 const routes = [
   {
@@ -257,16 +255,6 @@ const router = createRouter({
 router.beforeEach((to, from) => {
   const profile = loadProfile()
 
-  // All roles sign in on the public apex — never keep a login form on admin.tapnam.com
-  if (
-    !isLocalHost() &&
-    isAdminHost() &&
-    (to.path === '/login' || to.path === '/shop/login' || to.path === '/admin/login')
-  ) {
-    goToLogin(typeof to.query.next === 'string' ? to.query.next : '')
-    return false
-  }
-
   if (to.path === '/me' && isTableBusiness(profile) && !isProfileDeleted(profile)) {
     return '/business'
   }
@@ -280,19 +268,16 @@ router.beforeEach((to, from) => {
     }
   }
 
-  // Staff area — home and /c/:serial stay public
+  // Staff area stays on admin.tapnam.com — never send staff to tapnam.com/login
   if (to.path.startsWith('/admin') && !to.meta.staffPublic) {
     if (!isStaffLoggedIn()) {
       // #region agent log
-      fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b5200b'},body:JSON.stringify({sessionId:'b5200b',runId:'post-fix',hypothesisId:'F',location:'router:admin-guard',message:'staff route requires public login',data:{to:to.fullPath,from:from?.fullPath||'',host:typeof window!=='undefined'?window.location.hostname:''},timestamp:Date.now()})}).catch(()=>{});
+      fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b5200b'},body:JSON.stringify({sessionId:'b5200b',runId:'post-fix',hypothesisId:'G',location:'router:admin-guard',message:'staff route → admin-host login',data:{to:to.fullPath,from:from?.fullPath||'',host:typeof window!=='undefined'?window.location.hostname:''},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
-      goToLogin(to.fullPath)
-      return false
+      return { path: '/login', query: { next: to.fullPath } }
     }
     if (!staffCanAccessAdminPath(to.path)) {
-      if (isStaffSalesTeam()) return '/admin/sales'
-      goToLogin()
-      return false
+      return isStaffSalesTeam() ? '/admin/sales' : { path: '/login', query: { next: to.fullPath } }
     }
     if (to.meta.staffRoles?.length) {
       const role = isStaffSalesTeam() ? 'sales' : 'admin'
@@ -305,10 +290,9 @@ router.beforeEach((to, from) => {
   if (to.meta.requiresAuth) {
     if (!requireLogin()) {
       // #region agent log
-      fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b5200b'},body:JSON.stringify({sessionId:'b5200b',runId:'post-fix',hypothesisId:'F',location:'router:requiresAuth',message:'auth route blocked → public login',data:{to:to.fullPath,from:from?.fullPath||'',loggedIn:isLoggedIn(),host:typeof window!=='undefined'?window.location.hostname:''},timestamp:Date.now()})}).catch(()=>{});
+      fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b5200b'},body:JSON.stringify({sessionId:'b5200b',runId:'post-fix',hypothesisId:'G',location:'router:requiresAuth',message:'owner route → same-host login',data:{to:to.fullPath,from:from?.fullPath||'',loggedIn:isLoggedIn(),host:typeof window!=='undefined'?window.location.hostname:''},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
-      goToLogin(to.fullPath)
-      return false
+      return { path: '/login', query: { next: to.fullPath } }
     }
   }
 

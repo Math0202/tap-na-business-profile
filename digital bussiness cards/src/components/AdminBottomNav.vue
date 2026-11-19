@@ -26,8 +26,7 @@ const activeLabel = computed(() => items.value.find((i) => isActive(i))?.label |
 
 async function onLogout() {
   await staffLogout()
-  const { goToLogin } = await import('../lib/authRedirect')
-  goToLogin()
+  window.location.assign('/login')
 }
 </script>
 

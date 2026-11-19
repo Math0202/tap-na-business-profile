@@ -34,7 +34,7 @@ export function adminAppUrl(path = '/admin') {
   return ADMIN_ORIGIN + (p.startsWith('/') ? p : `/${p}`)
 }
 
-/** Canonical login for every role lives on the public apex. */
+/** Owner login URL on the public apex (staff use admin.tapnam.com/login). */
 export function publicLoginUrl(next = '') {
   const raw = String(next || '').trim()
   const safe =

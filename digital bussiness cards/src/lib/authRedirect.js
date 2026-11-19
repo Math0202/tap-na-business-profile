@@ -1,17 +1,12 @@
 /**
- * Post-login home paths for card owners and staff.
- * Everyone signs in at tapnam.com/login; role decides where they go next.
+ * Host-separated auth.
+ * - Card owners: tapnam.com/login → stay on tapnam.com
+ * - Staff: admin.tapnam.com/login → stay on admin.tapnam.com
+ * No cross-host login redirects.
  */
 
 import { isStaffAdmin, isStaffLoggedIn, isStaffSalesTeam } from './staffAuth'
-import {
-  ADMIN_ORIGIN,
-  TABLE_ORIGIN,
-  adminAppUrl,
-  isAdminHost,
-  isLocalHost,
-  publicLoginUrl
-} from './hosts'
+import { ADMIN_ORIGIN, isAdminHost, isLocalHost } from './hosts'
 import { isLoggedIn, isTableBusiness, loadProfile } from './profileStore'
 
 export function profileHomePath(cardType) {
@@ -24,67 +19,56 @@ export function staffHomePath() {
   return '/admin'
 }
 
-export function loginRedirectTarget(next = '') {
-  return publicLoginUrl(next)
+function loginPath(next = '') {
+  const raw = String(next || '').trim()
+  const safe =
+    raw &&
+    raw.startsWith('/') &&
+    !raw.startsWith('//') &&
+    raw !== '/login' &&
+    raw !== '/shop/login' &&
+    raw !== '/admin/login'
+      ? raw
+      : ''
+  return safe ? { path: '/login', query: { next: safe } } : { path: '/login' }
 }
 
-/** Send the browser to the shared public login page. */
-export function goToLogin(next = '') {
-  const url = publicLoginUrl(next)
+/** Same-host login only — never bounce between tapnam.com and admin.tapnam.com. */
+export function goToLogin(routerOrNext, maybeNext) {
+  const hasRouter = routerOrNext && typeof routerOrNext.push === 'function'
+  const router = hasRouter ? routerOrNext : null
+  const next = hasRouter ? maybeNext : routerOrNext
+  const target = loginPath(next)
   // #region agent log
   if (typeof window !== 'undefined') {
-    fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b5200b'},body:JSON.stringify({sessionId:'b5200b',runId:'post-fix',hypothesisId:'F',location:'authRedirect.js:goToLogin',message:'redirect to public login',data:{next:String(next||''),url,host:window.location.hostname},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b5200b'},body:JSON.stringify({sessionId:'b5200b',runId:'post-fix',hypothesisId:'G',location:'authRedirect.js:goToLogin',message:'same-host login redirect',data:{next:String(next||''),target,host:window.location.hostname,adminHost:isAdminHost()},timestamp:Date.now()})}).catch(()=>{});
   }
   // #endregion
-  if (typeof window === 'undefined') return url
-  if (url.startsWith('http')) {
-    window.location.assign(url)
-    return url
+  if (router) {
+    router.replace(target)
+    return target
   }
-  window.location.assign(url)
-  return url
+  if (typeof window !== 'undefined') {
+    const q = target.query?.next ? `?next=${encodeURIComponent(target.query.next)}` : ''
+    window.location.assign(`/login${q}`)
+  }
+  return target
 }
 
 /**
- * Navigate after login.
- * - Staff → admin.tapnam.com
- * - Profile / card owners → public apex
+ * Navigate after login on the same host.
+ * Staff must already be on admin.tapnam.com; owners on tapnam.com.
  */
 export function navigateAfterLogin(router, kind, opts = {}) {
   const path = resolvePostLoginPath(kind, opts)
   // #region agent log
   if (typeof window !== 'undefined') {
-    fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b5200b'},body:JSON.stringify({sessionId:'b5200b',runId:'post-fix',hypothesisId:'F',location:'authRedirect.js:navigateAfterLogin',message:'role-based post-login nav',data:{kind,path,next:opts.next||'',host:window.location.hostname,adminHost:isAdminHost(),staff:isStaffLoggedIn(),profile:isLoggedIn()},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b5200b'},body:JSON.stringify({sessionId:'b5200b',runId:'post-fix',hypothesisId:'G',location:'authRedirect.js:navigateAfterLogin',message:'same-host post-login nav',data:{kind,path,next:opts.next||'',host:window.location.hostname,adminHost:isAdminHost()},timestamp:Date.now()})}).catch(()=>{});
   }
   // #endregion
-  if (typeof window === 'undefined') {
-    router.push(path)
-    return
-  }
-  if (isLocalHost()) {
-    router.push(path)
-    return
-  }
-  if (kind === 'staff') {
-    if (isAdminHost()) {
-      router.push(path)
-      return
-    }
-    window.location.assign(adminAppUrl(path))
-    return
-  }
-  if (isAdminHost()) {
-    window.location.assign(TABLE_ORIGIN + path)
-    return
-  }
   router.push(path)
 }
 
-/**
- * Pick a safe redirect after login based on role.
- * @param {'profile'|'staff'} kind
- * @param {{ cardType?: string, next?: string }} opts
- */
 export function resolvePostLoginPath(kind, opts = {}) {
   const next = typeof opts.next === 'string' ? opts.next.trim() : ''
 
@@ -98,7 +82,6 @@ export function resolvePostLoginPath(kind, opts = {}) {
     return staffHomePath()
   }
 
-  // Card owner — never send to staff area
   if (
     next &&
     !next.startsWith('/admin') &&
@@ -111,11 +94,17 @@ export function resolvePostLoginPath(kind, opts = {}) {
   return profileHomePath(opts.cardType)
 }
 
-/** If a session already exists on the login page, continue by role. */
+/**
+ * Continue only for the role that belongs on this host.
+ * Public host ignores staff sessions; admin host ignores profile sessions.
+ */
 export function continueIfAlreadyLoggedIn(router, next = '') {
-  if (isStaffLoggedIn()) {
-    navigateAfterLogin(router, 'staff', { next })
-    return true
+  if (isAdminHost() || (isLocalHost() && String(next || '').startsWith('/admin'))) {
+    if (isStaffLoggedIn()) {
+      navigateAfterLogin(router, 'staff', { next })
+      return true
+    }
+    return false
   }
   if (isLoggedIn()) {
     const p = loadProfile()
@@ -128,4 +117,4 @@ export function continueIfAlreadyLoggedIn(router, next = '') {
   return false
 }
 
-export { ADMIN_ORIGIN, publicLoginUrl }
+export { ADMIN_ORIGIN }
