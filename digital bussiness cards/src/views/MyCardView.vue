@@ -204,10 +204,6 @@ function refresh() {
   const viewed = loadViewedProfile()
   const viewedId = String(viewed?.remoteProfileId || viewed?.id || '').trim()
 
-  // #region agent log
-  fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'B',location:'MyCardView.vue:refresh',message:'refresh start',data:{path:typeof location!=='undefined'?location.pathname:'',myId:!!myId,viewedId:!!viewedId,loggedIn:isLoggedIn()},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-
   // /me or logged-in owner viewing their own card always shows the latest local profile
   if (route.path === '/me' && isLoggedIn()) {
     clearViewedProfile()

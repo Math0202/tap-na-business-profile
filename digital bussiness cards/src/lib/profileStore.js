@@ -197,7 +197,10 @@ export function isLoggedIn() {
     const raw = localStorage.getItem(SESSION_KEY)
     if (!raw) return false
     const session = JSON.parse(raw)
-    return !!(session && session.loggedIn)
+    // A setup flag, or a leftover flag with no account and no API token, is not a login.
+    if (!session?.loggedIn || session.setup) return false
+    const token = localStorage.getItem('tapna.apiToken')
+    return !!(token || hasCredentials())
   } catch {
     return false
   }

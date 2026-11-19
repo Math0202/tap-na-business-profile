@@ -52,10 +52,6 @@ onMounted(() => {
   const staff = isStaffLoggedIn()
   const profile = isLoggedIn()
 
-  // #region agent log
-  fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'B',location:'digital/LoginView.vue:onMounted',message:'login page mounted',data:{host:typeof window!=='undefined'?window.location.hostname:'',href:typeof window!=='undefined'?window.location.href:'',path:route.path,next,staff,profile,claimed:route.query.claimed,willAutoNav:(staff||profile)&&route.query.claimed!=='1'},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-
   if ((profile || staff) && route.query.claimed !== '1') {
     if (staff) navigateAfterLogin(router, 'staff', { next })
     else {
