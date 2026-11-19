@@ -273,14 +273,11 @@ router.beforeEach((to, from) => {
   if (to.path.startsWith('/admin') && !to.meta.staffPublic) {
     if (!isStaffLoggedIn()) {
       // #region agent log
-      fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'A',location:'router/index.js:admin-guard',message:'admin route blocked → login',data:{host:typeof window!=='undefined'?window.location.hostname:'',toPath:to.path,toFull:to.fullPath,fromPath:from?.path,href:typeof window!=='undefined'?window.location.href:''},timestamp:Date.now()})}).catch(()=>{});
+      fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b5200b'},body:JSON.stringify({sessionId:'b5200b',runId:'post-fix',hypothesisId:'B',location:'admin/router:admin-guard',message:'admin route bounced to login',data:{to:to.fullPath,from:from?.fullPath||'',loggedIn:isLoggedIn()},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
       return { path: '/login', query: { next: to.fullPath } }
     }
     if (!staffCanAccessAdminPath(to.path)) {
-      // #region agent log
-      fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'C',location:'router/index.js:staff-access-denied',message:'staff logged in but path denied',data:{toPath:to.path,sales:isStaffSalesTeam(),redirect:isStaffSalesTeam()?'/admin/sales':'/login'},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       return isStaffSalesTeam() ? '/admin/sales' : '/login'
     }
     if (to.meta.staffRoles?.length) {

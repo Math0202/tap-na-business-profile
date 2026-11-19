@@ -53,7 +53,7 @@ onMounted(() => {
   const profile = isLoggedIn()
 
   // #region agent log
-  fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'61b56f'},body:JSON.stringify({sessionId:'61b56f',runId:'pre-fix',hypothesisId:'B',location:'LoginView.vue:onMounted',message:'login page mounted',data:{host:typeof window!=='undefined'?window.location.hostname:'',href:typeof window!=='undefined'?window.location.href:'',path:route.path,next,staff,profile,claimed:route.query.claimed,willAutoNav:(staff||profile)&&route.query.claimed!=='1'},timestamp:Date.now()})}).catch(()=>{});
+  fetch('http://127.0.0.1:7629/ingest/a3538da8-2f3f-4210-a162-410aee0f17a2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b5200b'},body:JSON.stringify({sessionId:'b5200b',runId:'post-fix',hypothesisId:'A',location:'admin/LoginView.vue:onMounted',message:'admin login auto-nav decision',data:{host:window.location.hostname,path:route.fullPath,next,staff,profile,willAutoNav:(staff||profile)&&route.query.claimed!=='1',hasToken:!!localStorage.getItem('tapna.apiToken')},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
 
   if ((profile || staff) && route.query.claimed !== '1') {
