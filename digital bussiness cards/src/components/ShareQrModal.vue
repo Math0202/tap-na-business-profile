@@ -51,8 +51,10 @@ const qrHeading = computed(() =>
 )
 
 const qrCopyText = computed(() => {
-  if (shareMode.value === 'details') return 'Scan to save this contact (includes profile link).'
-  if (shareMode.value === 'profile') return 'Scan to open this profile.'
+  if (shareMode.value === 'details') {
+    return 'QR for sharing your direct contact details (It works offline)'
+  }
+  if (shareMode.value === 'profile') return 'QR for sharing your Digital Profile'
   return 'Choose how you want to share.'
 })
 
@@ -239,20 +241,30 @@ defineExpose({ downloadQr, renderQr, qrDataUrl })
         <div class="space-y-3">
           <button
             type="button"
-            class="w-full text-left rounded-2xl border border-zinc-700 bg-zinc-800/80 hover:bg-zinc-800 p-4 transition-colors"
+            class="w-full text-left rounded-2xl border border-zinc-700 bg-zinc-800/80 hover:bg-zinc-800 p-4 transition-colors flex items-start gap-3"
             @click="pickShareMode('profile')"
           >
-            <p class="text-sm font-bold">Share Profile</p>
-            <p class="text-xs text-gray-400 mt-1">QR code opens this profile page.</p>
+            <span class="w-11 h-11 rounded-full bg-sky-500/15 text-sky-300 flex items-center justify-center shrink-0">
+              <span class="material-symbols-outlined text-[22px]">qr_code_2</span>
+            </span>
+            <span class="min-w-0">
+              <p class="text-sm font-bold">Share Profile</p>
+              <p class="text-xs text-gray-400 mt-1">QR for sharing your Digital Profile</p>
+            </span>
           </button>
           <button
             v-if="hasContact"
             type="button"
-            class="w-full text-left rounded-2xl border border-zinc-700 bg-zinc-800/80 hover:bg-zinc-800 p-4 transition-colors"
+            class="w-full text-left rounded-2xl border border-zinc-700 bg-zinc-800/80 hover:bg-zinc-800 p-4 transition-colors flex items-start gap-3"
             @click="pickShareMode('details')"
           >
-            <p class="text-sm font-bold">Share Direct Details</p>
-            <p class="text-xs text-gray-400 mt-1">QR code saves the contact to a phone.</p>
+            <span class="w-11 h-11 rounded-full bg-emerald-500/15 text-emerald-300 flex items-center justify-center shrink-0">
+              <span class="material-symbols-outlined text-[22px]">contact_page</span>
+            </span>
+            <span class="min-w-0">
+              <p class="text-sm font-bold">Share Direct Details</p>
+              <p class="text-xs text-gray-400 mt-1">QR for sharing your direct contact details (It works offline)</p>
+            </span>
           </button>
         </div>
       </template>

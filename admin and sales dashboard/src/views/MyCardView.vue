@@ -44,6 +44,7 @@ const installingProfile = ref(false)
 const savingContact = ref(false)
 const saveContactOpen = ref(false)
 const saveContactHint = ref('')
+const askShareOpen = ref(false)
 const shareModal = ref(null)
 const videoEl = ref(null)
 const embedSrc = ref('')
@@ -337,6 +338,20 @@ async function saveContact() {
   } finally {
     savingContact.value = false
   }
+}
+
+function closeSaveContact() {
+  saveContactOpen.value = false
+  if (showConnect.value) askShareOpen.value = true
+}
+
+function acceptShareDetails() {
+  askShareOpen.value = false
+  connectOpen.value = true
+}
+
+function declineShareDetails() {
+  askShareOpen.value = false
 }
 
 function openVideo() {
@@ -815,7 +830,7 @@ watch(() => route.path, () => {
         v-if="saveContactOpen"
         class="app-dialog-overlay fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4"
       >
-        <div class="absolute inset-0 bg-black/70" @click="saveContactOpen = false" />
+        <div class="absolute inset-0 bg-black/70" @click="closeSaveContact" />
         <div class="relative w-full max-w-md card-item-bg rounded-3xl p-5 shadow-2xl">
           <div class="flex items-center justify-between mb-3">
             <h2 class="text-lg font-bold">Save to phone book</h2>
@@ -823,7 +838,7 @@ watch(() => route.path, () => {
               type="button"
               aria-label="Close"
               class="w-9 h-9 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center"
-              @click="saveContactOpen = false"
+              @click="closeSaveContact"
             >
               <span class="material-symbols-outlined text-[20px]">close</span>
             </button>
@@ -832,10 +847,51 @@ watch(() => route.path, () => {
           <button
             type="button"
             class="w-full mt-4 py-3 rounded-full bg-white text-black font-bold text-sm hover:bg-gray-200 transition-colors"
-            @click="saveContactOpen = false"
+            @click="closeSaveContact"
           >
             Got it
           </button>
+        </div>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div
+        v-if="askShareOpen"
+        class="app-dialog-overlay fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4"
+      >
+        <div class="absolute inset-0 bg-black/70" @click="declineShareDetails" />
+        <div class="relative w-full max-w-md card-item-bg rounded-3xl p-5 shadow-2xl">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-bold">Share your details?</h2>
+            <button
+              type="button"
+              aria-label="Close"
+              class="w-9 h-9 rounded-full bg-zinc-700 hover:bg-zinc-600 flex items-center justify-center"
+              @click="declineShareDetails"
+            >
+              <span class="material-symbols-outlined text-[20px]">close</span>
+            </button>
+          </div>
+          <p class="text-sm text-gray-300">
+            Would you also like to share your details with {{ name }}?
+          </p>
+          <div class="mt-4 grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              class="py-3 rounded-full border border-[var(--border)] text-sm font-bold text-gray-300 hover:text-white transition-colors"
+              @click="declineShareDetails"
+            >
+              No
+            </button>
+            <button
+              type="button"
+              class="py-3 rounded-full bg-white text-black font-bold text-sm hover:bg-gray-200 transition-colors"
+              @click="acceptShareDetails"
+            >
+              Yes
+            </button>
+          </div>
         </div>
       </div>
     </Teleport>
