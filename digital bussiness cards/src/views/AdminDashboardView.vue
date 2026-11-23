@@ -41,6 +41,8 @@ const profiles = ref([])
 const cards = ref([])
 const query = ref('')
 const tab = ref('all') // all | personal | business
+const profileSort = ref('lastSeen') // lastSeen | saves | views
+const profileVisibleCount = ref(30)
 const panel = ref('profiles') // profiles | analytics | log | errors | deleted
 
 const changeLog = ref([])
@@ -51,7 +53,11 @@ const restoringId = ref('')
 const clearingDeleted = ref(false)
 const deletedNotice = ref('')
 
+const analyticsRangeMode = ref('days') // days | all | custom
 const analyticsDays = ref(30)
+const analyticsFrom = ref('')
+const analyticsTo = ref('')
+const analyticsGranularity = ref('day') // year | month | week | day
 const analyticsLoading = ref(false)
 const analyticsError = ref('')
 const analyticsData = ref(null)
@@ -158,7 +164,7 @@ async function refresh() {
     } else if (panel.value === 'analytics') {
       analyticsLoading.value = true
       analyticsError.value = ''
-      const res = await apiAdminAnalytics({ days: analyticsDays.value })
+      const res = await apiAdminAnalytics(analyticsQueryParams())
       if (res.ok && res.data?.ok) {
         analyticsData.value = res.data
       } else {
@@ -339,13 +345,102 @@ function matchesQuery(p) {
   return hay.includes(q)
 }
 
-const filtered = computed(() =>
-  profiles.value.filter((p) => {
+const filtered = computed(() => {
+  const list = profiles.value.filter((p) => {
     if (tab.value === 'personal' && p.cardType === 'table') return false
     if (tab.value === 'business' && p.cardType !== 'table') return false
     return matchesQuery(p)
   })
+  const sorted = [...list]
+  if (profileSort.value === 'saves') {
+    sorted.sort((a, b) => (b.saveContacts || 0) - (a.saveContacts || 0))
+  } else if (profileSort.value === 'views') {
+    sorted.sort((a, b) => (b.visits || 0) - (a.visits || 0))
+  } else {
+    sorted.sort((a, b) => {
+      const at = a.lastActivityAt || ''
+      const bt = b.lastActivityAt || ''
+      if (!at && !bt) return 0
+      if (!at) return 1
+      if (!bt) return -1
+      return bt.localeCompare(at)
+    })
+  }
+  return sorted
+})
+
+const visibleProfiles = computed(() => filtered.value.slice(0, profileVisibleCount.value))
+
+const canLoadMoreProfiles = computed(
+  () => filtered.value.length > profileVisibleCount.value
 )
+
+function loadMoreProfiles() {
+  profileVisibleCount.value += 30
+}
+
+function formatShortDate(iso) {
+  if (!iso) return '—'
+  try {
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return '—'
+    return d.toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
+  } catch {
+    return '—'
+  }
+}
+
+function analyticsQueryParams() {
+  if (analyticsRangeMode.value === 'all') {
+    return { range: 'all', granularity: analyticsGranularity.value }
+  }
+  if (analyticsRangeMode.value === 'custom') {
+    return {
+      range: 'custom',
+      from: analyticsFrom.value || '',
+      to: analyticsTo.value || '',
+      granularity: analyticsGranularity.value
+    }
+  }
+  return {
+    days: analyticsDays.value,
+    granularity: analyticsGranularity.value
+  }
+}
+
+const analyticsRangeLabel = computed(() => {
+  if (analyticsRangeMode.value === 'all') return 'All time'
+  if (analyticsRangeMode.value === 'custom') {
+    const from = analyticsFrom.value || '…'
+    const to = analyticsTo.value || '…'
+    return `${from} → ${to}`
+  }
+  return `Last ${analyticsDays.value} days`
+})
+
+function setAnalyticsPreset(days) {
+  analyticsRangeMode.value = 'days'
+  analyticsDays.value = days
+}
+
+function setAnalyticsAllTime() {
+  analyticsRangeMode.value = 'all'
+}
+
+function setAnalyticsCustom() {
+  analyticsRangeMode.value = 'custom'
+  if (!analyticsFrom.value || !analyticsTo.value) {
+    const to = new Date()
+    const from = new Date()
+    from.setUTCDate(from.getUTCDate() - 29)
+    analyticsTo.value = to.toISOString().slice(0, 10)
+    analyticsFrom.value = from.toISOString().slice(0, 10)
+  }
+}
 
 function profileLabel(p) {
   if (p.cardType === 'table') return p.company || p.name || 'Unnamed venue'
@@ -410,9 +505,11 @@ function formatJson(value) {
 }
 
 const filteredTeams = computed(() => {
+  // A group requires 2+ people (owner alone is not a group)
+  const groups = teams.value.filter((t) => Number(t.memberCount || 0) >= 2)
   const q = teamQuery.value.trim().toLowerCase()
-  if (!q) return teams.value
-  return teams.value.filter((t) => {
+  if (!q) return groups
+  return groups.filter((t) => {
     return (
       (t.name && t.name.toLowerCase().includes(q)) ||
       (t.ownerName && t.ownerName.toLowerCase().includes(q)) ||
@@ -822,8 +919,12 @@ watch(
   }
 )
 
-watch(analyticsDays, () => {
+watch([analyticsDays, analyticsRangeMode, analyticsFrom, analyticsTo], () => {
   if (panel.value === 'analytics') refresh()
+})
+
+watch([query, tab, profileSort], () => {
+  profileVisibleCount.value = 30
 })
 
 onMounted(() => {
@@ -900,32 +1001,53 @@ onMounted(() => {
           </div>
         </section>
 
-        <div class="flex flex-col sm:flex-row gap-3 mb-6">
-          <div class="field-shell flex-1 !rounded-2xl">
-            <span class="material-symbols-outlined field-icon">search</span>
-            <input
-              v-model="query"
-              type="search"
-              class="field-input"
-              placeholder="Search name, company, email, card ID…"
-            >
+        <div class="flex flex-col gap-3 mb-6">
+          <div class="flex flex-col sm:flex-row gap-3">
+            <div class="field-shell flex-1 !rounded-2xl">
+              <span class="material-symbols-outlined field-icon">search</span>
+              <input
+                v-model="query"
+                type="search"
+                class="field-input"
+                placeholder="Search name, company, email, card ID…"
+              >
+            </div>
+            <div class="flex gap-2 shrink-0 flex-wrap">
+              <button
+                v-for="t in [
+                  { id: 'all', label: 'All' },
+                  { id: 'personal', label: 'Personal' },
+                  { id: 'business', label: 'Business' }
+                ]"
+                :key="t.id"
+                type="button"
+                class="px-3.5 py-2.5 rounded-full text-xs font-semibold border transition-colors"
+                :class="tab === t.id
+                  ? 'bg-white text-black border-white'
+                  : 'bg-transparent text-gray-400 border-[var(--border)] hover:text-white'"
+                @click="tab = t.id"
+              >
+                {{ t.label }}
+              </button>
+            </div>
           </div>
-          <div class="flex gap-2 shrink-0">
+          <div class="flex gap-2 flex-wrap items-center">
+            <span class="text-[10px] uppercase tracking-wide text-gray-500 shrink-0">Sort</span>
             <button
-              v-for="t in [
-                { id: 'all', label: 'All' },
-                { id: 'personal', label: 'Personal' },
-                { id: 'business', label: 'Business' }
+              v-for="s in [
+                { id: 'lastSeen', label: 'Last seen' },
+                { id: 'saves', label: 'Saves' },
+                { id: 'views', label: 'Views' }
               ]"
-              :key="t.id"
+              :key="s.id"
               type="button"
-              class="px-3.5 py-2.5 rounded-full text-xs font-semibold border transition-colors"
-              :class="tab === t.id
+              class="px-3 py-2 rounded-full text-xs font-semibold border transition-colors"
+              :class="profileSort === s.id
                 ? 'bg-white text-black border-white'
                 : 'bg-transparent text-gray-400 border-[var(--border)] hover:text-white'"
-              @click="tab = t.id"
+              @click="profileSort = s.id"
             >
-              {{ t.label }}
+              {{ s.label }}
             </button>
           </div>
         </div>
@@ -940,99 +1062,114 @@ onMounted(() => {
           No profiles match this filter.
         </div>
 
-        <section v-else class="grid grid-cols-3 lg:grid-cols-6 gap-3 mb-8 justify-items-center">
-          <article
-            v-for="p in filtered"
-            :key="p.id"
-            class="card-item-bg rounded-2xl p-3 w-full flex flex-col items-center text-center gap-2"
-          >
-            <img
-              v-if="profileThumb(p)"
-              :src="profileThumb(p)"
-              alt=""
-              class="w-14 h-14 lg:w-16 lg:h-16 object-cover shrink-0 bg-zinc-800"
-              :class="p.cardType === 'table' ? 'rounded-2xl' : 'rounded-full'"
+        <template v-else>
+          <p class="text-[11px] text-gray-500 mb-3">
+            Showing {{ visibleProfiles.length }} of {{ filtered.length }}
+          </p>
+          <section class="grid grid-cols-3 lg:grid-cols-6 gap-3 mb-4 justify-items-center">
+            <article
+              v-for="p in visibleProfiles"
+              :key="p.id"
+              class="card-item-bg rounded-2xl p-3 w-full flex flex-col items-center text-center gap-2 relative"
             >
-            <div
-              v-else
-              class="w-14 h-14 lg:w-16 lg:h-16 shrink-0 bg-zinc-800 flex items-center justify-center text-sm font-bold text-gray-300"
-              :class="p.cardType === 'table' ? 'rounded-2xl' : 'rounded-full'"
-            >
-              {{ initials(p) }}
-            </div>
-
-            <img
-              :src="profileCardImage(p)"
-              alt=""
-              class="w-full max-w-[88px] h-12 object-contain"
-            >
-
-            <div class="min-w-0 w-full">
-              <p class="font-semibold text-xs lg:text-sm leading-tight line-clamp-2 text-[var(--text)]">{{ profileLabel(p) }}</p>
-              <p class="text-[10px] lg:text-xs text-gray-400 line-clamp-2 mt-0.5">{{ profileMeta(p) }}</p>
-            </div>
-
-            <div class="flex items-center justify-center gap-1 flex-wrap">
               <span
-                class="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
-                :class="p.cardType === 'table'
-                  ? 'bg-sky-500/15 text-sky-300'
-                  : 'bg-violet-500/15 text-violet-300'"
-              >
-                {{ p.cardType === 'table' ? 'Biz' : 'Personal' }}
-              </span>
-              <span
-                class="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
-                :class="p.disabled
-                  ? 'bg-amber-500/15 text-amber-300'
-                  : 'bg-emerald-500/15 text-emerald-300'"
-              >
-                {{ p.disabled ? 'Off' : 'Live' }}
-              </span>
-            </div>
+                class="absolute top-2.5 right-2.5 w-2 h-2 rounded-full"
+                :class="p.disabled ? 'bg-amber-400/80' : 'bg-emerald-400'"
+                :title="p.disabled ? 'Disabled' : 'Live'"
+              />
 
-            <div class="text-[10px] text-gray-500 space-y-0.5 w-full min-w-0">
-              <p class="truncate">{{ p.email || 'No email' }}</p>
-              <p class="font-mono text-sky-300/90 truncate">
-                <template v-if="p.slugs?.length">
-                  {{ p.slugs.map((s) => s.slug).join(' · ') }}
-                </template>
-                <template v-else>No card ID</template>
-              </p>
-            </div>
-
-            <div class="mt-auto w-full pt-1 space-y-1.5">
-              <RouterLink
-                v-if="viewPath(p)"
-                :to="viewPath(p)"
-                class="inline-flex items-center gap-1 w-full justify-center px-2 py-2 rounded-full bg-white text-black text-[10px] lg:text-xs font-bold no-underline hover:bg-gray-200 transition-colors"
+              <img
+                v-if="profileThumb(p)"
+                :src="profileThumb(p)"
+                alt=""
+                class="w-14 h-14 lg:w-16 lg:h-16 object-cover shrink-0 bg-zinc-800"
+                :class="p.cardType === 'table' ? 'rounded-2xl' : 'rounded-full'"
               >
-                <span class="material-symbols-outlined text-[16px]">visibility</span>
-                View
-              </RouterLink>
-              <span
+              <div
                 v-else
-                class="inline-flex items-center gap-1 w-full justify-center px-2 py-2 rounded-full border border-[var(--border)] text-[10px] lg:text-xs font-semibold text-gray-500"
+                class="w-14 h-14 lg:w-16 lg:h-16 shrink-0 bg-zinc-800 flex items-center justify-center text-sm font-bold text-gray-300"
+                :class="p.cardType === 'table' ? 'rounded-2xl' : 'rounded-full'"
               >
-                No page
-              </span>
-              <RouterLink
-                :to="`/admin/profiles/${encodeURIComponent(p.id)}/activities`"
-                class="inline-flex items-center gap-1 w-full justify-center px-2 py-2 rounded-full border border-[var(--border)] text-[10px] lg:text-xs font-semibold no-underline hover:text-white transition-colors"
+                {{ initials(p) }}
+              </div>
+
+              <img
+                :src="profileCardImage(p)"
+                alt=""
+                class="w-full max-w-[88px] h-12 object-contain"
               >
-                <span class="material-symbols-outlined text-[16px]">monitoring</span>
-                Activity
-              </RouterLink>
-              <RouterLink
-                :to="`/admin/profiles/${encodeURIComponent(p.id)}`"
-                class="inline-flex items-center gap-1 w-full justify-center px-2 py-2 rounded-full border border-[var(--border)] text-[10px] lg:text-xs font-semibold no-underline hover:text-white transition-colors"
-              >
-                <span class="material-symbols-outlined text-[16px]">edit</span>
-                Edit
-              </RouterLink>
-            </div>
-          </article>
-        </section>
+
+              <div class="min-w-0 w-full">
+                <p class="font-semibold text-xs lg:text-sm leading-tight line-clamp-2 text-[var(--text)]">{{ profileLabel(p) }}</p>
+                <p class="text-[10px] lg:text-xs text-gray-400 line-clamp-2 mt-0.5">{{ profileMeta(p) }}</p>
+              </div>
+
+              <div class="text-[10px] text-gray-500 space-y-0.5 w-full min-w-0">
+                <p class="truncate">{{ p.email || 'No email' }}</p>
+                <p class="font-mono text-sky-300/90 truncate">
+                  <template v-if="p.slugs?.length">
+                    {{ p.slugs.map((s) => s.slug).join(' · ') }}
+                  </template>
+                  <template v-else>No card ID</template>
+                </p>
+              </div>
+
+              <div class="w-full grid grid-cols-2 gap-x-1 gap-y-0.5 text-[9px] text-gray-400 tabular-nums">
+                <p><span class="text-gray-500">Logins</span> {{ p.logins || 0 }}</p>
+                <p><span class="text-gray-500">Visits</span> {{ p.visits || 0 }}</p>
+                <p><span class="text-gray-500">Saves</span> {{ p.saveContacts || 0 }}</p>
+                <p class="truncate" :title="formatShortDate(p.lastActivityAt)">
+                  <span class="text-gray-500">Last</span> {{ formatShortDate(p.lastActivityAt) }}
+                </p>
+              </div>
+
+              <div class="mt-auto w-full pt-1 flex items-center justify-center gap-1.5">
+                <RouterLink
+                  v-if="viewPath(p)"
+                  :to="viewPath(p)"
+                  class="inline-flex items-center justify-center w-9 h-9 rounded-full bg-white text-black no-underline hover:bg-gray-200 transition-colors"
+                  title="View"
+                  aria-label="View"
+                >
+                  <span class="material-symbols-outlined text-[18px]">visibility</span>
+                </RouterLink>
+                <span
+                  v-else
+                  class="inline-flex items-center justify-center w-9 h-9 rounded-full border border-[var(--border)] text-gray-500"
+                  title="No page"
+                  aria-label="No page"
+                >
+                  <span class="material-symbols-outlined text-[18px]">visibility_off</span>
+                </span>
+                <RouterLink
+                  :to="`/admin/profiles/${encodeURIComponent(p.id)}/activities`"
+                  class="inline-flex items-center justify-center w-9 h-9 rounded-full border border-[var(--border)] no-underline hover:text-white transition-colors"
+                  title="Activity"
+                  aria-label="Activity"
+                >
+                  <span class="material-symbols-outlined text-[18px]">monitoring</span>
+                </RouterLink>
+                <RouterLink
+                  :to="`/admin/profiles/${encodeURIComponent(p.id)}`"
+                  class="inline-flex items-center justify-center w-9 h-9 rounded-full border border-[var(--border)] no-underline hover:text-white transition-colors"
+                  title="Edit"
+                  aria-label="Edit"
+                >
+                  <span class="material-symbols-outlined text-[18px]">edit</span>
+                </RouterLink>
+              </div>
+            </article>
+          </section>
+          <div v-if="canLoadMoreProfiles" class="flex justify-center mb-8">
+            <button
+              type="button"
+              class="px-5 py-2.5 rounded-full text-xs font-bold bg-white text-black hover:bg-gray-200 transition-colors"
+              @click="loadMoreProfiles"
+            >
+              Load more
+            </button>
+          </div>
+        </template>
       </template>
 
       <!-- Groups / Teams panel -->
@@ -1041,7 +1178,7 @@ onMounted(() => {
           <div>
             <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-400">Groups &amp; Teams Management</h2>
             <p class="text-xs text-gray-500 mt-1">
-              Create groups, assign group leaders, configure tiers, control asset sharing, and manage group members
+              A group is 2 or more people. Create groups, assign leaders, configure tiers, sharing, and members.
             </p>
           </div>
           <button
@@ -1070,7 +1207,7 @@ onMounted(() => {
           {{ loadError }}
         </div>
         <div v-else-if="!filteredTeams.length" class="card-item-bg rounded-2xl p-8 text-center text-sm text-gray-500">
-          No groups found.
+          No groups found. Teams with only one member are hidden until a second person joins.
         </div>
         <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <article
@@ -1194,21 +1331,57 @@ onMounted(() => {
           <div>
             <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-400">Activity analytics</h2>
             <p class="text-xs text-gray-500 mt-1">
-              Tap vs scan, opens, clicks, shares, logins, and top profiles
+              Opens, clicks, shares, logins, and top profiles
             </p>
           </div>
-          <div class="flex gap-2 overflow-x-auto pb-1">
+          <div class="flex gap-2 overflow-x-auto pb-1 flex-wrap">
             <button
               v-for="d in [7, 30, 90]"
               :key="d"
               type="button"
               class="px-3.5 py-2 rounded-full text-xs font-semibold border shrink-0"
-              :class="analyticsDays === d ? 'bg-white text-black border-white' : 'border-[var(--border)] text-gray-400'"
-              @click="analyticsDays = d"
+              :class="analyticsRangeMode === 'days' && analyticsDays === d
+                ? 'bg-white text-black border-white'
+                : 'border-[var(--border)] text-gray-400'"
+              @click="setAnalyticsPreset(d)"
             >
               {{ d }} days
             </button>
+            <button
+              type="button"
+              class="px-3.5 py-2 rounded-full text-xs font-semibold border shrink-0"
+              :class="analyticsRangeMode === 'all'
+                ? 'bg-white text-black border-white'
+                : 'border-[var(--border)] text-gray-400'"
+              @click="setAnalyticsAllTime"
+            >
+              All time
+            </button>
+            <button
+              type="button"
+              class="px-3.5 py-2 rounded-full text-xs font-semibold border shrink-0"
+              :class="analyticsRangeMode === 'custom'
+                ? 'bg-white text-black border-white'
+                : 'border-[var(--border)] text-gray-400'"
+              @click="setAnalyticsCustom"
+            >
+              Custom
+            </button>
           </div>
+        </div>
+
+        <div
+          v-if="analyticsRangeMode === 'custom'"
+          class="flex flex-wrap items-end gap-3 card-item-bg rounded-2xl p-3"
+        >
+          <label class="text-xs text-gray-400 space-y-1">
+            <span class="block uppercase tracking-wide text-[10px] text-gray-500">From</span>
+            <input v-model="analyticsFrom" type="date" class="field-input bg-zinc-900 rounded-xl text-xs">
+          </label>
+          <label class="text-xs text-gray-400 space-y-1">
+            <span class="block uppercase tracking-wide text-[10px] text-gray-500">To</span>
+            <input v-model="analyticsTo" type="date" class="field-input bg-zinc-900 rounded-xl text-xs">
+          </label>
         </div>
 
         <div v-if="analyticsLoading || loading" class="card-item-bg rounded-2xl p-6 text-sm text-gray-400 text-center">
@@ -1249,9 +1422,12 @@ onMounted(() => {
             :analytics="analyticsData.analytics"
             :logins="analyticsData.logins || 0"
             :logins-by-day="analyticsData.loginsByDay || []"
+            :logins-by-bucket="analyticsData.loginsByBucket || []"
             :connections="analyticsData.connections || 0"
             :top-profiles="analyticsData.topProfiles || []"
-            :days="analyticsDays"
+            :days="analyticsRangeMode === 'all' ? 'all' : analyticsDays"
+            :range-label="analyticsRangeLabel"
+            v-model:granularity="analyticsGranularity"
             show-logins
             show-top-profiles
           />

@@ -529,7 +529,7 @@ export function apiDeleteSalesClientNote(id) {
 
 /** All profiles + all cards (slugs) straight from the backend */
 export function apiAdminOverview() {
-  return request('/api/admin/overview', { timeoutMs: 12000 })
+  return request('/api/admin/overview', { timeoutMs: 45000 })
 }
 
 /** Live activity feed for one profile (opens, clicks, shares, device, location) */
@@ -544,11 +544,21 @@ export function apiAdminProfileActivities(profileId, { days = 30 } = {}) {
 }
 
 /** Cross-profile activity analytics (charts) for admin dashboard */
-export function apiAdminAnalytics({ days = 30 } = {}) {
+export function apiAdminAnalytics({
+  days = 30,
+  range = '',
+  from = '',
+  to = '',
+  granularity = 'day'
+} = {}) {
   const q = new URLSearchParams()
-  if (days) q.set('days', String(days))
+  if (range === 'all' || range === 'custom') q.set('range', range)
+  else if (days) q.set('days', String(days))
+  if (from) q.set('from', String(from))
+  if (to) q.set('to', String(to))
+  if (granularity) q.set('granularity', String(granularity))
   const qs = q.toString()
-  return request(`/api/admin/analytics${qs ? `?${qs}` : ''}`, { timeoutMs: 25000 })
+  return request(`/api/admin/analytics${qs ? `?${qs}` : ''}`, { timeoutMs: 45000 })
 }
 
 /** Full profile for admin edit */

@@ -280,6 +280,62 @@ function analyticsSinceIso(days) {
   return d.toISOString()
 }
 
+/** Flexible analytics window: presets (days), all-time, or custom from/to. */
+function parseAnalyticsRange(request, fallbackDays = 30) {
+  try {
+    const url = new URL(request.url)
+    const range = String(url.searchParams.get('range') || '').trim().toLowerCase()
+    const fromRaw = String(url.searchParams.get('from') || '').trim()
+    const toRaw = String(url.searchParams.get('to') || '').trim()
+    const granRaw = String(url.searchParams.get('granularity') || 'day')
+      .trim()
+      .toLowerCase()
+    const granularity = ['year', 'month', 'week', 'day'].includes(granRaw) ? granRaw : 'day'
+
+    if (range === 'all') {
+      return { mode: 'all', days: null, since: null, until: null, granularity }
+    }
+
+    if (fromRaw || toRaw || range === 'custom') {
+      let since = null
+      let until = null
+      if (fromRaw) {
+        const d = new Date(fromRaw.includes('T') ? fromRaw : `${fromRaw}T00:00:00.000Z`)
+        if (!Number.isNaN(d.getTime())) since = d.toISOString()
+      }
+      if (toRaw) {
+        const d = new Date(toRaw.includes('T') ? toRaw : `${toRaw}T23:59:59.999Z`)
+        if (!Number.isNaN(d.getTime())) until = d.toISOString()
+      }
+      return { mode: 'custom', days: null, since, until, granularity }
+    }
+
+    const days = parseAnalyticsDays(request, fallbackDays)
+    return {
+      mode: 'days',
+      days,
+      since: analyticsSinceIso(days),
+      until: null,
+      granularity
+    }
+  } catch {
+    return {
+      mode: 'days',
+      days: fallbackDays,
+      since: analyticsSinceIso(fallbackDays),
+      until: null,
+      granularity: 'day'
+    }
+  }
+}
+
+function timeRangeQuery(field, since, until) {
+  const parts = []
+  if (since) parts.push(`${field}=gte.${encodeURIComponent(since)}`)
+  if (until) parts.push(`${field}=lte.${encodeURIComponent(until)}`)
+  return parts.join('&')
+}
+
 function dayKeyUtc(iso) {
   try {
     return new Date(iso).toISOString().slice(0, 10)
@@ -6488,13 +6544,44 @@ async function handleApi(request, env, url) {
       sb(env, 'card_batches?select=id,name,kind,personal_type,created_by,created_at&order=created_at.desc&limit=500')
     ])
     const cardsByProfile = {}
+    const slugToProfile = {}
     for (const c of cards || []) {
       if (!c.profile_id || c.deleted === true) continue
       if (!cardsByProfile[c.profile_id]) cardsByProfile[c.profile_id] = []
       cardsByProfile[c.profile_id].push(c)
+      if (c.slug) slugToProfile[c.slug] = c.profile_id
     }
     const nameByProfile = {}
-    for (const p of profiles || []) nameByProfile[p.id] = p.name || p.company || ''
+    const statsByProfile = {}
+    for (const p of profiles || []) {
+      nameByProfile[p.id] = p.name || p.company || ''
+      statsByProfile[p.id] = { logins: 0, visits: 0, saveContacts: 0, lastActivityAt: null }
+    }
+    try {
+      const opens = await sbPaged(env, 'card_opens?select=slug,action,opened_at')
+      for (const o of opens || []) {
+        const pid = slugToProfile[o.slug]
+        if (!pid || !statsByProfile[pid]) continue
+        const action = String(o.action || 'open')
+        if (action === 'open') statsByProfile[pid].visits += 1
+        else if (action === 'click:save_contact') statsByProfile[pid].saveContacts += 1
+        const at = o.opened_at || ''
+        if (at && (!statsByProfile[pid].lastActivityAt || at > statsByProfile[pid].lastActivityAt)) {
+          statsByProfile[pid].lastActivityAt = at
+        }
+      }
+    } catch {
+      /* activity stats optional */
+    }
+    try {
+      const sessions = await sbPaged(env, 'sessions?select=profile_id')
+      for (const s of sessions || []) {
+        const pid = s.profile_id
+        if (pid && statsByProfile[pid]) statsByProfile[pid].logins += 1
+      }
+    } catch {
+      /* login stats optional */
+    }
     const mappedBatches = (batches || []).map((b) => ({
       id: b.id,
       name: b.name || '',
@@ -6508,31 +6595,43 @@ async function handleApi(request, env, url) {
     return json({
       ok: true,
       batches: mappedBatches,
-      profiles: (profiles || []).map((p) => ({
-        id: p.id,
-        cardType: p.card_type === 'table' ? 'table' : 'personal',
-        name: p.name || '',
-        title: p.title || '',
-        company: p.company || '',
-        email: p.email || '',
-        phone: p.phone || '',
-        address: p.address || '',
-        avatar: p.avatar || '',
-        logo: p.logo || '',
-        disabled: !!p.disabled,
-        createdAt: p.created_at,
-        updatedAt: p.updated_at,
-        slugs: (cardsByProfile[p.id] || []).map((c) => ({
-          slug: c.slug,
-          kind: c.kind === 'personal' ? 'personal' : 'table',
-          personalType:
-            c.kind === 'personal'
-              ? normalizePersonalType(c.personal_type || 'business')
-              : '',
-          productId: c.product_id || '',
-          status: c.status
-        }))
-      })),
+      profiles: (profiles || []).map((p) => {
+        const st = statsByProfile[p.id] || {
+          logins: 0,
+          visits: 0,
+          saveContacts: 0,
+          lastActivityAt: null
+        }
+        return {
+          id: p.id,
+          cardType: p.card_type === 'table' ? 'table' : 'personal',
+          name: p.name || '',
+          title: p.title || '',
+          company: p.company || '',
+          email: p.email || '',
+          phone: p.phone || '',
+          address: p.address || '',
+          avatar: p.avatar || '',
+          logo: p.logo || '',
+          disabled: !!p.disabled,
+          createdAt: p.created_at,
+          updatedAt: p.updated_at,
+          logins: st.logins,
+          visits: st.visits,
+          saveContacts: st.saveContacts,
+          lastActivityAt: st.lastActivityAt,
+          slugs: (cardsByProfile[p.id] || []).map((c) => ({
+            slug: c.slug,
+            kind: c.kind === 'personal' ? 'personal' : 'table',
+            personalType:
+              c.kind === 'personal'
+                ? normalizePersonalType(c.personal_type || 'business')
+                : '',
+            productId: c.product_id || '',
+            status: c.status
+          }))
+        }
+      }),
       cards: (cards || []).map((c) => ({
         slug: c.slug,
         kind: c.kind === 'personal' ? 'personal' : 'table',
@@ -6564,47 +6663,88 @@ async function handleApi(request, env, url) {
   if (pathname === '/api/admin/analytics' && method === 'GET') {
     const gate = await requireStaff(env, request, { roles: ['admin'] })
     if (gate.error) return gate.error
-    const days = parseAnalyticsDays(request, 30)
-    const since = analyticsSinceIso(days)
+    const range = parseAnalyticsRange(request, 30)
+    const { since, until, days, mode, granularity } = range
+    const openFilter = timeRangeQuery('opened_at', since, until)
+    const sessionFilter = timeRangeQuery('created_at', since, until)
+    const connFilter = timeRangeQuery('created_at', since, until)
+
     let opens = []
     try {
-      opens = await sbPaged(
-        env,
-        `card_opens?opened_at=gte.${encodeURIComponent(since)}&select=id,slug,channel,action,user_agent,device_type,browser,ip_country,ip_city,ip_region,opened_at&order=opened_at.desc`
-      )
+      const openPath = openFilter
+        ? `card_opens?${openFilter}&select=id,slug,channel,action,user_agent,device_type,browser,ip_country,ip_city,ip_region,opened_at&order=opened_at.desc`
+        : `card_opens?select=id,slug,channel,action,user_agent,device_type,browser,ip_country,ip_city,ip_region,opened_at&order=opened_at.desc`
+      opens = await sbPaged(env, openPath)
     } catch {
       opens = []
     }
     const activities = mapOpenRows(opens)
     const analytics = buildActivityAnalytics(activities)
 
-    let logins = 0
-    let loginsByDay = []
+    const ownerIds = new Set()
+    const memberIds = new Set()
     try {
-      const sessions = await sbPaged(
-        env,
-        `sessions?created_at=gte.${encodeURIComponent(since)}&select=id,profile_id,created_at&order=created_at.desc`
-      )
+      const [teamsRows, memberRows] = await Promise.all([
+        sbPaged(env, 'teams?deleted=eq.false&select=id,owner_profile_id'),
+        sbPaged(env, 'team_members?deleted=eq.false&select=team_id,profile_id,status')
+      ])
+      for (const t of teamsRows || []) {
+        if (t.owner_profile_id) ownerIds.add(t.owner_profile_id)
+      }
+      for (const m of memberRows || []) {
+        if (!m.profile_id) continue
+        if (m.status && m.status !== 'active' && m.status !== 'invited' && m.status !== 'pending_claim') {
+          continue
+        }
+        memberIds.add(m.profile_id)
+      }
+    } catch {
+      /* team role optional */
+    }
+
+    let logins = 0
+    let loginsOwners = 0
+    let loginsStaff = 0
+    let loginsByDay = []
+    let loginsByBucket = []
+    try {
+      const sessionPath = sessionFilter
+        ? `sessions?${sessionFilter}&select=id,profile_id,created_at&order=created_at.desc`
+        : `sessions?select=id,profile_id,created_at&order=created_at.desc`
+      const sessions = await sbPaged(env, sessionPath)
       logins = (sessions || []).length
       const map = {}
+      const splitMap = {}
       for (const s of sessions || []) {
         const dk = dayKeyUtc(s.created_at)
         if (!dk) continue
         map[dk] = (map[dk] || 0) + 1
+        if (!splitMap[dk]) splitMap[dk] = { date: dk, owners: 0, staff: 0, count: 0 }
+        const pid = s.profile_id || ''
+        const isStaff = pid && memberIds.has(pid) && !ownerIds.has(pid)
+        if (isStaff) {
+          splitMap[dk].staff += 1
+          loginsStaff += 1
+        } else {
+          splitMap[dk].owners += 1
+          loginsOwners += 1
+        }
+        splitMap[dk].count += 1
       }
       loginsByDay = Object.entries(map)
         .map(([date, count]) => ({ date, count }))
         .sort((a, b) => a.date.localeCompare(b.date))
+      loginsByBucket = Object.values(splitMap).sort((a, b) => a.date.localeCompare(b.date))
     } catch {
       /* sessions optional */
     }
 
     let connections = 0
     try {
-      const rows = await sbPaged(
-        env,
-        `profile_connections?deleted=eq.false&created_at=gte.${encodeURIComponent(since)}&select=id`
-      )
+      const connPath = connFilter
+        ? `profile_connections?deleted=eq.false&${connFilter}&select=id`
+        : `profile_connections?deleted=eq.false&select=id`
+      const rows = await sbPaged(env, connPath)
       connections = (rows || []).length
     } catch {
       connections = 0
@@ -6643,7 +6783,6 @@ async function handleApi(request, env, url) {
             count
           }))
           .sort((a, b) => b.count - a.count)
-          .slice(0, 10)
       )
     } catch {
       /* ignore */
@@ -6652,11 +6791,17 @@ async function handleApi(request, env, url) {
     return json({
       ok: true,
       days,
+      mode,
       since,
+      until,
+      granularity,
       sampleSize: activities.length,
       analytics,
       logins,
+      loginsOwners,
+      loginsStaff,
       loginsByDay,
+      loginsByBucket,
       connections,
       topProfiles
     })
