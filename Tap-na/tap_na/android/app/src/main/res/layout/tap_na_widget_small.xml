@@ -16,12 +16,32 @@
 
     <ImageView
         android:id="@+id/widget_avatar"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="4dp"
-        android:adjustViewBounds="true"
-        android:contentDescription="@string/widget_profile_description"
-        android:scaleType="fitCenter"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/widget_name"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/widget_title"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/widget_company"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/widget_identity"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:orientation="vertical"
         android:visibility="gone" />
 </FrameLayout>

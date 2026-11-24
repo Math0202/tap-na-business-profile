@@ -4,25 +4,67 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_shell"
-    android:gravity="center_vertical"
     android:orientation="horizontal"
     android:padding="8dp">
 
-    <ImageView
-        android:id="@+id/widget_avatar"
+    <LinearLayout
+        android:id="@+id/widget_identity"
         android:layout_width="0dp"
         android:layout_height="match_parent"
         android:layout_marginEnd="8dp"
-        android:layout_weight="3"
-        android:adjustViewBounds="true"
-        android:contentDescription="@string/widget_profile_description"
-        android:scaleType="fitCenter" />
+        android:layout_weight="4"
+        android:background="@drawable/widget_panel"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:padding="8dp">
+
+        <ImageView
+            android:id="@+id/widget_avatar"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:adjustViewBounds="true"
+            android:contentDescription="@string/widget_card_description"
+            android:scaleType="fitCenter" />
+
+        <TextView
+            android:id="@+id/widget_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:textColor="#A1A1AA"
+            android:textSize="10sp" />
+
+        <TextView
+            android:id="@+id/widget_company"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:textColor="#71717A"
+            android:textSize="10sp" />
+    </LinearLayout>
 
     <ImageView
         android:id="@+id/widget_qr"
         android:layout_width="0dp"
         android:layout_height="match_parent"
-        android:layout_weight="7"
+        android:layout_weight="6"
         android:adjustViewBounds="true"
         android:contentDescription="@string/widget_qr_description"
         android:scaleType="fitCenter" />

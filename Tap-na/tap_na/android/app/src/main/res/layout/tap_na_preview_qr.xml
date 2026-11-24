@@ -10,12 +10,4 @@
         android:layout_height="match_parent"
         android:contentDescription="@string/widget_qr_description"
         android:src="@drawable/widget_skeleton_qr" />
-
-    <ImageView
-        android:layout_width="28dp"
-        android:layout_height="28dp"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="4dp"
-        android:contentDescription="@string/widget_profile_description"
-        android:src="@drawable/widget_skeleton_circle" />
 </FrameLayout>

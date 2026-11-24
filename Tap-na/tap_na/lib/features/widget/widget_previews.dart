@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
-import '../../core/app_constants.dart';
 import '../../core/models/profile_data.dart';
 
 class WidgetPreviewOption extends StatelessWidget {
@@ -49,16 +48,7 @@ class WidgetQrPreview extends StatelessWidget {
     return _Shell(
       width: size,
       height: size,
-      child: Stack(
-        children: [
-          Positioned.fill(child: _QrPlate(data: url, iconSize: size * 0.4)),
-          Positioned(
-            right: 4,
-            bottom: 4,
-            child: _AvatarBadge(profile: profile, size: size * 0.28),
-          ),
-        ],
-      ),
+      child: _QrPlate(data: url, iconSize: size * 0.4),
     );
   }
 }
@@ -77,9 +67,13 @@ class WidgetCardPreview extends StatelessWidget {
       height: height,
       child: Row(
         children: [
-          _AvatarBadge(profile: profile, size: height * 0.62),
+          Expanded(
+            flex: 4,
+            child: _IdentityPanel(profile: profile, compact: true),
+          ),
           const SizedBox(width: 8),
           Expanded(
+            flex: 6,
             child: _QrPlate(data: profile?.publicProfileUrl.trim() ?? ''),
           ),
         ],
@@ -107,9 +101,13 @@ class WidgetProfilePreview extends StatelessWidget {
       height: height,
       child: Column(
         children: [
-          _AvatarBadge(profile: profile, size: height * 0.22),
+          Expanded(
+            flex: 5,
+            child: _IdentityPanel(profile: profile, compact: false),
+          ),
           const SizedBox(height: 8),
           Expanded(
+            flex: 3,
             child: _QrPlate(data: profile?.publicProfileUrl.trim() ?? ''),
           ),
         ],
@@ -118,11 +116,11 @@ class WidgetProfilePreview extends StatelessWidget {
   }
 }
 
-class _AvatarBadge extends StatelessWidget {
-  const _AvatarBadge({required this.profile, required this.size});
+class _IdentityPanel extends StatelessWidget {
+  const _IdentityPanel({this.profile, required this.compact});
 
   final ProfileData? profile;
-  final double size;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -130,31 +128,72 @@ class _AvatarBadge extends StatelessWidget {
     final hasPhoto = photo != null && File(photo).existsSync();
     final name = profile?.safeName ?? '';
     return Container(
-      width: size,
-      height: size,
-      decoration: const BoxDecoration(
-        shape: BoxShape.circle,
-        color: Colors.white,
+      width: double.infinity,
+      padding: EdgeInsets.all(compact ? 8 : 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2A2A),
+        borderRadius: BorderRadius.circular(12),
       ),
-      padding: EdgeInsets.all(size * 0.06),
-      child: ClipOval(
-        child: hasPhoto
-            ? Image.file(File(photo), fit: BoxFit.cover)
-            : ColoredBox(
-                color: const Color(0xFF3F3F46),
-                child: Center(
-                  child: name.isEmpty
-                      ? null
-                      : Text(
-                          name.substring(0, 1).toUpperCase(),
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: size * 0.35,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+      child: Column(
+        children: [
+          Expanded(
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: 1,
+                child: hasPhoto
+                    ? ClipOval(
+                        child: Image.file(File(photo), fit: BoxFit.cover),
+                      )
+                    : CircleAvatar(
+                        backgroundColor: const Color(0xFF3F3F46),
+                        child: name.isEmpty
+                            ? null
+                            : Text(
+                                name.substring(0, 1).toUpperCase(),
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                      ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          if (profile == null) ...[
+            const _Bar(width: 56),
+            const SizedBox(height: 4),
+            const _Bar(width: 40, color: Color(0xFF52525B)),
+          ] else ...[
+            Text(
+              profile!.safeName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: compact ? 11 : 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (profile!.title.isNotEmpty)
+              Text(
+                profile!.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: const Color(0xFFA1A1AA),
+                  fontSize: compact ? 9 : 11,
                 ),
               ),
+            if (profile!.company.isNotEmpty)
+              Text(
+                profile!.company,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: const Color(0xFF71717A),
+                  fontSize: compact ? 9 : 11,
+                ),
+              ),
+          ],
+        ],
       ),
     );
   }
@@ -194,20 +233,35 @@ class _Shell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark =
-        MediaQuery.platformBrightnessOf(context) == Brightness.dark;
     return Container(
       width: width,
       height: height,
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: isDark ? AppConstants.bg : AppConstants.cream,
+        color: const Color(0xFF121212),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isDark ? const Color(0xFF3A3A3A) : const Color(0xFFD6D0C4),
-        ),
+        border: Border.all(color: const Color(0xFF3A3A3A)),
       ),
       child: child,
+    );
+  }
+}
+
+class _Bar extends StatelessWidget {
+  const _Bar({required this.width, this.color = Colors.white70});
+
+  final double width;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: 6,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(4),
+      ),
     );
   }
 }

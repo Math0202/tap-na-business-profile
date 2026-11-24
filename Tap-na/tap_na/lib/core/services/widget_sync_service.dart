@@ -18,11 +18,6 @@ class WidgetSyncService {
   Future<void> sync(ProfileData profile) async {
     try {
       await configure();
-      final isDark = _isDarkTheme();
-      await HomeWidget.saveWidgetData<String>(
-        'widget_theme',
-        isDark ? 'dark' : 'light',
-      );
       await HomeWidget.saveWidgetData<String>('widget_name', profile.safeName);
       await HomeWidget.saveWidgetData<String>('widget_title', profile.title);
       await HomeWidget.saveWidgetData<String>(
@@ -36,12 +31,9 @@ class WidgetSyncService {
 
       if (profile.publicProfileUrl.trim().isNotEmpty) {
         await HomeWidget.renderFlutterWidget(
-          _QrPlate(
-            url: profile.publicProfileUrl.trim(),
-            shellColor: isDark ? AppConstants.bg : AppConstants.cream,
-          ),
+          _QrPlate(url: profile.publicProfileUrl.trim()),
           key: 'widget_qr',
-          logicalSize: const Size(384, 384),
+          logicalSize: const Size(672, 672),
         );
       }
 
@@ -64,48 +56,31 @@ class WidgetSyncService {
     } catch (_) {}
   }
 
-  bool _isDarkTheme() {
-    final brightness =
-        WidgetsBinding.instance.platformDispatcher.platformBrightness;
-    return brightness == Brightness.dark;
-  }
-
   Future<void> _renderAvatar(String path) async {
     final bytes = await File(path).readAsBytes();
     if (bytes.isEmpty) return;
-    const size = 168.0;
-    const ring = 8.0;
     final codec = await ui.instantiateImageCodec(
       bytes,
-      targetWidth: 160,
-      targetHeight: 160,
+      targetWidth: 240,
+      targetHeight: 240,
     );
     final frame = await codec.getNextFrame();
     try {
       await HomeWidget.renderFlutterWidget(
         SizedBox(
-          width: size,
-          height: size,
-          child: DecoratedBox(
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(ring),
-              child: ClipOval(
-                child: RawImage(
-                  image: frame.image,
-                  fit: BoxFit.cover,
-                  width: size - ring * 2,
-                  height: size - ring * 2,
-                ),
-              ),
+          width: 240,
+          height: 240,
+          child: ClipOval(
+            child: RawImage(
+              image: frame.image,
+              fit: BoxFit.cover,
+              width: 240,
+              height: 240,
             ),
           ),
         ),
         key: 'widget_avatar',
-        logicalSize: const Size(size, size),
+        logicalSize: const Size(240, 240),
       );
     } finally {
       frame.image.dispose();
@@ -127,26 +102,25 @@ class WidgetSyncService {
 }
 
 class _QrPlate extends StatelessWidget {
-  const _QrPlate({required this.url, required this.shellColor});
+  const _QrPlate({required this.url});
 
   final String url;
-  final Color shellColor;
 
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: shellColor,
+      color: const Color(0xFF121212),
       child: Padding(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(12),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(24),
           child: ColoredBox(
             color: Colors.white,
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(28),
               child: QrImageView(
                 data: url,
-                size: 336,
+                size: 576,
                 padding: EdgeInsets.zero,
                 backgroundColor: Colors.white,
                 eyeStyle: const QrEyeStyle(
