@@ -5,12 +5,14 @@ import WidgetKit
 struct TapNaEntry: TimelineEntry {
   let date: Date
   let name: String
+  let theme: String
   let qr: UIImage?
+  let avatar: UIImage?
 }
 
 struct TapNaProvider: TimelineProvider {
   func placeholder(in context: Context) -> TapNaEntry {
-    TapNaEntry(date: Date(), name: "Tap Na", qr: nil)
+    TapNaEntry(date: Date(), name: "Tap Na", theme: "dark", qr: nil, avatar: nil)
   }
 
   func getSnapshot(in context: Context, completion: @escaping (TapNaEntry) -> Void) {
@@ -24,10 +26,13 @@ struct TapNaProvider: TimelineProvider {
   private func loadEntry() -> TapNaEntry {
     let defaults = UserDefaults(suiteName: "group.tapna.app")
     let name = defaults?.string(forKey: "widget_name") ?? "Tap Na"
+    let theme = defaults?.string(forKey: "widget_theme") ?? "dark"
     return TapNaEntry(
       date: Date(),
       name: name.isEmpty ? "Tap Na" : name,
-      qr: image(named: "widget_qr", defaults: defaults)
+      theme: theme,
+      qr: image(named: "widget_qr", defaults: defaults),
+      avatar: image(named: "widget_avatar", defaults: defaults)
     )
   }
 
@@ -43,7 +48,14 @@ struct TapNaProvider: TimelineProvider {
 }
 
 struct TapNaPalette {
-  static let shell = Color(red: 18 / 255, green: 18 / 255, blue: 18 / 255)
+  static let shellDark = Color(red: 18 / 255, green: 18 / 255, blue: 18 / 255)
+  static let shellLight = Color(red: 244 / 255, green: 241 / 255, blue: 234 / 255)
+
+  static func shell(theme: String, colorScheme: ColorScheme) -> Color {
+    if theme == "light" { return shellLight }
+    if theme == "dark" { return shellDark }
+    return colorScheme == .dark ? shellDark : shellLight
+  }
 }
 
 struct QrPlate: View {
@@ -57,11 +69,11 @@ struct QrPlate: View {
           .scaledToFit()
       } else {
         RoundedRectangle(cornerRadius: 16)
-          .fill(Color.white.opacity(0.12))
+          .fill(Color.white.opacity(0.92))
           .overlay(
             Image(systemName: "qrcode")
               .font(.largeTitle)
-              .foregroundColor(.white.opacity(0.45))
+              .foregroundColor(.black.opacity(0.45))
           )
       }
     }
@@ -69,44 +81,89 @@ struct QrPlate: View {
   }
 }
 
+struct AvatarBadge: View {
+  let image: UIImage?
+
+  var body: some View {
+    Group {
+      if let image {
+        Image(uiImage: image)
+          .resizable()
+          .scaledToFit()
+      } else {
+        Circle()
+          .fill(Color(white: 0.25))
+      }
+    }
+    .clipShape(Circle())
+    .overlay(Circle().stroke(Color.white, lineWidth: 3))
+  }
+}
+
 extension View {
   @ViewBuilder
-  func tapNaWidgetChrome() -> some View {
+  func tapNaWidgetChrome(theme: String, colorScheme: ColorScheme) -> some View {
+    let shell = TapNaPalette.shell(theme: theme, colorScheme: colorScheme)
     if #available(iOSApplicationExtension 17.0, *) {
-      containerBackground(for: .widget) { TapNaPalette.shell }
+      containerBackground(for: .widget) { shell }
     } else {
-      background(TapNaPalette.shell)
+      background(shell)
     }
   }
 }
 
 struct TapNaQrView: View {
+  @Environment(\.colorScheme) private var colorScheme
   var entry: TapNaEntry
 
   var body: some View {
-    QrPlate(image: entry.qr)
-      .padding(8)
-      .tapNaWidgetChrome()
+    ZStack(alignment: .bottomTrailing) {
+      QrPlate(image: entry.qr)
+      if let avatar = entry.avatar {
+        AvatarBadge(image: avatar)
+          .frame(width: 34, height: 34)
+          .padding(6)
+      }
+    }
+    .padding(8)
+    .tapNaWidgetChrome(theme: entry.theme, colorScheme: colorScheme)
   }
 }
 
 struct TapNaCardView: View {
+  @Environment(\.colorScheme) private var colorScheme
   var entry: TapNaEntry
 
   var body: some View {
-    QrPlate(image: entry.qr)
-      .padding(8)
-      .tapNaWidgetChrome()
+    HStack(spacing: 8) {
+      if let avatar = entry.avatar {
+        AvatarBadge(image: avatar)
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .layoutPriority(-1)
+      }
+      QrPlate(image: entry.qr)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    .padding(8)
+    .tapNaWidgetChrome(theme: entry.theme, colorScheme: colorScheme)
   }
 }
 
 struct TapNaProfileView: View {
+  @Environment(\.colorScheme) private var colorScheme
   var entry: TapNaEntry
 
   var body: some View {
-    QrPlate(image: entry.qr)
-      .padding(10)
-      .tapNaWidgetChrome()
+    VStack(spacing: 10) {
+      if let avatar = entry.avatar {
+        AvatarBadge(image: avatar)
+          .frame(width: 72, height: 72)
+      }
+      QrPlate(image: entry.qr)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    .padding(10)
+    .tapNaWidgetChrome(theme: entry.theme, colorScheme: colorScheme)
   }
 }
 
@@ -118,7 +175,7 @@ struct TapNaQrWidget: Widget {
       TapNaQrView(entry: entry)
     }
     .configurationDisplayName("Tap Na QR")
-    .description("QR code only. People scan this to open your profile.")
+    .description("QR code with your profile photo.")
     .supportedFamilies([.systemSmall])
   }
 }
@@ -131,7 +188,7 @@ struct TapNaCardWidget: Widget {
       TapNaCardView(entry: entry)
     }
     .configurationDisplayName("Tap Na Card")
-    .description("Wide QR code for your Tap Na profile.")
+    .description("Wide QR with your profile photo.")
     .supportedFamilies([.systemMedium])
   }
 }
@@ -144,7 +201,7 @@ struct TapNaProfileWidget: Widget {
       TapNaProfileView(entry: entry)
     }
     .configurationDisplayName("Tap Na Profile")
-    .description("Large QR code for your Tap Na profile.")
+    .description("Tall QR with your profile photo.")
     .supportedFamilies([.systemLarge])
   }
 }

@@ -1,13 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="110dp"
     android:layout_height="280dp"
     android:background="@drawable/widget_shell"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
     android:padding="12dp">
 
     <ImageView
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:contentDescription="@string/widget_profile_description"
+        android:src="@drawable/widget_skeleton_circle" />
+
+    <ImageView
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="10dp"
+        android:layout_weight="1"
         android:contentDescription="@string/widget_qr_description"
         android:src="@drawable/widget_skeleton_qr" />
-</FrameLayout>
+</LinearLayout>

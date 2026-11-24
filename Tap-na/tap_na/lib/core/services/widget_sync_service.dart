@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -15,6 +18,11 @@ class WidgetSyncService {
   Future<void> sync(ProfileData profile) async {
     try {
       await configure();
+      final isDark = _isDarkTheme();
+      await HomeWidget.saveWidgetData<String>(
+        'widget_theme',
+        isDark ? 'dark' : 'light',
+      );
       await HomeWidget.saveWidgetData<String>('widget_name', profile.safeName);
       await HomeWidget.saveWidgetData<String>('widget_title', profile.title);
       await HomeWidget.saveWidgetData<String>(
@@ -27,13 +35,19 @@ class WidgetSyncService {
       );
 
       if (profile.publicProfileUrl.trim().isNotEmpty) {
-        // Keep QR modest: home-screen RemoteViews reject oversized bitmaps
-        // (Android limit ≈ 6 × screen pixels). 384 logical is sharp enough.
         await HomeWidget.renderFlutterWidget(
-          _QrPlate(url: profile.publicProfileUrl.trim()),
+          _QrPlate(
+            url: profile.publicProfileUrl.trim(),
+            shellColor: isDark ? AppConstants.bg : AppConstants.cream,
+          ),
           key: 'widget_qr',
           logicalSize: const Size(384, 384),
         );
+      }
+
+      final avatar = profile.localImagePath;
+      if (avatar != null && File(avatar).existsSync()) {
+        await _renderAvatar(avatar);
       }
 
       await _updateAll();
@@ -48,6 +62,54 @@ class WidgetSyncService {
       await HomeWidget.saveWidgetData<String>('widget_url', '');
       await _updateAll();
     } catch (_) {}
+  }
+
+  bool _isDarkTheme() {
+    final brightness =
+        WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    return brightness == Brightness.dark;
+  }
+
+  Future<void> _renderAvatar(String path) async {
+    final bytes = await File(path).readAsBytes();
+    if (bytes.isEmpty) return;
+    const size = 168.0;
+    const ring = 8.0;
+    final codec = await ui.instantiateImageCodec(
+      bytes,
+      targetWidth: 160,
+      targetHeight: 160,
+    );
+    final frame = await codec.getNextFrame();
+    try {
+      await HomeWidget.renderFlutterWidget(
+        SizedBox(
+          width: size,
+          height: size,
+          child: DecoratedBox(
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(ring),
+              child: ClipOval(
+                child: RawImage(
+                  image: frame.image,
+                  fit: BoxFit.cover,
+                  width: size - ring * 2,
+                  height: size - ring * 2,
+                ),
+              ),
+            ),
+          ),
+        ),
+        key: 'widget_avatar',
+        logicalSize: const Size(size, size),
+      );
+    } finally {
+      frame.image.dispose();
+    }
   }
 
   Future<void> _updateAll() async {
@@ -65,14 +127,15 @@ class WidgetSyncService {
 }
 
 class _QrPlate extends StatelessWidget {
-  const _QrPlate({required this.url});
+  const _QrPlate({required this.url, required this.shellColor});
 
   final String url;
+  final Color shellColor;
 
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: const Color(0xFF121212),
+      color: shellColor,
       child: Padding(
         padding: const EdgeInsets.all(8),
         child: ClipRRect(

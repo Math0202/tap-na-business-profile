@@ -13,4 +13,15 @@
         android:adjustViewBounds="true"
         android:contentDescription="@string/widget_qr_description"
         android:scaleType="fitCenter" />
+
+    <ImageView
+        android:id="@+id/widget_avatar"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="6dp"
+        android:adjustViewBounds="true"
+        android:contentDescription="@string/widget_profile_description"
+        android:scaleType="fitCenter"
+        android:visibility="gone" />
 </FrameLayout>

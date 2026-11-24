@@ -2,4 +2,6 @@
 <resources>
     <color name="launch_background">#F4F1EA</color>
     <color name="ic_launcher_background">#F4F1EA</color>
+    <color name="widget_shell">#F4F1EA</color>
+    <color name="widget_shell_dark">#121212</color>
 </resources>

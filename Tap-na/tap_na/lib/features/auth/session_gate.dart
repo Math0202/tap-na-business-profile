@@ -19,7 +19,7 @@ class SessionGate extends StatefulWidget {
   State<SessionGate> createState() => _SessionGateState();
 }
 
-class _SessionGateState extends State<SessionGate> {
+class _SessionGateState extends State<SessionGate> with WidgetsBindingObserver {
   final SessionService _sessionService = SessionService();
   final ConnectivityService _connectivityService = ConnectivityService();
   final ProfileCacheService _cacheService = ProfileCacheService();
@@ -38,6 +38,7 @@ class _SessionGateState extends State<SessionGate> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _bootstrap();
     _connectivitySub = _connectivityService.onStatusChanged.listen((online) {
       if (!mounted) return;
@@ -50,8 +51,17 @@ class _SessionGateState extends State<SessionGate> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _connectivitySub?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    final profile = _cachedProfile;
+    if (profile != null) {
+      _widgetSync.sync(profile);
+    }
   }
 
   Future<void> _bootstrap() async {

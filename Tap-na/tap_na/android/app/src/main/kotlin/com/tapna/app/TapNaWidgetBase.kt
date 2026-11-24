@@ -3,6 +3,7 @@ package com.tapna.app
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
@@ -44,11 +45,65 @@ open class TapNaWidgetBase : HomeWidgetProvider() {
         widgetId: Int,
         widgetData: SharedPreferences,
     ) {
-        val views = RemoteViews(context.packageName, R.layout.tap_na_widget_small)
+        val options = appWidgetManager.getAppWidgetOptions(widgetId)
+        val minWidth = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 110)
+        val minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 110)
+        val qrOnly = minHeight < 70 || (minWidth < 110 && minHeight < 110)
+        val landscape = !qrOnly && minWidth > minHeight
+        val showPhoto = !qrOnly && (landscape || minHeight >= 110)
+
+        val layout =
+            when {
+                qrOnly -> R.layout.tap_na_widget_small
+                landscape -> R.layout.tap_na_widget_landscape
+                showPhoto -> R.layout.tap_na_widget_tall
+                else -> R.layout.tap_na_widget_details
+            }
+
+        val views = RemoteViews(context.packageName, layout)
         val pendingIntent = HomeWidgetLaunchIntent.getActivity(context, MainActivity::class.java)
         views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
-        bindImage(views, R.id.widget_qr, widgetData.getString("widget_qr", null), 420)
-        pushUpdate(appWidgetManager, widgetId, views)
+        applyShellColor(context, views, widgetData)
+
+        val qrMaxEdge = if (qrOnly) 420 else 360
+        bindImage(views, R.id.widget_qr, widgetData.getString("widget_qr", null), qrMaxEdge)
+
+        val avatarPath = widgetData.getString("widget_avatar", null)
+        if (showPhoto || layout == R.layout.tap_na_widget_small || layout == R.layout.tap_na_widget_details) {
+            val avatarEdge = if (showPhoto && landscape) 220 else if (showPhoto) 200 else 120
+            bindImage(views, R.id.widget_avatar, avatarPath, avatarEdge)
+        } else {
+            views.setViewVisibility(R.id.widget_avatar, View.GONE)
+        }
+
+        if (!pushUpdate(appWidgetManager, widgetId, views) && showPhoto) {
+            val fallback = RemoteViews(context.packageName, R.layout.tap_na_widget_details)
+            fallback.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
+            applyShellColor(context, fallback, widgetData)
+            bindImage(fallback, R.id.widget_qr, widgetData.getString("widget_qr", null), 280)
+            fallback.setViewVisibility(R.id.widget_avatar, View.GONE)
+            pushUpdate(appWidgetManager, widgetId, fallback)
+        }
+    }
+
+    private fun applyShellColor(
+        context: Context,
+        views: RemoteViews,
+        widgetData: SharedPreferences,
+    ) {
+        val saved = widgetData.getString("widget_theme", null)
+        val dark =
+            when (saved) {
+                "light" -> false
+                "dark" -> true
+                else -> {
+                    val night =
+                        context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+                    night == Configuration.UI_MODE_NIGHT_YES
+                }
+            }
+        val shell = if (dark) R.drawable.widget_shell_dark else R.drawable.widget_shell_light
+        views.setInt(R.id.widget_root, "setBackgroundResource", shell)
     }
 
     private fun pushUpdate(

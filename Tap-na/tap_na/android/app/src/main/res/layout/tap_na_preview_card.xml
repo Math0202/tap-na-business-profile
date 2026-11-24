@@ -1,13 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="280dp"
     android:layout_height="140dp"
     android:background="@drawable/widget_shell"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
     android:padding="10dp">
 
     <ImageView
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="match_parent"
+        android:layout_marginEnd="8dp"
+        android:layout_weight="3"
+        android:contentDescription="@string/widget_profile_description"
+        android:src="@drawable/widget_skeleton_circle" />
+
+    <ImageView
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="7"
         android:contentDescription="@string/widget_qr_description"
         android:src="@drawable/widget_skeleton_qr" />
-</FrameLayout>
+</LinearLayout>
