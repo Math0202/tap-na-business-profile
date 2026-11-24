@@ -109,10 +109,11 @@ class _QrPlate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Match widget panel (#2A2A2A) so QR sits cleanly in the unified card.
     return ColoredBox(
-      color: const Color(0xFF121212),
+      color: const Color(0xFF2A2A2A),
       child: Padding(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(4),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: ColoredBox(

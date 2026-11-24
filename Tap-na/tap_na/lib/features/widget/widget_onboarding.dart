@@ -173,38 +173,39 @@ class _LandscapeSkeleton extends StatelessWidget {
     return _Shell(
       width: 220,
       height: 110,
-      child: Row(
-        children: [
-          Expanded(
-            flex: 4,
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2A),
-                borderRadius: BorderRadius.circular(12),
-              ),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF2A2A2A),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            const Expanded(
+              flex: 4,
               child: Column(
                 children: [
-                  const Expanded(child: _PhotoDot()),
-                  const SizedBox(height: 6),
-                  const _Bar(width: 48),
-                  const SizedBox(height: 4),
-                  const _Bar(width: 36, color: Color(0xFF52525B)),
+                  Expanded(child: _PhotoDot()),
+                  SizedBox(height: 6),
+                  _Bar(width: 48),
+                  SizedBox(height: 4),
+                  _Bar(width: 36, color: Color(0xFF52525B)),
                 ],
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 6,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
+            const SizedBox(width: 10),
+            Expanded(
+              flex: 6,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.qr_code_2, color: Colors.black),
               ),
-              child: const Icon(Icons.qr_code_2, color: Colors.black),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -218,18 +219,18 @@ class _TallSkeleton extends StatelessWidget {
     return _Shell(
       width: 120,
       height: 180,
-      child: Column(
-        children: [
-          Expanded(
-            flex: 5,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2A),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Column(
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF2A2A2A),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            const Expanded(
+              flex: 3,
+              child: Column(
                 children: [
                   Expanded(child: _PhotoDot()),
                   SizedBox(height: 6),
@@ -239,21 +240,21 @@ class _TallSkeleton extends StatelessWidget {
                 ],
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            flex: 3,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Center(
-                child: Icon(Icons.qr_code_2, color: Colors.black, size: 40),
+            const SizedBox(height: 10),
+            Expanded(
+              flex: 5,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Center(
+                  child: Icon(Icons.qr_code_2, color: Colors.black, size: 40),
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

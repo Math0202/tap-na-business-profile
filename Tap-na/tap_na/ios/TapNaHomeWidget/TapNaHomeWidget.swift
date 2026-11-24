@@ -68,11 +68,11 @@ struct QrPlate: View {
           .scaledToFit()
       } else {
         RoundedRectangle(cornerRadius: 16)
-          .fill(Color.white.opacity(0.12))
+          .fill(Color.white.opacity(0.92))
           .overlay(
             Image(systemName: "qrcode")
               .font(.largeTitle)
-              .foregroundColor(.white.opacity(0.45))
+              .foregroundColor(.black.opacity(0.45))
           )
       }
     }
@@ -80,7 +80,7 @@ struct QrPlate: View {
   }
 }
 
-struct IdentityColumn: View {
+struct IdentityBlock: View {
   let entry: TapNaEntry
   var showPhoto: Bool
   var expanded: Bool = false
@@ -119,9 +119,18 @@ struct IdentityColumn: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: expanded ? .infinity : nil)
-    .padding(10)
-    .background(TapNaPalette.panel)
-    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+  }
+}
+
+struct UnifiedCard<Content: View>: View {
+  @ViewBuilder var content: Content
+
+  var body: some View {
+    content
+      .padding(10)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background(TapNaPalette.panel)
+      .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
   }
 }
 
@@ -151,13 +160,17 @@ struct TapNaCardView: View {
 
   var body: some View {
     ViewThatFits(in: .vertical) {
-      HStack(spacing: 8) {
-        IdentityColumn(entry: entry, showPhoto: true, expanded: true)
-        QrPlate(image: entry.qr)
+      UnifiedCard {
+        HStack(spacing: 10) {
+          IdentityBlock(entry: entry, showPhoto: true, expanded: true)
+          QrPlate(image: entry.qr)
+        }
       }
-      HStack(spacing: 8) {
-        IdentityColumn(entry: entry, showPhoto: false)
-        QrPlate(image: entry.qr)
+      UnifiedCard {
+        HStack(spacing: 10) {
+          IdentityBlock(entry: entry, showPhoto: false)
+          QrPlate(image: entry.qr)
+        }
       }
       QrPlate(image: entry.qr)
     }
@@ -171,16 +184,19 @@ struct TapNaProfileView: View {
 
   var body: some View {
     ViewThatFits(in: .vertical) {
-      VStack(spacing: 10) {
-        IdentityColumn(entry: entry, showPhoto: true, expanded: true)
-          .frame(maxHeight: .infinity)
-        QrPlate(image: entry.qr)
-          .frame(maxHeight: .infinity)
-          .layoutPriority(-1)
+      UnifiedCard {
+        VStack(spacing: 10) {
+          IdentityBlock(entry: entry, showPhoto: true, expanded: true)
+            .frame(maxHeight: .infinity)
+          QrPlate(image: entry.qr)
+            .frame(maxHeight: .infinity)
+        }
       }
-      VStack(spacing: 10) {
-        IdentityColumn(entry: entry, showPhoto: false)
-        QrPlate(image: entry.qr)
+      UnifiedCard {
+        VStack(spacing: 10) {
+          IdentityBlock(entry: entry, showPhoto: false)
+          QrPlate(image: entry.qr)
+        }
       }
       QrPlate(image: entry.qr)
     }
