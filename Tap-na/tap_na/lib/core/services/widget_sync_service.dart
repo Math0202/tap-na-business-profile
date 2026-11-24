@@ -30,10 +30,11 @@ class WidgetSyncService {
       );
 
       if (profile.publicProfileUrl.trim().isNotEmpty) {
+        // Modest size: RemoteViews reject oversized bitmaps on many phones.
         await HomeWidget.renderFlutterWidget(
           _QrPlate(url: profile.publicProfileUrl.trim()),
           key: 'widget_qr',
-          logicalSize: const Size(672, 672),
+          logicalSize: const Size(384, 384),
         );
       }
 
@@ -61,26 +62,26 @@ class WidgetSyncService {
     if (bytes.isEmpty) return;
     final codec = await ui.instantiateImageCodec(
       bytes,
-      targetWidth: 240,
-      targetHeight: 240,
+      targetWidth: 160,
+      targetHeight: 160,
     );
     final frame = await codec.getNextFrame();
     try {
       await HomeWidget.renderFlutterWidget(
         SizedBox(
-          width: 240,
-          height: 240,
+          width: 160,
+          height: 160,
           child: ClipOval(
             child: RawImage(
               image: frame.image,
               fit: BoxFit.cover,
-              width: 240,
-              height: 240,
+              width: 160,
+              height: 160,
             ),
           ),
         ),
         key: 'widget_avatar',
-        logicalSize: const Size(240, 240),
+        logicalSize: const Size(160, 160),
       );
     } finally {
       frame.image.dispose();
@@ -111,16 +112,16 @@ class _QrPlate extends StatelessWidget {
     return ColoredBox(
       color: const Color(0xFF121212),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(8),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(16),
           child: ColoredBox(
             color: Colors.white,
             child: Padding(
-              padding: const EdgeInsets.all(28),
+              padding: const EdgeInsets.all(16),
               child: QrImageView(
                 data: url,
-                size: 576,
+                size: 336,
                 padding: EdgeInsets.zero,
                 backgroundColor: Colors.white,
                 eyeStyle: const QrEyeStyle(
