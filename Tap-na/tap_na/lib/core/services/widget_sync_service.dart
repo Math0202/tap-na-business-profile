@@ -1,6 +1,3 @@
-import 'dart:io';
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -39,11 +36,6 @@ class WidgetSyncService {
         );
       }
 
-      final avatar = profile.localImagePath;
-      if (avatar != null && File(avatar).existsSync()) {
-        await _renderAvatar(avatar);
-      }
-
       await _updateAll();
     } catch (_) {}
   }
@@ -56,37 +48,6 @@ class WidgetSyncService {
       await HomeWidget.saveWidgetData<String>('widget_url', '');
       await _updateAll();
     } catch (_) {}
-  }
-
-  Future<void> _renderAvatar(String path) async {
-    final bytes = await File(path).readAsBytes();
-    if (bytes.isEmpty) return;
-    final codec = await ui.instantiateImageCodec(
-      bytes,
-      targetWidth: 160,
-      targetHeight: 160,
-    );
-    final frame = await codec.getNextFrame();
-    try {
-      await HomeWidget.renderFlutterWidget(
-        SizedBox(
-          width: 160,
-          height: 160,
-          child: ClipOval(
-            child: RawImage(
-              image: frame.image,
-              fit: BoxFit.cover,
-              width: 160,
-              height: 160,
-            ),
-          ),
-        ),
-        key: 'widget_avatar',
-        logicalSize: const Size(160, 160),
-      );
-    } finally {
-      frame.image.dispose();
-    }
   }
 
   Future<void> _updateAll() async {

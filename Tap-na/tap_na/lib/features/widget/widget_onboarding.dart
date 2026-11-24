@@ -61,11 +61,11 @@ class WidgetOnboarding extends StatelessWidget {
                       ),
                       _PreviewCard(
                         title: 'Tap Na Card',
-                        child: _LandscapeSkeleton(),
+                        child: _QrSkeleton(width: 220, height: 110),
                       ),
                       _PreviewCard(
                         title: 'Tap Na Profile',
-                        child: _TallSkeleton(),
+                        child: _QrSkeleton(width: 120, height: 180),
                       ),
                     ],
                   ),
@@ -121,177 +121,32 @@ class _PreviewCard extends StatelessWidget {
   }
 }
 
-class _Shell extends StatelessWidget {
-  const _Shell({required this.child, this.width, this.height});
+class _QrSkeleton extends StatelessWidget {
+  const _QrSkeleton({this.size, this.width, this.height});
 
-  final Widget child;
+  final double? size;
   final double? width;
   final double? height;
 
   @override
   Widget build(BuildContext context) {
+    final w = width ?? ((size ?? 72) + 16);
+    final h = height ?? ((size ?? 72) + 16);
     return Container(
-      width: width,
-      height: height,
+      width: w,
+      height: h,
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: const Color(0xFF121212),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: const Color(0xFF3A3A3A)),
       ),
-      child: child,
-    );
-  }
-}
-
-class _QrSkeleton extends StatelessWidget {
-  const _QrSkeleton({this.size = 72});
-
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Shell(
-      width: size + 16,
-      height: size + 16,
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
         ),
         child: const Icon(Icons.qr_code_2, color: Colors.black, size: 48),
-      ),
-    );
-  }
-}
-
-class _LandscapeSkeleton extends StatelessWidget {
-  const _LandscapeSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return _Shell(
-      width: 220,
-      height: 110,
-      child: Row(
-        children: [
-          Expanded(
-            flex: 4,
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2A),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: [
-                  const Expanded(child: _PhotoDot()),
-                  const SizedBox(height: 6),
-                  const _Bar(width: 48),
-                  const SizedBox(height: 4),
-                  const _Bar(width: 36, color: Color(0xFF52525B)),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 6,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.qr_code_2, color: Colors.black),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TallSkeleton extends StatelessWidget {
-  const _TallSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return _Shell(
-      width: 120,
-      height: 180,
-      child: Column(
-        children: [
-          Expanded(
-            flex: 5,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2A),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Column(
-                children: [
-                  Expanded(child: _PhotoDot()),
-                  SizedBox(height: 6),
-                  _Bar(width: 56),
-                  SizedBox(height: 4),
-                  _Bar(width: 40, color: Color(0xFF52525B)),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            flex: 3,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Center(
-                child: Icon(Icons.qr_code_2, color: Colors.black, size: 40),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PhotoDot extends StatelessWidget {
-  const _PhotoDot();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: AspectRatio(
-        aspectRatio: 1,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: Color(0xFF3F3F46),
-            shape: BoxShape.circle,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Bar extends StatelessWidget {
-  const _Bar({required this.width, this.color = Colors.white70});
-
-  final double width;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: width,
-      height: 6,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(4),
       ),
     );
   }

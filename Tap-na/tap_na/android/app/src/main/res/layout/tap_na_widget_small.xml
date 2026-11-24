@@ -13,35 +13,4 @@
         android:adjustViewBounds="true"
         android:contentDescription="@string/widget_qr_description"
         android:scaleType="fitCenter" />
-
-    <ImageView
-        android:id="@+id/widget_avatar"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:visibility="gone" />
-
-    <TextView
-        android:id="@+id/widget_name"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:visibility="gone" />
-
-    <TextView
-        android:id="@+id/widget_title"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:visibility="gone" />
-
-    <TextView
-        android:id="@+id/widget_company"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:visibility="gone" />
-
-    <LinearLayout
-        android:id="@+id/widget_identity"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:orientation="vertical"
-        android:visibility="gone" />
 </FrameLayout>

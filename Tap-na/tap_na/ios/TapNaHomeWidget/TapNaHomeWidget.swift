@@ -5,15 +5,12 @@ import WidgetKit
 struct TapNaEntry: TimelineEntry {
   let date: Date
   let name: String
-  let title: String
-  let company: String
   let qr: UIImage?
-  let avatar: UIImage?
 }
 
 struct TapNaProvider: TimelineProvider {
   func placeholder(in context: Context) -> TapNaEntry {
-    TapNaEntry(date: Date(), name: "Name", title: "Title", company: "Company", qr: nil, avatar: nil)
+    TapNaEntry(date: Date(), name: "Tap Na", qr: nil)
   }
 
   func getSnapshot(in context: Context, completion: @escaping (TapNaEntry) -> Void) {
@@ -27,15 +24,10 @@ struct TapNaProvider: TimelineProvider {
   private func loadEntry() -> TapNaEntry {
     let defaults = UserDefaults(suiteName: "group.tapna.app")
     let name = defaults?.string(forKey: "widget_name") ?? "Tap Na"
-    let title = defaults?.string(forKey: "widget_title") ?? ""
-    let company = defaults?.string(forKey: "widget_company") ?? ""
     return TapNaEntry(
       date: Date(),
       name: name.isEmpty ? "Tap Na" : name,
-      title: title,
-      company: company,
-      qr: image(named: "widget_qr", defaults: defaults),
-      avatar: image(named: "widget_avatar", defaults: defaults)
+      qr: image(named: "widget_qr", defaults: defaults)
     )
   }
 
@@ -52,9 +44,6 @@ struct TapNaProvider: TimelineProvider {
 
 struct TapNaPalette {
   static let shell = Color(red: 18 / 255, green: 18 / 255, blue: 18 / 255)
-  static let panel = Color(red: 42 / 255, green: 42 / 255, blue: 42 / 255)
-  static let muted = Color(red: 161 / 255, green: 161 / 255, blue: 170 / 255)
-  static let faint = Color(red: 113 / 255, green: 113 / 255, blue: 122 / 255)
 }
 
 struct QrPlate: View {
@@ -76,51 +65,6 @@ struct QrPlate: View {
           )
       }
     }
-    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-  }
-}
-
-struct IdentityColumn: View {
-  let entry: TapNaEntry
-  var showPhoto: Bool
-  var expanded: Bool = false
-
-  var body: some View {
-    VStack(spacing: 6) {
-      if showPhoto {
-        Group {
-          if let avatar = entry.avatar {
-            Image(uiImage: avatar)
-              .resizable()
-              .scaledToFit()
-          } else {
-            Circle()
-              .fill(Color(white: 0.25))
-              .aspectRatio(1, contentMode: .fit)
-          }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-      }
-      Text(entry.name)
-        .font(expanded ? .title3.weight(.bold) : .headline)
-        .foregroundColor(.white)
-        .lineLimit(1)
-      if !entry.title.isEmpty {
-        Text(entry.title)
-          .font(.caption)
-          .foregroundColor(TapNaPalette.muted)
-          .lineLimit(1)
-      }
-      if !entry.company.isEmpty {
-        Text(entry.company)
-          .font(.caption)
-          .foregroundColor(TapNaPalette.faint)
-          .lineLimit(1)
-      }
-    }
-    .frame(maxWidth: .infinity, maxHeight: expanded ? .infinity : nil)
-    .padding(10)
-    .background(TapNaPalette.panel)
     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
   }
 }
@@ -150,19 +94,9 @@ struct TapNaCardView: View {
   var entry: TapNaEntry
 
   var body: some View {
-    ViewThatFits(in: .vertical) {
-      HStack(spacing: 8) {
-        IdentityColumn(entry: entry, showPhoto: true, expanded: true)
-        QrPlate(image: entry.qr)
-      }
-      HStack(spacing: 8) {
-        IdentityColumn(entry: entry, showPhoto: false)
-        QrPlate(image: entry.qr)
-      }
-      QrPlate(image: entry.qr)
-    }
-    .padding(8)
-    .tapNaWidgetChrome()
+    QrPlate(image: entry.qr)
+      .padding(8)
+      .tapNaWidgetChrome()
   }
 }
 
@@ -170,22 +104,9 @@ struct TapNaProfileView: View {
   var entry: TapNaEntry
 
   var body: some View {
-    ViewThatFits(in: .vertical) {
-      VStack(spacing: 10) {
-        IdentityColumn(entry: entry, showPhoto: true, expanded: true)
-          .frame(maxHeight: .infinity)
-        QrPlate(image: entry.qr)
-          .frame(maxHeight: .infinity)
-          .layoutPriority(-1)
-      }
-      VStack(spacing: 10) {
-        IdentityColumn(entry: entry, showPhoto: false)
-        QrPlate(image: entry.qr)
-      }
-      QrPlate(image: entry.qr)
-    }
-    .padding(10)
-    .tapNaWidgetChrome()
+    QrPlate(image: entry.qr)
+      .padding(10)
+      .tapNaWidgetChrome()
   }
 }
 
@@ -210,7 +131,7 @@ struct TapNaCardWidget: Widget {
       TapNaCardView(entry: entry)
     }
     .configurationDisplayName("Tap Na Card")
-    .description("Landscape business card with your details and QR code.")
+    .description("Wide QR code for your Tap Na profile.")
     .supportedFamilies([.systemMedium])
   }
 }
@@ -223,7 +144,7 @@ struct TapNaProfileWidget: Widget {
       TapNaProfileView(entry: entry)
     }
     .configurationDisplayName("Tap Na Profile")
-    .description("Tall profile card with photo, details, and QR code.")
+    .description("Large QR code for your Tap Na profile.")
     .supportedFamilies([.systemLarge])
   }
 }
