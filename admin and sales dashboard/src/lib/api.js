@@ -1,24 +1,17 @@
 /**
  * tap-na API client — talks to the Worker backend on tapnam.com.
- * Same-origin only on the apex public site; admin.tapnam.com always uses https://tapnam.com.
+ * Same-origin in production; falls back to https://tapnam.com in local dev.
+ * All calls fail soft so the app keeps working offline (localStorage fallback).
  */
 
 import { getStaffAccessToken } from './staffAuth'
-import { isAdminHost, isLocalHost } from './hosts'
 
 const TOKEN_KEY = 'tapna.apiToken'
 
-function resolveApiBase() {
-  if (typeof window === 'undefined') return 'https://tapnam.com'
-  const host = String(window.location.hostname || '').toLowerCase()
-  // Staff SPA on admin subdomain (and local/dev) must hit apex API
-  if (isAdminHost(host) || isLocalHost(host)) return 'https://tapnam.com'
-  // Public apex / legacy hosts stay same-origin
-  if (/(^|\.)(tapnam\.com|redirct\.link)$/i.test(host)) return ''
-  return 'https://tapnam.com'
-}
-
-export const API_BASE = resolveApiBase()
+export const API_BASE =
+  typeof window !== 'undefined' && /(^|\.)(tapnam\.com|redirct\.link)$/i.test(window.location.hostname)
+    ? ''
+    : 'https://tapnam.com'
 
 export function getApiToken() {
   try {
@@ -152,11 +145,35 @@ export function apiLogCardOpen(slug, via = '') {
 }
 
 /** Log a click / share / other profile event */
-export function apiLogCardEvent(slug, action, via = '') {
+export function apiLogCardEvent(slug, action, via = '', extra = {}) {
+  const body = { action, via }
+  if (extra.sessionKey) body.sessionKey = String(extra.sessionKey)
+  if (extra.dwellMs != null && Number.isFinite(Number(extra.dwellMs))) {
+    body.dwellMs = Math.max(0, Math.round(Number(extra.dwellMs)))
+  }
+  if (extra.reason) body.reason = String(extra.reason).slice(0, 200)
   return request(`/api/cards/${encodeURIComponent(slug)}/event`, {
     method: 'POST',
-    body: { action, via }
+    body
   })
+}
+
+/** Cross-profile events feed + journeys for admin Events panel */
+export function apiAdminEvents({
+  days = 30,
+  range = '',
+  from = '',
+  to = '',
+  limit = 80
+} = {}) {
+  const q = new URLSearchParams()
+  if (range === 'all' || range === 'custom') q.set('range', range)
+  else if (days) q.set('days', String(days))
+  if (from) q.set('from', String(from))
+  if (to) q.set('to', String(to))
+  if (limit) q.set('limit', String(limit))
+  const qs = q.toString()
+  return request(`/api/admin/events${qs ? `?${qs}` : ''}`, { timeoutMs: 45000 })
 }
 
 /** Link a card to a profile */

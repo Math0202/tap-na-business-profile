@@ -64,7 +64,11 @@ function requestGeo(request) {
   }
 }
 
-async function recordCardActivity(env, request, { slug, channel = 'nfc', action = 'open' }) {
+async function recordCardActivity(
+  env,
+  request,
+  { slug, channel = 'nfc', action = 'open', dwellMs = null, sessionKey = '' } = {}
+) {
   const code = String(slug || '').trim()
   if (!code) return null
   const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(code)}&deleted=eq.false&select=id,profile_id`)
@@ -76,24 +80,39 @@ async function recordCardActivity(env, request, { slug, channel = 'nfc', action 
   const ch = channel === 'qr' ? 'qr' : channel === 'other' ? 'other' : 'nfc'
   const act = String(action || 'open').trim().slice(0, 64) || 'open'
   const openId = uid('open')
+  const body = {
+    id: openId,
+    card_id: card.id,
+    slug: code,
+    channel: ch,
+    action: act,
+    user_agent: ua.slice(0, 400),
+    device_type: device,
+    browser,
+    ip_country: geo.country,
+    ip_city: geo.city,
+    ip_region: geo.region,
+    session_key: String(sessionKey || '').trim().slice(0, 80)
+  }
+  if (dwellMs != null && Number.isFinite(Number(dwellMs))) {
+    body.dwell_ms = Math.max(0, Math.min(Math.round(Number(dwellMs)), 24 * 60 * 60 * 1000))
+  }
   await sb(env, 'card_opens', {
     method: 'POST',
-    body: {
-      id: openId,
-      card_id: card.id,
-      slug: code,
-      channel: ch,
-      action: act,
-      user_agent: ua.slice(0, 400),
-      device_type: device,
-      browser,
-      ip_country: geo.country,
-      ip_city: geo.city,
-      ip_region: geo.region
-    },
+    body,
     prefer: 'return=minimal'
   })
-  return { openId, channel: ch, action: act, device, browser, ...geo, profileId: card.profile_id || '' }
+  return {
+    openId,
+    channel: ch,
+    action: act,
+    device,
+    browser,
+    ...geo,
+    profileId: card.profile_id || '',
+    dwellMs: body.dwell_ms ?? null,
+    sessionKey: body.session_key || ''
+  }
 }
 
 function parseUa(ua = '') {
@@ -458,8 +477,162 @@ function mapOpenRows(opens) {
     city: o.ip_city || '',
     region: o.ip_region || '',
     userAgent: o.user_agent || '',
+    dwellMs: o.dwell_ms == null ? null : Number(o.dwell_ms),
+    sessionKey: o.session_key || '',
     at: o.opened_at
   }))
+}
+
+function percentile(sorted, p) {
+  if (!sorted.length) return 0
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1))
+  return sorted[idx]
+}
+
+function buildJourneyAnalytics(activities = [], { logins = 0, errors = 0 } = {}) {
+  const opens = activities.filter((r) => r.action === 'open')
+  const opensNfc = opens.filter((r) => r.channel === 'nfc').length
+  const opensQr = opens.filter((r) => r.channel === 'qr').length
+  const opensWeb = opens.filter((r) => r.channel !== 'nfc' && r.channel !== 'qr').length
+
+  const saveContacts = activities.filter((r) => r.action === 'click:save_contact').length
+  const saveContactFails = activities.filter((r) => r.action === 'friction:save_contact').length
+  const shareOpens = activities.filter((r) => r.action === 'share:open').length
+  const shareChannels = activities.filter(
+    (r) => r.action.startsWith('share:') && r.action !== 'share:open'
+  ).length
+  const engages = activities.filter(
+    (r) =>
+      r.action.startsWith('click:') ||
+      r.action.startsWith('share:') ||
+      r.action === 'dwell'
+  ).length
+  const engageUniqueSessions = new Set(
+    activities
+      .filter(
+        (r) =>
+          r.sessionKey &&
+          (r.action.startsWith('click:') ||
+            r.action.startsWith('share:') ||
+            (r.action === 'dwell' && Number(r.dwellMs || 0) >= 3000))
+      )
+      .map((r) => r.sessionKey)
+  ).size
+
+  const dwells = activities
+    .filter((r) => r.action === 'dwell' && Number.isFinite(Number(r.dwellMs)))
+    .map((r) => Number(r.dwellMs))
+    .sort((a, b) => a - b)
+  const bounceDwells = dwells.filter((ms) => ms < 3000).length
+  const avgDwell = dwells.length
+    ? Math.round(dwells.reduce((a, b) => a + b, 0) / dwells.length)
+    : 0
+  const p50Dwell = percentile(dwells, 50)
+  const p95Dwell = percentile(dwells, 95)
+
+  const friction = activities.filter((r) => r.action.startsWith('friction:')).length
+  const openCount = opens.length
+
+  function funnel(steps) {
+    return steps.map((step, i) => {
+      const prev = i === 0 ? step.count : steps[i - 1].count
+      const rate = prev ? Math.round((step.count / prev) * 1000) / 10 : 0
+      const dropOff = prev ? Math.round(((prev - step.count) / prev) * 1000) / 10 : 0
+      return { ...step, rateFromPrev: rate, dropOffPct: Math.max(0, dropOff) }
+    })
+  }
+
+  const engageAfterOpen = Math.max(engageUniqueSessions, Math.min(engages, openCount))
+
+  return {
+    dwell: {
+      samples: dwells.length,
+      avgMs: avgDwell,
+      p50Ms: p50Dwell,
+      p95Ms: p95Dwell,
+      bounceCount: bounceDwells,
+      bounceRate: dwells.length ? Math.round((bounceDwells / dwells.length) * 1000) / 10 : 0
+    },
+    journeys: [
+      {
+        id: 'nfc_engage',
+        title: 'NFC open → engage',
+        channel: 'nfc',
+        steps: funnel([
+          { id: 'open', label: 'NFC open', count: opensNfc },
+          {
+            id: 'engage',
+            label: 'Engage',
+            count: opensNfc ? Math.min(engageAfterOpen, opensNfc) : 0
+          }
+        ])
+      },
+      {
+        id: 'qr_engage',
+        title: 'QR open → engage',
+        channel: 'qr',
+        steps: funnel([
+          { id: 'open', label: 'QR open', count: opensQr },
+          {
+            id: 'engage',
+            label: 'Engage',
+            count: opensQr ? Math.min(engageAfterOpen, opensQr) : 0
+          }
+        ])
+      },
+      {
+        id: 'web_engage',
+        title: 'Web open → engage',
+        channel: 'other',
+        steps: funnel([
+          { id: 'open', label: 'Web open', count: opensWeb },
+          {
+            id: 'engage',
+            label: 'Engage',
+            count: opensWeb ? Math.min(engageAfterOpen, opensWeb) : 0
+          }
+        ])
+      },
+      {
+        id: 'save_contact',
+        title: 'Save Contact',
+        steps: funnel([
+          { id: 'open', label: 'Open', count: openCount },
+          { id: 'save', label: 'Save Contact', count: saveContacts },
+          {
+            id: 'ok',
+            label: 'No friction',
+            count: Math.max(0, saveContacts - saveContactFails)
+          }
+        ])
+      },
+      {
+        id: 'share',
+        title: 'Share path',
+        steps: funnel([
+          { id: 'open', label: 'Open', count: openCount },
+          { id: 'share_open', label: 'Share open', count: shareOpens },
+          { id: 'share_channel', label: 'Shared', count: shareChannels }
+        ])
+      },
+      {
+        id: 'login',
+        title: 'Owner login',
+        steps: funnel([
+          { id: 'attempt', label: 'Login activity', count: Math.max(logins, errors) },
+          { id: 'session', label: 'Session created', count: logins }
+        ])
+      },
+      {
+        id: 'friction',
+        title: 'Friction / hangups',
+        steps: funnel([
+          { id: 'open', label: 'Opens', count: openCount },
+          { id: 'errors', label: 'Errors + friction', count: errors + friction }
+        ])
+      }
+    ]
+  }
 }
 
 async function uniqueSlug(env) {
@@ -684,6 +857,75 @@ function staffSessionPayload(tokenData, user) {
     expiresAt: tokenData.expires_at || null,
     tokenType: tokenData.token_type || 'bearer',
     user: claims
+  }
+}
+
+const TWO_TIER_SHOP_PRODUCTS = {
+  'black-card': {
+    name: 'Business Tier',
+    shop_label: 'Business Tier',
+    default_price: 360,
+    active: true,
+    description:
+      'Business Tier NFC card with an external NFC sticker tag. Mix with Executive (min 2 cards). Catalogue, CRM, calendar, and B&W logo.'
+  },
+  'black-card-front': {
+    name: 'Executive Tier',
+    shop_label: 'Executive Tier',
+    default_price: 510,
+    active: true,
+    description:
+      'Executive Tier NFC card with internal NFC. Mix with Business (min 2 cards). Team manager, personal assistant, and stand-in.'
+  }
+}
+
+let shopTiersEnsured = false
+
+async function ensureTwoTierShopCatalog(env) {
+  if (shopTiersEnsured) return
+  try {
+    for (const [id, target] of Object.entries(TWO_TIER_SHOP_PRODUCTS)) {
+      const rows = await sb(
+        env,
+        `sales_products?id=eq.${encodeURIComponent(id)}&select=id,name,default_price,active,shop_label,description`,
+        { skipErrorLog: true }
+      )
+      const row = rows?.[0]
+      if (!row) continue
+      const price = Number(row.default_price) || 0
+      const needs =
+        row.name !== target.name ||
+        price !== target.default_price ||
+        row.active !== target.active ||
+        String(row.shop_label || '') !== target.shop_label ||
+        String(row.description || '') !== target.description
+      if (!needs) continue
+      await sb(env, `sales_products?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: {
+          ...target,
+          updated_at: new Date().toISOString()
+        },
+        prefer: 'return=minimal',
+        skipErrorLog: true
+      })
+    }
+    const blue = await sb(
+      env,
+      'sales_products?id=eq.blue-card&select=id,active',
+      { skipErrorLog: true }
+    )
+    if (blue?.[0] && blue[0].active !== false) {
+      await sb(env, 'sales_products?id=eq.blue-card', {
+        method: 'PATCH',
+        body: { active: false, updated_at: new Date().toISOString() },
+        prefer: 'return=minimal',
+        skipErrorLog: true
+      })
+    }
+    shopTiersEnsured = true
+  } catch {
+    /* catalog still served from current rows */
   }
 }
 
@@ -1169,13 +1411,14 @@ function mapSalesClientTodoRow(row) {
 
 function salesClientTodoToDb(body, { isNew = false, staff = null } = {}) {
   const id = String(body?.id || '').trim() || (isNew ? uid('sctd') : '')
-  const kind = ['visit_1', 'visit_2', 'quote', 'manual'].includes(body?.kind) ? body.kind : 'manual'
+  const clientId = String(body?.clientId || '').trim()
   const status = body?.status === 'done' ? 'done' : 'open'
+  const kind = ['visit_1', 'visit_2', 'quote', 'manual'].includes(body?.kind) ? body.kind : 'manual'
   return {
     id,
-    client_id: String(body?.clientId || '').trim(),
+    client_id: clientId,
     owner_agent_id: String(body?.ownerAgentId || '').trim() || null,
-    title: String(body?.title || '').trim(),
+    title: String(body?.title || '').trim().slice(0, 160),
     due_at: body?.dueAt || new Date().toISOString(),
     status,
     kind,
@@ -1725,6 +1968,7 @@ function mapPublicCardRow(c) {
   return {
     slug: c.slug || '',
     kind,
+    industry: normalizeIndustry(c.industry),
     personalType: kind === 'personal' ? normalizePersonalType(c.personal_type || 'business') : '',
     productId: c.product_id || '',
     status: c.status || ''
@@ -1737,7 +1981,7 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
   const cardRows =
     (await sb(
       env,
-      `cards?profile_id=eq.${encodeURIComponent(row.id)}&deleted=eq.false&select=slug,kind,personal_type,product_id,status,linked_at&order=linked_at.desc.nullslast`
+      `cards?profile_id=eq.${encodeURIComponent(row.id)}&deleted=eq.false&select=slug,kind,industry,personal_type,product_id,status,linked_at&order=linked_at.desc.nullslast`
     )) || []
   const mapped = cardRows.map(mapPublicCardRow)
   const linked = mapped.filter((c) => !c.status || c.status === 'linked')
@@ -1815,6 +2059,8 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
     id: row.id,
     cardType: row.card_type === 'table' ? 'table' : 'personal',
     personalType,
+    industry: normalizeIndustry(shareHit?.industry),
+    vehicleFinance: normalizeVehicleFinance(row.vehicle_finance),
     name: row.name,
     title: row.title,
     company: row.company,
@@ -1841,7 +2087,10 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
     showCheckin: !!row.show_checkin,
     showFeedback: !!row.show_feedback,
     showBooking: row.show_booking !== false,
-    checkinForm: row.checkin_form && typeof row.checkin_form === 'object' ? row.checkin_form : {},
+    checkinForm:
+      row.checkin_form && typeof row.checkin_form === 'object'
+        ? Object.fromEntries(Object.entries(row.checkin_form).filter(([k]) => k !== '_tap_is_claimed'))
+        : {},
     feedbackForm: row.feedback_form && typeof row.feedback_form === 'object' ? row.feedback_form : {},
     catalogItems: normalizeCatalogItems(row.catalog_items),
     avatar: row.avatar,
@@ -1859,6 +2108,7 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
     standinUntil: row.standin_until || '',
     standinCover,
     bookingProfileId,
+    isClaimed: isProfileClaimed(row),
     ...(includeCards ? { cards: mapped } : {})
   }
 }
@@ -1978,6 +2228,45 @@ function normalizePersonalType(raw, fallback = 'business') {
   if (key === 'executive' || key === 'exclusive' || key === 'exec') return 'executive_exclusive'
   if (PERSONAL_TYPE_RANKS[key]) return key
   return fallback || ''
+}
+
+const DEFAULT_VEHICLE_FINANCE_REQUIREMENTS = [
+  'Valid Namibian ID or foreign passport with work permit',
+  'Valid driver’s license',
+  'Proof of residence (utility bill or lease agreement not older than 3 months)',
+  'Latest payslip (or 3–6 months of payslips if earning commission/overtime)',
+  '3–6 months of bank statements',
+  'Marriage certificate and antenuptial contract (if applicable)',
+  'Comprehensive vehicle insurance confirmation'
+]
+
+function normalizeIndustry(raw) {
+  const key = String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_')
+  if (key === 'auto_dealer' || key === 'autodealer' || key === 'auto') return 'auto_dealer'
+  return ''
+}
+
+function normalizeVehicleFinance(raw) {
+  const src = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
+  const rate = Number(src.annualRatePercent ?? src.annual_rate_percent)
+  const term = Number(src.termMonths ?? src.term_months)
+  const listed = Array.isArray(src.requirements) ? src.requirements : null
+  let requirements = (listed || [])
+    .map((line) => String(line || '').trim())
+    .filter(Boolean)
+    .slice(0, 24)
+  if (!requirements.length) requirements = [...DEFAULT_VEHICLE_FINANCE_REQUIREMENTS]
+  const allowRaw = src.allowBalloon !== undefined ? src.allowBalloon : src.allow_balloon
+  return {
+    enabled: src.enabled === true,
+    annualRatePercent: Number.isFinite(rate) ? Math.min(100, Math.max(0, rate)) : 12,
+    termMonths: Number.isFinite(term) ? Math.min(360, Math.max(1, Math.round(term))) : 60,
+    allowBalloon: allowRaw !== false,
+    requirements
+  }
 }
 
 function personalTypeRank(role) {
@@ -2640,6 +2929,132 @@ async function resolveSharedCatalogForProfile(env, profileId) {
   }
 }
 
+function cardRedirectSlug(card, fromSlug = '') {
+  const target = String(card?.redirect_slug || '').trim()
+  if (!target) return ''
+  const current = String(fromSlug || card?.slug || '').trim()
+  if (!current || target.toLowerCase() === current.toLowerCase()) return ''
+  return target
+}
+
+function isProfileClaimed(profile) {
+  if (!profile) return true
+  if (profile.is_claimed === false || profile.isClaimed === false) return false
+  const form = profile.checkin_form
+  if (form && typeof form === 'object' && form._tap_is_claimed === false) return false
+  return true
+}
+
+function cardContactPreset(card, profile = null) {
+  if (!card || card.status === 'linked' || card.status === 'disabled') return null
+  const fromProfile = !!(profile && card.status === 'unlinked')
+  const preset = {
+    name: String((fromProfile && profile.name) || card.contact_name || '').trim(),
+    company: String((fromProfile && profile.company) || card.contact_company || '').trim(),
+    phone: String((fromProfile && profile.phone) || card.contact_phone || '').trim(),
+    email: String((fromProfile && profile.email) || card.contact_email || '').trim(),
+    title: String((fromProfile && profile.title) || card.contact_title || '').trim()
+  }
+  if (!preset.name && !preset.company && !preset.phone && !preset.email && !preset.title) return null
+  return preset
+}
+
+function claimProfileFields(body, claimCard) {
+  const contact = claimCard || {}
+  const pick = (bodyVal, contactVal, max) => {
+    if (bodyVal !== undefined && bodyVal !== null) return String(bodyVal).trim().slice(0, max)
+    return String(contactVal || '').trim().slice(0, max)
+  }
+  const nameFromBody = String(body?.name || '').trim().slice(0, 160)
+  return {
+    name: nameFromBody || String(contact.contact_name || '').trim().slice(0, 160),
+    company: pick(body?.company, contact.contact_company, 160),
+    phone: pick(body?.phone, contact.contact_phone, 40),
+    title: pick(body?.title, contact.contact_title, 160)
+  }
+}
+
+async function findTeamByOwnerCard(env, cardId) {
+  const id = String(cardId || '').trim()
+  if (!id) return null
+  const rows = await sb(
+    env,
+    `teams?owner_card_id=eq.${encodeURIComponent(id)}&deleted=eq.false&select=*&limit=1`
+  )
+  return rows?.[0] || null
+}
+
+/** When the designated lead claims, attach them to the existing team instead of creating another. */
+async function assignDesignatedLead(env, team, profile, card) {
+  if (!team?.id || !profile?.id) return false
+  if (team.owner_profile_id && team.owner_profile_id !== profile.id) return false
+  const now = new Date().toISOString()
+  const email = String(profile.login_email || profile.email || '').trim().toLowerCase()
+  const role = normalizePersonalType(team.package_ceiling || 'executive_exclusive')
+  if (!team.owner_profile_id) {
+    const patched = await sb(
+      env,
+      `teams?id=eq.${encodeURIComponent(team.id)}&owner_profile_id=is.null`,
+      {
+        method: 'PATCH',
+        body: {
+          owner_profile_id: profile.id,
+          owner_email: email,
+          updated_at: now
+        },
+        prefer: 'return=representation'
+      }
+    )
+    if (!patched?.length) return false
+  }
+  const existingMem = await sb(
+    env,
+    `team_members?team_id=eq.${encodeURIComponent(team.id)}&profile_id=eq.${encodeURIComponent(profile.id)}&deleted=eq.false&select=id&limit=1`
+  )
+  if (!existingMem?.length) {
+    await sb(env, 'team_members', {
+      method: 'POST',
+      body: {
+        id: uid('tmem'),
+        team_id: team.id,
+        profile_id: profile.id,
+        card_id: card?.id || null,
+        slug: card?.slug || '',
+        role,
+        status: 'active',
+        invite_email: email,
+        invited_by_profile_id: profile.id,
+        invite_token: '',
+        joined_at: now,
+        created_at: now,
+        updated_at: now
+      },
+      prefer: 'return=minimal'
+    })
+  }
+  return true
+}
+
+async function teamOwnerDisplayName(env, team) {
+  if (team?.owner_profile_id) {
+    const owners = await sb(
+      env,
+      `profiles?id=eq.${encodeURIComponent(team.owner_profile_id)}&select=name,company`
+    )
+    const fromProfile = String(owners?.[0]?.name || owners?.[0]?.company || '').trim()
+    if (fromProfile) return fromProfile
+  }
+  if (team?.owner_card_id) {
+    const leadCards = await sb(
+      env,
+      `cards?id=eq.${encodeURIComponent(team.owner_card_id)}&select=contact_name,contact_company`
+    )
+    const fromCard = String(leadCards?.[0]?.contact_name || leadCards?.[0]?.contact_company || '').trim()
+    if (fromCard) return fromCard
+  }
+  return 'Team owner'
+}
+
 async function findPendingTeamInviteForCard(env, cardId, profileId = '') {
   let q =
     `team_members?deleted=eq.false&status=in.(pending_claim,invited)&select=*&order=created_at.desc&limit=5`
@@ -2655,12 +3070,7 @@ async function findPendingTeamInviteForCard(env, cardId, profileId = '') {
   )
   const team = teams?.[0]
   if (!team) return null
-  let ownerName = ''
-  const owners = await sb(
-    env,
-    `profiles?id=eq.${encodeURIComponent(team.owner_profile_id)}&select=name,company`
-  )
-  ownerName = String(owners?.[0]?.name || owners?.[0]?.company || 'Team owner').trim()
+  const ownerName = await teamOwnerDisplayName(env, team)
   return {
     memberId: row.id,
     teamId: team.id,
@@ -3665,7 +4075,7 @@ async function serveOgImage(env, origin, slug) {
 }
 
 function destinationFor(card, profile) {
-  if (!profile) return null
+  if (!profile || String(card?.status || '') !== 'linked' || !isProfileClaimed(profile)) return null
   if (profile.disabled) {
     return {
       path: profile.card_type === 'table' ? '/business' : (card.slug ? `/c/${encodeURIComponent(card.slug)}` : '/me'),
@@ -3962,6 +4372,7 @@ async function handleApi(request, env, url) {
     const batchName = String(body?.name || body?.batchName || '').trim().slice(0, 80)
     const existingBatchId = String(body?.batchId || body?.batch_id || '').trim()
     const includeVcard = body?.includeVcard === true || body?.include_vcard === true
+    const industry = normalizeIndustry(body?.industry)
     const rawContacts = Array.isArray(body?.contacts) ? body.contacts : []
     const normalizeContact = (raw) => {
       const c = raw && typeof raw === 'object' ? raw : {}
@@ -4032,6 +4443,7 @@ async function handleApi(request, env, url) {
         id,
         slug,
         kind,
+        industry,
         personal_type: personalType,
         product_id: body?.productId || '',
         status: 'unlinked',
@@ -4051,6 +4463,7 @@ async function handleApi(request, env, url) {
         id,
         slug,
         kind,
+        industry,
         personalType,
         batchId: batch?.id || '',
         batchName: batch?.name || '',
@@ -4072,23 +4485,20 @@ async function handleApi(request, env, url) {
     const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&deleted=eq.false&select=*`)
     const card = cards?.[0]
     if (!card) return bad('Card not found', 404)
+    const redirectSlug = cardRedirectSlug(card, slug)
     let profile = null
     if (card.profile_id) {
       const profiles = await sb(env, `profiles?id=eq.${encodeURIComponent(card.profile_id)}&select=*`)
       profile = profiles?.[0] || null
     }
     const pendingTeamInvite =
-      card.status === 'unlinked'
+      !redirectSlug && card.status === 'unlinked'
         ? await findPendingTeamInviteForCard(env, card.id)
         : null
-    let ownerTeam = null
-    if (card.status === 'unlinked' && card.id) {
-      const owned = await sb(
-        env,
-        `teams?owner_card_id=eq.${encodeURIComponent(card.id)}&deleted=eq.false&select=*&limit=1`
-      )
-      ownerTeam = owned?.[0] || null
-    }
+    const ownerTeam =
+      !redirectSlug && card.status === 'unlinked'
+        ? await findTeamByOwnerCard(env, card.id)
+        : null
     const teamIntegrations = ownerTeam
       ? teamIntegrationsFromRow(ownerTeam)
       : pendingTeamInvite
@@ -4105,12 +4515,15 @@ async function handleApi(request, env, url) {
         id: card.id,
         slug: card.slug,
         kind: card.kind,
+        industry: normalizeIndustry(card.industry),
         personalType: card.kind === 'personal' ? normalizePersonalType(card.personal_type || 'business') : '',
         status: card.status,
         profileId: card.profile_id
       },
       profile: await publicProfile(env, profile),
       destination: destinationFor(card, profile),
+      redirectSlug,
+      preset: cardContactPreset(card, profile),
       pendingTeamInvite,
       isDesignatedLead: !!ownerTeam,
       teamIntegrations
@@ -4145,7 +4558,18 @@ async function handleApi(request, env, url) {
     if (via === 'qr') channel = 'qr'
     else if (via === 'nfc') channel = 'nfc'
     else if (action.startsWith('share')) channel = 'other'
-    const recorded = await recordCardActivity(env, request, { slug, channel, action })
+    const dwellMs =
+      body?.dwellMs != null && Number.isFinite(Number(body.dwellMs))
+        ? Number(body.dwellMs)
+        : null
+    const sessionKey = String(body?.sessionKey || body?.session_key || '').trim()
+    const recorded = await recordCardActivity(env, request, {
+      slug,
+      channel,
+      action,
+      dwellMs,
+      sessionKey
+    })
     if (!recorded) return bad('Card not found', 404)
     return json({ ok: true, ...recorded })
   }
@@ -4228,11 +4652,15 @@ async function handleApi(request, env, url) {
     const body = await readJson(request)
     const cards = await sb(
       env,
-      `cards?slug=eq.${encodeURIComponent(slug)}&select=id,kind,personal_type,profile_id,contact_name,contact_company,contact_phone,contact_email,contact_title`
+      `cards?slug=eq.${encodeURIComponent(slug)}&select=id,kind,industry,personal_type,profile_id,contact_name,contact_company,contact_phone,contact_email,contact_title`
     )
     if (!cards?.length) return bad('Card not found', 404)
     const cardRow = cards[0]
     const patch = {}
+
+    if (body?.industry !== undefined) {
+      patch.industry = normalizeIndustry(body.industry)
+    }
 
     if (body?.kind !== undefined) {
       const kind = body.kind === 'personal' ? 'personal' : 'table'
@@ -4303,6 +4731,7 @@ async function handleApi(request, env, url) {
       ok: true,
       slug,
       kind: kindOut,
+      industry: patch.industry !== undefined ? patch.industry : normalizeIndustry(cardRow.industry),
       personalType: personalOut || '',
       contactName: patch.contact_name !== undefined ? patch.contact_name : cardRow.contact_name || '',
       contactCompany:
@@ -5030,62 +5459,137 @@ async function handleApi(request, env, url) {
     if (!passwordHash) return bad('Password is required')
 
     let claimCard = null
+    let unclaimedProfile = null
     if (slug) {
       const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(slug)}&deleted=eq.false&select=*`)
       claimCard = cards?.[0]
       if (!claimCard) return bad('Card not found', 404)
-      if (claimCard.profile_id || claimCard.status === 'linked') {
+      if (claimCard.status === 'linked') {
         return bad('Card already linked to another profile', 409)
+      }
+      if (claimCard.profile_id) {
+        const rows = await sb(
+          env,
+          `profiles?id=eq.${encodeURIComponent(claimCard.profile_id)}&deleted=eq.false&select=*`
+        )
+        unclaimedProfile = rows?.[0] || null
+        if (!unclaimedProfile) {
+          return bad('Card already linked to another profile', 409)
+        }
       }
     }
 
     const existing = await sb(
       env,
-      `profiles?or=(login_email.ilike.${encodeURIComponent(email)},email.ilike.${encodeURIComponent(email)})&select=id&limit=1`
+      `profiles?or=(login_email.ilike.${encodeURIComponent(email)},email.ilike.${encodeURIComponent(email)})&select=id&limit=5`
     )
-    if (existing?.length) return bad('An account with this email already exists', 409)
+    const otherAccount = (existing || []).find(
+      (row) => !unclaimedProfile || row.id !== unclaimedProfile.id
+    )
+    if (otherAccount) return bad('An account with this email already exists', 409)
 
     const pendingTeamInviteForClaim = claimCard
       ? await findPendingTeamInviteForCard(env, claimCard.id)
       : null
+    const provisionalLeadTeam = claimCard
+      ? await findTeamByOwnerCard(env, claimCard.id)
+      : null
+    const isDesignatedLead = !!(provisionalLeadTeam && !provisionalLeadTeam.owner_profile_id)
     const claimPersonalType =
       claimCard?.kind === 'personal'
         ? normalizePersonalType(claimCard.personal_type || 'business')
         : ''
     const isTeamOwnerClaim =
-      !pendingTeamInviteForClaim &&
-      (claimPersonalType === 'business' || claimPersonalType === 'executive_exclusive')
+      isDesignatedLead ||
+      (!pendingTeamInviteForClaim &&
+        (claimPersonalType === 'business' || claimPersonalType === 'executive_exclusive'))
     let ownerIntegrations = null
     if (isTeamOwnerClaim) {
       ownerIntegrations = parseTeamIntegrationsFromBody(body || {})
+      const existing = teamIntegrationsFromRow(provisionalLeadTeam)
+      const existingMeetingOk =
+        existing.meetingTool === 'google' ||
+        existing.meetingTool === 'microsoft' ||
+        existing.meetingTool === 'apple'
+      if (!ownerIntegrations.meetingOk && existingMeetingOk) {
+        ownerIntegrations = {
+          ...ownerIntegrations,
+          meetingTool: existing.meetingTool,
+          meetingOk: true
+        }
+      }
+      if (
+        body?.usesCrm === undefined &&
+        body?.uses_crm === undefined &&
+        existing.usesCrm
+      ) {
+        ownerIntegrations = {
+          ...ownerIntegrations,
+          usesCrm: true,
+          crmProvider: existing.crmProvider,
+          crmOther: existing.crmOther,
+          crmOk:
+            !existing.usesCrm ||
+            ['salesforce', 'zoho', 'hubspot', 'odoo', 'sage', 'other'].includes(existing.crmProvider)
+        }
+      }
       if (!ownerIntegrations.meetingOk) return bad('Choose Google Meet or Microsoft')
       if (ownerIntegrations.usesCrm && !ownerIntegrations.crmOk) return bad('Choose the CRM you use')
     }
 
-    const id = uid('prof')
     const cardType = claimCard
       ? (claimCard.kind === 'personal' ? 'personal' : 'table')
       : (body.cardType === 'table' ? 'table' : 'personal')
-    await sb(env, 'profiles', {
-      method: 'POST',
-      body: {
-        id,
-        card_type: cardType,
-        name: String(body.name || '').trim(),
-        company: body.company || '',
-        email,
-        phone: body.phone || '',
-        login_email: email,
-        login_phone: body.loginPhone || body.phone || '',
-        password_hash: passwordHash
-      },
-      prefer: 'return=minimal'
-    })
+    const seeded = claimProfileFields(body, claimCard)
+    const id = unclaimedProfile?.id || uid('prof')
+    if (unclaimedProfile) {
+      await sb(env, `profiles?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: {
+          card_type: cardType,
+          name: seeded.name || unclaimedProfile.name || '',
+          title: seeded.title || unclaimedProfile.title || '',
+          company: seeded.company || unclaimedProfile.company || '',
+          email,
+          phone: seeded.phone || unclaimedProfile.phone || '',
+          login_email: email,
+          login_phone: body.loginPhone || seeded.phone || unclaimedProfile.login_phone || '',
+          password_hash: passwordHash,
+          is_claimed: true,
+          checkin_form:
+            unclaimedProfile.checkin_form && typeof unclaimedProfile.checkin_form === 'object'
+              ? Object.fromEntries(
+                  Object.entries(unclaimedProfile.checkin_form).filter(([k]) => k !== '_tap_is_claimed')
+                )
+              : {},
+          updated_at: new Date().toISOString()
+        },
+        prefer: 'return=minimal'
+      })
+    } else {
+      await sb(env, 'profiles', {
+        method: 'POST',
+        body: {
+          id,
+          card_type: cardType,
+          name: seeded.name,
+          title: seeded.title,
+          company: seeded.company,
+          email,
+          phone: seeded.phone,
+          login_email: email,
+          login_phone: body.loginPhone || seeded.phone || '',
+          password_hash: passwordHash,
+          is_claimed: true
+        },
+        prefer: 'return=minimal'
+      })
+    }
 
     if (claimCard) {
       const claimed = await sb(
         env,
-        `cards?slug=eq.${encodeURIComponent(slug)}&profile_id=is.null`,
+        `cards?slug=eq.${encodeURIComponent(slug)}&status=eq.unlinked`,
         {
           method: 'PATCH',
           body: {
@@ -5130,10 +5634,30 @@ async function handleApi(request, env, url) {
       }
     }
 
-    const pendingTeamInvite = claimCard
-      ? await findPendingTeamInviteForCard(env, claimCard.id, id)
-      : pendingTeamInviteForClaim
-    if (ownerIntegrations && newProfile) {
+    const pendingTeamInvite = isDesignatedLead
+      ? null
+      : claimCard
+        ? await findPendingTeamInviteForCard(env, claimCard.id, id)
+        : pendingTeamInviteForClaim
+    let leadAssigned = false
+    if (isDesignatedLead && provisionalLeadTeam && newProfile && claimCard) {
+      try {
+        leadAssigned = await assignDesignatedLead(env, provisionalLeadTeam, newProfile, claimCard)
+        if (leadAssigned && ownerIntegrations) {
+          await applyTeamIntegrations(env, provisionalLeadTeam.id, ownerIntegrations)
+        }
+      } catch (err) {
+        await logAppError(env, {
+          source: 'team_integrations',
+          message: err?.message || String(err),
+          stack: err?.stack || '',
+          path: pathname,
+          method,
+          context: { kind: 'signup_designated_lead' }
+        })
+      }
+    }
+    if (!leadAssigned && ownerIntegrations && newProfile) {
       try {
         const team = await getOrCreateOwnedTeam(env, newProfile)
         if (team?.id) await applyTeamIntegrations(env, team.id, ownerIntegrations)
@@ -5257,6 +5781,7 @@ async function handleApi(request, env, url) {
   }
 
   if (pathname === '/api/shop/products' && method === 'GET') {
+    await ensureTwoTierShopCatalog(env)
     const rows = await sb(
       env,
       'sales_products?active=eq.true&deleted=eq.false&select=id,name,default_price,category,active,description,images,video,shop_label,shop_badge,created_at,updated_at&order=name.asc'
@@ -6015,31 +6540,20 @@ async function handleApi(request, env, url) {
     const row = salesClientToDb(body, { isNew: !beforeRow, staff: gate.staff })
     if (!row.id) return bad('Client id required')
     if (!row.name) return bad('Prospect name is required')
-    // Preserve creator on update unless elevated staff reassigns "Added by"
-    const elevated = isSalesElevated(gate.staff)
-    const reassignCreator =
-      elevated && beforeRow && Object.prototype.hasOwnProperty.call(body || {}, 'createdByAgentId')
+    // Preserve creator fields on update; sales agents cannot reassign ownership
     const payload = {
       ...row,
       created_at: beforeRow?.created_at || row.created_at || new Date().toISOString(),
-      created_by_agent_id: reassignCreator
-        ? row.created_by_agent_id || null
-        : beforeRow?.created_by_agent_id || row.created_by_agent_id,
-      created_by_user_id: reassignCreator
-        ? row.created_by_user_id || ''
-        : beforeRow?.created_by_user_id || row.created_by_user_id,
-      created_by_name: reassignCreator
-        ? row.created_by_name || ''
-        : beforeRow?.created_by_name || row.created_by_name,
-      created_by_email: reassignCreator
-        ? row.created_by_email || ''
-        : beforeRow?.created_by_email || row.created_by_email
+      created_by_agent_id: beforeRow?.created_by_agent_id || row.created_by_agent_id,
+      created_by_user_id: beforeRow?.created_by_user_id || row.created_by_user_id,
+      created_by_name: beforeRow?.created_by_name || row.created_by_name,
+      created_by_email: beforeRow?.created_by_email || row.created_by_email
     }
-    if (!elevated && gate.staff.agentId) {
-      // Sales agents cannot reassign ownership
+    if (!isSalesElevated(gate.staff) && gate.staff.agentId) {
       payload.owner_agent_id = beforeRow?.owner_agent_id || gate.staff.agentId
+    } else if (!payload.owner_agent_id && gate.staff.agentId) {
+      payload.owner_agent_id = gate.staff.agentId
     }
-    // Elevated staff: keep owner from body (including null = Unassigned)
     await upsertSalesRow(env, 'sales_clients', payload)
     const saved = await sb(env, 'sales_clients?id=eq.' + encodeURIComponent(row.id) + '&select=*')
     const savedRow = saved?.[0] || payload
@@ -6540,7 +7054,7 @@ async function handleApi(request, env, url) {
     if (gate.error) return gate.error
     const [profiles, cards, batches] = await Promise.all([
       sb(env, 'profiles?deleted=eq.false&select=id,card_type,name,title,company,email,phone,address,avatar,logo,disabled,created_at,updated_at&order=created_at.desc&limit=500'),
-      sb(env, 'cards?select=slug,kind,personal_type,product_id,status,profile_id,linked_at,created_at,deleted,deleted_at,deleted_by,batch_id,contact_name,contact_company,contact_phone,contact_email,contact_title&order=created_at.desc&limit=2000'),
+      sb(env, 'cards?select=slug,kind,industry,personal_type,product_id,status,profile_id,linked_at,created_at,deleted,deleted_at,deleted_by,batch_id,contact_name,contact_company,contact_phone,contact_email,contact_title&order=created_at.desc&limit=2000'),
       sb(env, 'card_batches?select=id,name,kind,personal_type,created_by,created_at&order=created_at.desc&limit=500')
     ])
     const cardsByProfile = {}
@@ -6623,6 +7137,7 @@ async function handleApi(request, env, url) {
           slugs: (cardsByProfile[p.id] || []).map((c) => ({
             slug: c.slug,
             kind: c.kind === 'personal' ? 'personal' : 'table',
+            industry: normalizeIndustry(c.industry),
             personalType:
               c.kind === 'personal'
                 ? normalizePersonalType(c.personal_type || 'business')
@@ -6635,6 +7150,7 @@ async function handleApi(request, env, url) {
       cards: (cards || []).map((c) => ({
         slug: c.slug,
         kind: c.kind === 'personal' ? 'personal' : 'table',
+        industry: normalizeIndustry(c.industry),
         personalType:
           c.kind === 'personal'
             ? normalizePersonalType(c.personal_type || 'business')
@@ -6807,6 +7323,132 @@ async function handleApi(request, env, url) {
     })
   }
 
+  if (pathname === '/api/admin/events' && method === 'GET') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
+    const range = parseAnalyticsRange(request, 30)
+    const { since, until, days, mode } = range
+    const openFilter = timeRangeQuery('opened_at', since, until)
+    const sessionFilter = timeRangeQuery('created_at', since, until)
+    const errorFilter = timeRangeQuery('created_at', since, until)
+    const urlObj = new URL(request.url)
+    const feedLimit = Math.min(200, Math.max(20, Number(urlObj.searchParams.get('limit') || 80) || 80))
+
+    let opens = []
+    try {
+      const openPath = openFilter
+        ? `card_opens?${openFilter}&select=id,slug,channel,action,user_agent,device_type,browser,ip_country,ip_city,ip_region,dwell_ms,session_key,opened_at&order=opened_at.desc`
+        : `card_opens?select=id,slug,channel,action,user_agent,device_type,browser,ip_country,ip_city,ip_region,dwell_ms,session_key,opened_at&order=opened_at.desc`
+      opens = await sbPaged(env, openPath)
+    } catch {
+      // Older DBs without dwell columns — fall back
+      try {
+        const openPath = openFilter
+          ? `card_opens?${openFilter}&select=id,slug,channel,action,user_agent,device_type,browser,ip_country,ip_city,ip_region,opened_at&order=opened_at.desc`
+          : `card_opens?select=id,slug,channel,action,user_agent,device_type,browser,ip_country,ip_city,ip_region,opened_at&order=opened_at.desc`
+        opens = await sbPaged(env, openPath)
+      } catch {
+        opens = []
+      }
+    }
+    const activities = mapOpenRows(opens)
+    const analytics = buildActivityAnalytics(activities)
+
+    let logins = 0
+    let recentLogins = []
+    try {
+      const sessionPath = sessionFilter
+        ? `sessions?${sessionFilter}&select=id,profile_id,created_at&order=created_at.desc`
+        : `sessions?select=id,profile_id,created_at&order=created_at.desc`
+      const sessions = await sbPaged(env, sessionPath)
+      logins = (sessions || []).length
+      recentLogins = (sessions || []).slice(0, 30).map((s) => ({
+        id: s.id,
+        type: 'login',
+        profileId: s.profile_id || '',
+        at: s.created_at,
+        label: 'Owner login'
+      }))
+    } catch {
+      logins = 0
+    }
+
+    let errors = []
+    try {
+      const errPath = errorFilter
+        ? `app_error_log?${errorFilter}&select=id,source,message,path,created_at&order=created_at.desc&limit=80`
+        : `app_error_log?select=id,source,message,path,created_at&order=created_at.desc&limit=80`
+      errors = (await sb(env, errPath)) || []
+    } catch {
+      errors = []
+    }
+
+    const uniqueSlugs = new Set(activities.map((a) => a.slug).filter(Boolean)).size
+    const saveContacts = activities.filter((a) => a.action === 'click:save_contact').length
+    const shares = analytics.totals?.shares || 0
+    const journeys = buildJourneyAnalytics(activities, {
+      logins,
+      errors: (errors || []).length
+    })
+
+    const feed = [
+      ...activities.slice(0, feedLimit).map((a) => ({
+        id: a.id,
+        type: a.action === 'open' ? 'open' : a.action.startsWith('share') ? 'share' : a.action.startsWith('friction') ? 'friction' : 'event',
+        action: a.action,
+        channel: a.channel,
+        slug: a.slug,
+        device: a.device,
+        country: a.country,
+        city: a.city,
+        dwellMs: a.dwellMs,
+        at: a.at,
+        label: a.action
+      })),
+      ...recentLogins,
+      ...(errors || []).slice(0, 40).map((e) => ({
+        id: e.id,
+        type: 'error',
+        action: 'error',
+        source: e.source || '',
+        path: e.path || '',
+        message: e.message || '',
+        at: e.created_at,
+        label: e.message || 'Error'
+      }))
+    ]
+      .sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')))
+      .slice(0, feedLimit)
+
+    return json({
+      ok: true,
+      days,
+      mode,
+      since,
+      until,
+      kpis: {
+        opens: analytics.totals?.opens || 0,
+        uniqueCards: uniqueSlugs,
+        logins,
+        saveContacts,
+        shares,
+        errors: (errors || []).length,
+        events: activities.length
+      },
+      dwell: journeys.dwell,
+      journeys: journeys.journeys,
+      analytics,
+      feed,
+      hangups: (errors || []).slice(0, 40).map((e) => ({
+        id: e.id,
+        source: e.source || '',
+        message: e.message || '',
+        path: e.path || '',
+        at: e.created_at
+      }))
+    })
+  }
+
   const adminActivitiesMatch = pathname.match(/^\/api\/admin\/profiles\/([^/]+)\/activities$/)
   if (adminActivitiesMatch && method === 'GET') {
     const gate = await requireStaff(env, request, { roles: ['admin'] })
@@ -6860,6 +7502,7 @@ async function handleApi(request, env, url) {
         slugs: (cards || []).map((c) => ({
           slug: c.slug,
           kind: c.kind === 'personal' ? 'personal' : 'table',
+          industry: normalizeIndustry(c.industry),
           personalType:
             c.kind === 'personal'
               ? normalizePersonalType(c.personal_type || 'business')
@@ -6901,7 +7544,7 @@ async function handleApi(request, env, url) {
     if (!profile) return bad('Profile not found', 404)
     const cards = await sb(
       env,
-      `cards?profile_id=eq.${encodeURIComponent(profileId)}&select=slug,kind,personal_type,product_id,status,linked_at&order=slug.asc`
+      `cards?profile_id=eq.${encodeURIComponent(profileId)}&select=slug,kind,industry,personal_type,product_id,status,linked_at&order=slug.asc`
     )
     const pub = await publicProfile(env, profile)
     return json({
@@ -6915,6 +7558,7 @@ async function handleApi(request, env, url) {
         slugs: (cards || []).map((c) => ({
           slug: c.slug,
           kind: c.kind === 'personal' ? 'personal' : 'table',
+          industry: normalizeIndustry(c.industry),
           personalType:
             c.kind === 'personal'
               ? normalizePersonalType(c.personal_type || 'business')
@@ -6998,7 +7642,7 @@ async function handleApi(request, env, url) {
     const next = nextRows?.[0]
     const cards = await sb(
       env,
-      `cards?profile_id=eq.${encodeURIComponent(profileId)}&select=slug,kind,personal_type,product_id,status,linked_at&order=slug.asc`
+      `cards?profile_id=eq.${encodeURIComponent(profileId)}&select=slug,kind,industry,personal_type,product_id,status,linked_at&order=slug.asc`
     )
     const pub = await publicProfile(env, next)
     return json({
@@ -7012,6 +7656,7 @@ async function handleApi(request, env, url) {
         slugs: (cards || []).map((c) => ({
           slug: c.slug,
           kind: c.kind === 'personal' ? 'personal' : 'table',
+          industry: normalizeIndustry(c.industry),
           personalType:
             c.kind === 'personal'
               ? normalizePersonalType(c.personal_type || 'business')
@@ -7743,6 +8388,19 @@ async function handleApi(request, env, url) {
     return json({ ok: true, profile: await publicProfile(env, profile, { includeCards: true }) })
   }
 
+  if (pathname === '/api/app/me' && method === 'GET') {
+    const profile = await getSessionProfile(env, request)
+    if (!profile) return bad('Unauthorized', 401)
+    const pub = await publicProfile(env, profile, { includeCards: true })
+    const shareSlug = String(pub?.shareSlug || '').trim()
+    return json({
+      ok: true,
+      profile: pub,
+      shareSlug,
+      publicProfileUrl: shareSlug ? `${CANONICAL_ORIGIN}/c/${encodeURIComponent(shareSlug)}` : ''
+    })
+  }
+
   if (pathname === '/api/me' && method === 'PUT') {
     const profile = await getSessionProfile(env, request)
     if (!profile) return bad('Unauthorized', 401)
@@ -7867,6 +8525,10 @@ async function handleApi(request, env, url) {
           : Array.isArray(profile.catalog_items)
             ? profile.catalog_items
             : [],
+        vehicle_finance:
+          body.vehicleFinance !== undefined
+            ? normalizeVehicleFinance(body.vehicleFinance)
+            : profile.vehicle_finance || {},
         avatar: body.avatar ?? profile.avatar,
         logo: body.logo ?? profile.logo,
         banner: body.banner !== undefined ? String(body.banner || '').trim() : (profile.banner || ''),
@@ -9883,6 +10545,24 @@ export default {
       return Response.redirect(next.toString(), 301)
     }
 
+    // Staff app UI lives on admin.tapnam.com — but /admin/login stays on apex so
+    // card owners can use the same login form; only confirmed staff are sent to admin.
+    const path = url.pathname
+    if (path === '/admin/login') {
+      const next = new URL(request.url)
+      next.protocol = 'https:'
+      next.hostname = 'tapnam.com'
+      next.pathname = '/login'
+      if (!next.searchParams.get('next')) next.searchParams.set('next', '/admin')
+      return Response.redirect(next.toString(), 302)
+    }
+    if (path === '/admin' || path.startsWith('/admin/')) {
+      const next = new URL(request.url)
+      next.protocol = 'https:'
+      next.hostname = 'admin.tapnam.com'
+      return Response.redirect(next.toString(), 302)
+    }
+
     if (url.pathname.startsWith('/api/')) {
       try {
         return await handleApi(request, env, url)
@@ -10047,6 +10727,22 @@ export default {
     if (tap && request.method === 'GET' && env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
       const slug = decodeURIComponent(tap[1])
       const ua = request.headers.get('User-Agent') || ''
+      try {
+        const aliasRows = await sb(
+          env,
+          `cards?slug=eq.${encodeURIComponent(slug)}&deleted=eq.false&select=slug,redirect_slug`
+        )
+        const redirectSlug = cardRedirectSlug(aliasRows?.[0], slug)
+        if (redirectSlug) {
+          const next = new URL(request.url)
+          next.hostname = 'tapnam.com'
+          next.protocol = 'https:'
+          next.pathname = `/c/${encodeURIComponent(redirectSlug)}`
+          return Response.redirect(next.toString(), 302)
+        }
+      } catch {
+        /* fall through */
+      }
 
       // Social crawlers get Open Graph HTML with the profile photo (WhatsApp, etc.)
       if (isCrawler(ua)) {

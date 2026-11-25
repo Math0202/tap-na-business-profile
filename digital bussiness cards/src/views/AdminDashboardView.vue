@@ -6,6 +6,7 @@ import AdminBottomNav from '../components/AdminBottomNav.vue'
 import {
   apiAdminOverview,
   apiAdminAnalytics,
+  apiAdminEvents,
   apiSalesChangelog,
   apiAdminErrors,
   apiSalesFinance,
@@ -31,6 +32,7 @@ import { CARD_ID_LABEL, CARD_ID_HINT } from '../lib/cardLabels'
 import { cardImageSrc } from '../lib/cardLinkStore'
 import { purgeLocalDeletedRecords } from '../lib/salesStore'
 import ActivityCharts from '../components/ActivityCharts.vue'
+import EventJourneyCards from '../components/EventJourneyCards.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -43,7 +45,7 @@ const query = ref('')
 const tab = ref('all') // all | personal | business
 const profileSort = ref('lastSeen') // lastSeen | saves | views
 const profileVisibleCount = ref(30)
-const panel = ref('profiles') // profiles | analytics | log | errors | deleted
+const panel = ref('profiles') // profiles | events | analytics | log | errors | deleted
 
 const changeLog = ref([])
 const errorLog = ref([])
@@ -62,9 +64,15 @@ const analyticsLoading = ref(false)
 const analyticsError = ref('')
 const analyticsData = ref(null)
 
+const eventsLoading = ref(false)
+const eventsError = ref('')
+const eventsData = ref(null)
+const eventsJourneyFilter = ref('')
+
 const panels = [
   { id: 'profiles', label: 'Profiles', icon: 'group' },
   { id: 'teams', label: 'Groups', icon: 'groups' },
+  { id: 'events', label: 'Events', icon: 'event' },
   { id: 'analytics', label: 'Analytics', icon: 'monitoring' },
   { id: 'log', label: 'Log', icon: 'history' },
   { id: 'errors', label: 'Errors', icon: 'bug_report' },
@@ -161,6 +169,17 @@ async function refresh() {
         )
       }
       teamsLoading.value = false
+    } else if (panel.value === 'events') {
+      eventsLoading.value = true
+      eventsError.value = ''
+      const res = await apiAdminEvents({ ...analyticsQueryParams(), limit: 100 })
+      if (res.ok && res.data?.ok) {
+        eventsData.value = res.data
+      } else {
+        eventsError.value = res.error || 'Could not load events'
+        eventsData.value = null
+      }
+      eventsLoading.value = false
     } else if (panel.value === 'analytics') {
       analyticsLoading.value = true
       analyticsError.value = ''
@@ -421,6 +440,42 @@ const analyticsRangeLabel = computed(() => {
   }
   return `Last ${analyticsDays.value} days`
 })
+
+const filteredEventsFeed = computed(() => {
+  const feed = eventsData.value?.feed || []
+  const id = eventsJourneyFilter.value
+  if (!id) return feed
+  return feed.filter((row) => {
+    const action = String(row.action || '')
+    const channel = String(row.channel || '')
+    const type = String(row.type || '')
+    if (id === 'nfc_engage') return channel === 'nfc' || (type === 'open' && channel === 'nfc')
+    if (id === 'qr_engage') return channel === 'qr'
+    if (id === 'web_engage') return channel === 'other' || (!channel && type !== 'login' && type !== 'error')
+    if (id === 'save_contact') {
+      return action === 'click:save_contact' || action === 'friction:save_contact' || type === 'open'
+    }
+    if (id === 'share') return action.startsWith('share:') || type === 'open'
+    if (id === 'login') return type === 'login' || type === 'error'
+    if (id === 'friction') {
+      return type === 'error' || type === 'friction' || action.startsWith('friction:')
+    }
+    return true
+  })
+})
+
+function formatDurationMs(ms) {
+  const n = Number(ms)
+  if (!Number.isFinite(n) || n <= 0) return '—'
+  if (n < 1000) return `${Math.round(n)} ms`
+  if (n < 60000) return `${(n / 1000).toFixed(1)} s`
+  return `${(n / 60000).toFixed(1)} min`
+}
+
+function selectEventsJourney(journey) {
+  eventsJourneyFilter.value =
+    eventsJourneyFilter.value === journey?.id ? '' : String(journey?.id || '')
+}
 
 function setAnalyticsPreset(days) {
   analyticsRangeMode.value = 'days'
@@ -920,7 +975,7 @@ watch(
 )
 
 watch([analyticsDays, analyticsRangeMode, analyticsFrom, analyticsTo], () => {
-  if (panel.value === 'analytics') refresh()
+  if (panel.value === 'analytics' || panel.value === 'events') refresh()
 })
 
 watch([query, tab, profileSort], () => {
@@ -1323,6 +1378,215 @@ onMounted(() => {
             </div>
           </article>
         </div>
+      </section>
+
+      <!-- Events panel -->
+      <section v-else-if="panel === 'events'" class="mb-8 space-y-4">
+        <div class="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-400">Events</h2>
+            <p class="text-xs text-gray-500 mt-1">
+              Profile opens, logins, dwell, journeys, and hangups for UX optimization
+            </p>
+          </div>
+          <div class="flex gap-2 overflow-x-auto pb-1 flex-wrap">
+            <button
+              v-for="d in [7, 30, 90]"
+              :key="'ev-' + d"
+              type="button"
+              class="px-3.5 py-2 rounded-full text-xs font-semibold border shrink-0"
+              :class="analyticsRangeMode === 'days' && analyticsDays === d
+                ? 'bg-white text-black border-white'
+                : 'border-[var(--border)] text-gray-400'"
+              @click="setAnalyticsPreset(d)"
+            >
+              {{ d }} days
+            </button>
+            <button
+              type="button"
+              class="px-3.5 py-2 rounded-full text-xs font-semibold border shrink-0"
+              :class="analyticsRangeMode === 'all'
+                ? 'bg-white text-black border-white'
+                : 'border-[var(--border)] text-gray-400'"
+              @click="setAnalyticsAllTime"
+            >
+              All time
+            </button>
+            <button
+              type="button"
+              class="px-3.5 py-2 rounded-full text-xs font-semibold border shrink-0"
+              :class="analyticsRangeMode === 'custom'
+                ? 'bg-white text-black border-white'
+                : 'border-[var(--border)] text-gray-400'"
+              @click="setAnalyticsCustom"
+            >
+              Custom
+            </button>
+          </div>
+        </div>
+
+        <div
+          v-if="analyticsRangeMode === 'custom'"
+          class="flex flex-wrap items-end gap-3 card-item-bg rounded-2xl p-3"
+        >
+          <label class="text-xs text-gray-400 space-y-1">
+            <span class="block uppercase tracking-wide text-[10px] text-gray-500">From</span>
+            <input v-model="analyticsFrom" type="date" class="field-input bg-zinc-900 rounded-xl text-xs">
+          </label>
+          <label class="text-xs text-gray-400 space-y-1">
+            <span class="block uppercase tracking-wide text-[10px] text-gray-500">To</span>
+            <input v-model="analyticsTo" type="date" class="field-input bg-zinc-900 rounded-xl text-xs">
+          </label>
+        </div>
+
+        <div v-if="eventsLoading || loading" class="card-item-bg rounded-2xl p-6 text-sm text-gray-400 text-center">
+          Loading events…
+        </div>
+        <div v-else-if="eventsError || loadError" class="card-item-bg rounded-2xl p-6 text-sm text-amber-300">
+          {{ eventsError || loadError }}
+        </div>
+        <template v-else-if="eventsData">
+          <section class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div class="card-item-bg rounded-2xl p-4">
+              <p class="text-[11px] uppercase tracking-wide text-gray-500">Opens</p>
+              <p class="text-2xl font-bold mt-1 text-emerald-300">{{ eventsData.kpis?.opens || 0 }}</p>
+            </div>
+            <div class="card-item-bg rounded-2xl p-4">
+              <p class="text-[11px] uppercase tracking-wide text-gray-500">Cards touched</p>
+              <p class="text-2xl font-bold mt-1">{{ eventsData.kpis?.uniqueCards || 0 }}</p>
+            </div>
+            <div class="card-item-bg rounded-2xl p-4">
+              <p class="text-[11px] uppercase tracking-wide text-gray-500">Logins</p>
+              <p class="text-2xl font-bold mt-1 text-amber-200">{{ eventsData.kpis?.logins || 0 }}</p>
+            </div>
+            <div class="card-item-bg rounded-2xl p-4">
+              <p class="text-[11px] uppercase tracking-wide text-gray-500">Save Contact</p>
+              <p class="text-2xl font-bold mt-1 text-sky-300">{{ eventsData.kpis?.saveContacts || 0 }}</p>
+            </div>
+            <div class="card-item-bg rounded-2xl p-4">
+              <p class="text-[11px] uppercase tracking-wide text-gray-500">Shares</p>
+              <p class="text-2xl font-bold mt-1 text-violet-300">{{ eventsData.kpis?.shares || 0 }}</p>
+            </div>
+            <div class="card-item-bg rounded-2xl p-4">
+              <p class="text-[11px] uppercase tracking-wide text-gray-500">Hangups</p>
+              <p class="text-2xl font-bold mt-1 text-red-300">{{ eventsData.kpis?.errors || 0 }}</p>
+            </div>
+          </section>
+
+          <section class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div class="card-item-bg rounded-2xl p-4">
+              <p class="text-[11px] uppercase tracking-wide text-gray-500">Avg dwell</p>
+              <p class="text-xl font-bold mt-1">{{ formatDurationMs(eventsData.dwell?.avgMs) }}</p>
+            </div>
+            <div class="card-item-bg rounded-2xl p-4">
+              <p class="text-[11px] uppercase tracking-wide text-gray-500">P50 dwell</p>
+              <p class="text-xl font-bold mt-1">{{ formatDurationMs(eventsData.dwell?.p50Ms) }}</p>
+            </div>
+            <div class="card-item-bg rounded-2xl p-4">
+              <p class="text-[11px] uppercase tracking-wide text-gray-500">P95 dwell</p>
+              <p class="text-xl font-bold mt-1">{{ formatDurationMs(eventsData.dwell?.p95Ms) }}</p>
+            </div>
+            <div class="card-item-bg rounded-2xl p-4">
+              <p class="text-[11px] uppercase tracking-wide text-gray-500">Bounce (&lt;3s)</p>
+              <p class="text-xl font-bold mt-1 text-amber-300">
+                {{ eventsData.dwell?.bounceRate || 0 }}%
+              </p>
+            </div>
+          </section>
+
+          <EventJourneyCards
+            :journeys="eventsData.journeys || []"
+            :active-id="eventsJourneyFilter"
+            @select="selectEventsJourney"
+          />
+
+          <ActivityCharts
+            v-if="eventsData.analytics"
+            :analytics="eventsData.analytics"
+            :days="analyticsRangeMode === 'all' ? 'all' : analyticsDays"
+            :range-label="analyticsRangeLabel"
+          />
+
+          <div class="grid gap-4 lg:grid-cols-2">
+            <section class="space-y-3">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-400">Activity feed</h3>
+                <button
+                  v-if="eventsJourneyFilter"
+                  type="button"
+                  class="text-xs text-gray-400 hover:text-white"
+                  @click="eventsJourneyFilter = ''"
+                >
+                  Clear filter
+                </button>
+              </div>
+              <ul class="space-y-2 max-h-[28rem] overflow-y-auto pr-1">
+                <li
+                  v-for="row in filteredEventsFeed"
+                  :key="row.id + '-' + (row.at || '')"
+                  class="card-item-bg rounded-2xl p-3"
+                >
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                      <div class="flex items-center gap-2 flex-wrap">
+                        <span
+                          class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
+                          :class="{
+                            'bg-emerald-500/15 text-emerald-300': row.type === 'open',
+                            'bg-sky-500/15 text-sky-300': row.type === 'event',
+                            'bg-violet-500/15 text-violet-300': row.type === 'share',
+                            'bg-amber-500/15 text-amber-200': row.type === 'login',
+                            'bg-red-500/15 text-red-300': row.type === 'error' || row.type === 'friction'
+                          }"
+                        >
+                          {{ row.type }}
+                        </span>
+                        <span v-if="row.channel" class="text-[10px] uppercase text-gray-500">{{ row.channel }}</span>
+                        <span v-if="row.slug" class="text-[10px] text-gray-500 truncate">{{ row.slug }}</span>
+                      </div>
+                      <p class="text-sm font-semibold mt-1 truncate">{{ row.label || row.action || row.message }}</p>
+                      <p class="text-xs text-gray-500 mt-1">
+                        <span v-if="row.device">{{ row.device }}</span>
+                        <span v-if="row.country"> · {{ row.country }}</span>
+                        <span v-if="row.dwellMs != null"> · dwell {{ formatDurationMs(row.dwellMs) }}</span>
+                      </p>
+                    </div>
+                    <p class="text-[11px] text-gray-500 shrink-0 text-right">{{ formatDate(row.at) }}</p>
+                  </div>
+                </li>
+              </ul>
+              <p v-if="!filteredEventsFeed.length" class="text-sm text-gray-500">No events in this range.</p>
+            </section>
+
+            <section class="space-y-3">
+              <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-400">Friction / hangups</h3>
+              <ul class="space-y-2 max-h-[28rem] overflow-y-auto pr-1">
+                <li
+                  v-for="row in (eventsData.hangups || [])"
+                  :key="row.id"
+                  class="card-item-bg rounded-2xl p-3 border border-red-500/10"
+                >
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                      <p class="text-[10px] uppercase tracking-wide text-red-300/80">{{ row.source || 'error' }}</p>
+                      <p class="text-sm font-semibold mt-1 break-words">{{ row.message || 'Unknown error' }}</p>
+                      <p v-if="row.path" class="text-xs text-gray-500 mt-1 truncate">{{ row.path }}</p>
+                    </div>
+                    <p class="text-[11px] text-gray-500 shrink-0">{{ formatDate(row.at) }}</p>
+                  </div>
+                </li>
+              </ul>
+              <p v-if="!(eventsData.hangups || []).length" class="text-sm text-gray-500">No hangups logged in this range.</p>
+              <button
+                type="button"
+                class="text-xs font-semibold text-gray-300 hover:text-white underline"
+                @click="setPanel('errors')"
+              >
+                Open Errors panel
+              </button>
+            </section>
+          </div>
+        </template>
       </section>
 
       <!-- Analytics panel -->

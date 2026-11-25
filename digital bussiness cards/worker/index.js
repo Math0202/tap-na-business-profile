@@ -64,7 +64,11 @@ function requestGeo(request) {
   }
 }
 
-async function recordCardActivity(env, request, { slug, channel = 'nfc', action = 'open' }) {
+async function recordCardActivity(
+  env,
+  request,
+  { slug, channel = 'nfc', action = 'open', dwellMs = null, sessionKey = '' } = {}
+) {
   const code = String(slug || '').trim()
   if (!code) return null
   const cards = await sb(env, `cards?slug=eq.${encodeURIComponent(code)}&deleted=eq.false&select=id,profile_id`)
@@ -76,24 +80,39 @@ async function recordCardActivity(env, request, { slug, channel = 'nfc', action 
   const ch = channel === 'qr' ? 'qr' : channel === 'other' ? 'other' : 'nfc'
   const act = String(action || 'open').trim().slice(0, 64) || 'open'
   const openId = uid('open')
+  const body = {
+    id: openId,
+    card_id: card.id,
+    slug: code,
+    channel: ch,
+    action: act,
+    user_agent: ua.slice(0, 400),
+    device_type: device,
+    browser,
+    ip_country: geo.country,
+    ip_city: geo.city,
+    ip_region: geo.region,
+    session_key: String(sessionKey || '').trim().slice(0, 80)
+  }
+  if (dwellMs != null && Number.isFinite(Number(dwellMs))) {
+    body.dwell_ms = Math.max(0, Math.min(Math.round(Number(dwellMs)), 24 * 60 * 60 * 1000))
+  }
   await sb(env, 'card_opens', {
     method: 'POST',
-    body: {
-      id: openId,
-      card_id: card.id,
-      slug: code,
-      channel: ch,
-      action: act,
-      user_agent: ua.slice(0, 400),
-      device_type: device,
-      browser,
-      ip_country: geo.country,
-      ip_city: geo.city,
-      ip_region: geo.region
-    },
+    body,
     prefer: 'return=minimal'
   })
-  return { openId, channel: ch, action: act, device, browser, ...geo, profileId: card.profile_id || '' }
+  return {
+    openId,
+    channel: ch,
+    action: act,
+    device,
+    browser,
+    ...geo,
+    profileId: card.profile_id || '',
+    dwellMs: body.dwell_ms ?? null,
+    sessionKey: body.session_key || ''
+  }
 }
 
 function parseUa(ua = '') {
@@ -458,8 +477,162 @@ function mapOpenRows(opens) {
     city: o.ip_city || '',
     region: o.ip_region || '',
     userAgent: o.user_agent || '',
+    dwellMs: o.dwell_ms == null ? null : Number(o.dwell_ms),
+    sessionKey: o.session_key || '',
     at: o.opened_at
   }))
+}
+
+function percentile(sorted, p) {
+  if (!sorted.length) return 0
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1))
+  return sorted[idx]
+}
+
+function buildJourneyAnalytics(activities = [], { logins = 0, errors = 0 } = {}) {
+  const opens = activities.filter((r) => r.action === 'open')
+  const opensNfc = opens.filter((r) => r.channel === 'nfc').length
+  const opensQr = opens.filter((r) => r.channel === 'qr').length
+  const opensWeb = opens.filter((r) => r.channel !== 'nfc' && r.channel !== 'qr').length
+
+  const saveContacts = activities.filter((r) => r.action === 'click:save_contact').length
+  const saveContactFails = activities.filter((r) => r.action === 'friction:save_contact').length
+  const shareOpens = activities.filter((r) => r.action === 'share:open').length
+  const shareChannels = activities.filter(
+    (r) => r.action.startsWith('share:') && r.action !== 'share:open'
+  ).length
+  const engages = activities.filter(
+    (r) =>
+      r.action.startsWith('click:') ||
+      r.action.startsWith('share:') ||
+      r.action === 'dwell'
+  ).length
+  const engageUniqueSessions = new Set(
+    activities
+      .filter(
+        (r) =>
+          r.sessionKey &&
+          (r.action.startsWith('click:') ||
+            r.action.startsWith('share:') ||
+            (r.action === 'dwell' && Number(r.dwellMs || 0) >= 3000))
+      )
+      .map((r) => r.sessionKey)
+  ).size
+
+  const dwells = activities
+    .filter((r) => r.action === 'dwell' && Number.isFinite(Number(r.dwellMs)))
+    .map((r) => Number(r.dwellMs))
+    .sort((a, b) => a - b)
+  const bounceDwells = dwells.filter((ms) => ms < 3000).length
+  const avgDwell = dwells.length
+    ? Math.round(dwells.reduce((a, b) => a + b, 0) / dwells.length)
+    : 0
+  const p50Dwell = percentile(dwells, 50)
+  const p95Dwell = percentile(dwells, 95)
+
+  const friction = activities.filter((r) => r.action.startsWith('friction:')).length
+  const openCount = opens.length
+
+  function funnel(steps) {
+    return steps.map((step, i) => {
+      const prev = i === 0 ? step.count : steps[i - 1].count
+      const rate = prev ? Math.round((step.count / prev) * 1000) / 10 : 0
+      const dropOff = prev ? Math.round(((prev - step.count) / prev) * 1000) / 10 : 0
+      return { ...step, rateFromPrev: rate, dropOffPct: Math.max(0, dropOff) }
+    })
+  }
+
+  const engageAfterOpen = Math.max(engageUniqueSessions, Math.min(engages, openCount))
+
+  return {
+    dwell: {
+      samples: dwells.length,
+      avgMs: avgDwell,
+      p50Ms: p50Dwell,
+      p95Ms: p95Dwell,
+      bounceCount: bounceDwells,
+      bounceRate: dwells.length ? Math.round((bounceDwells / dwells.length) * 1000) / 10 : 0
+    },
+    journeys: [
+      {
+        id: 'nfc_engage',
+        title: 'NFC open → engage',
+        channel: 'nfc',
+        steps: funnel([
+          { id: 'open', label: 'NFC open', count: opensNfc },
+          {
+            id: 'engage',
+            label: 'Engage',
+            count: opensNfc ? Math.min(engageAfterOpen, opensNfc) : 0
+          }
+        ])
+      },
+      {
+        id: 'qr_engage',
+        title: 'QR open → engage',
+        channel: 'qr',
+        steps: funnel([
+          { id: 'open', label: 'QR open', count: opensQr },
+          {
+            id: 'engage',
+            label: 'Engage',
+            count: opensQr ? Math.min(engageAfterOpen, opensQr) : 0
+          }
+        ])
+      },
+      {
+        id: 'web_engage',
+        title: 'Web open → engage',
+        channel: 'other',
+        steps: funnel([
+          { id: 'open', label: 'Web open', count: opensWeb },
+          {
+            id: 'engage',
+            label: 'Engage',
+            count: opensWeb ? Math.min(engageAfterOpen, opensWeb) : 0
+          }
+        ])
+      },
+      {
+        id: 'save_contact',
+        title: 'Save Contact',
+        steps: funnel([
+          { id: 'open', label: 'Open', count: openCount },
+          { id: 'save', label: 'Save Contact', count: saveContacts },
+          {
+            id: 'ok',
+            label: 'No friction',
+            count: Math.max(0, saveContacts - saveContactFails)
+          }
+        ])
+      },
+      {
+        id: 'share',
+        title: 'Share path',
+        steps: funnel([
+          { id: 'open', label: 'Open', count: openCount },
+          { id: 'share_open', label: 'Share open', count: shareOpens },
+          { id: 'share_channel', label: 'Shared', count: shareChannels }
+        ])
+      },
+      {
+        id: 'login',
+        title: 'Owner login',
+        steps: funnel([
+          { id: 'attempt', label: 'Login activity', count: Math.max(logins, errors) },
+          { id: 'session', label: 'Session created', count: logins }
+        ])
+      },
+      {
+        id: 'friction',
+        title: 'Friction / hangups',
+        steps: funnel([
+          { id: 'open', label: 'Opens', count: openCount },
+          { id: 'errors', label: 'Errors + friction', count: errors + friction }
+        ])
+      }
+    ]
+  }
 }
 
 async function uniqueSlug(env) {
@@ -4385,7 +4558,18 @@ async function handleApi(request, env, url) {
     if (via === 'qr') channel = 'qr'
     else if (via === 'nfc') channel = 'nfc'
     else if (action.startsWith('share')) channel = 'other'
-    const recorded = await recordCardActivity(env, request, { slug, channel, action })
+    const dwellMs =
+      body?.dwellMs != null && Number.isFinite(Number(body.dwellMs))
+        ? Number(body.dwellMs)
+        : null
+    const sessionKey = String(body?.sessionKey || body?.session_key || '').trim()
+    const recorded = await recordCardActivity(env, request, {
+      slug,
+      channel,
+      action,
+      dwellMs,
+      sessionKey
+    })
     if (!recorded) return bad('Card not found', 404)
     return json({ ok: true, ...recorded })
   }
@@ -7136,6 +7320,132 @@ async function handleApi(request, env, url) {
       loginsByBucket,
       connections,
       topProfiles
+    })
+  }
+
+  if (pathname === '/api/admin/events' && method === 'GET') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
+    const range = parseAnalyticsRange(request, 30)
+    const { since, until, days, mode } = range
+    const openFilter = timeRangeQuery('opened_at', since, until)
+    const sessionFilter = timeRangeQuery('created_at', since, until)
+    const errorFilter = timeRangeQuery('created_at', since, until)
+    const urlObj = new URL(request.url)
+    const feedLimit = Math.min(200, Math.max(20, Number(urlObj.searchParams.get('limit') || 80) || 80))
+
+    let opens = []
+    try {
+      const openPath = openFilter
+        ? `card_opens?${openFilter}&select=id,slug,channel,action,user_agent,device_type,browser,ip_country,ip_city,ip_region,dwell_ms,session_key,opened_at&order=opened_at.desc`
+        : `card_opens?select=id,slug,channel,action,user_agent,device_type,browser,ip_country,ip_city,ip_region,dwell_ms,session_key,opened_at&order=opened_at.desc`
+      opens = await sbPaged(env, openPath)
+    } catch {
+      // Older DBs without dwell columns — fall back
+      try {
+        const openPath = openFilter
+          ? `card_opens?${openFilter}&select=id,slug,channel,action,user_agent,device_type,browser,ip_country,ip_city,ip_region,opened_at&order=opened_at.desc`
+          : `card_opens?select=id,slug,channel,action,user_agent,device_type,browser,ip_country,ip_city,ip_region,opened_at&order=opened_at.desc`
+        opens = await sbPaged(env, openPath)
+      } catch {
+        opens = []
+      }
+    }
+    const activities = mapOpenRows(opens)
+    const analytics = buildActivityAnalytics(activities)
+
+    let logins = 0
+    let recentLogins = []
+    try {
+      const sessionPath = sessionFilter
+        ? `sessions?${sessionFilter}&select=id,profile_id,created_at&order=created_at.desc`
+        : `sessions?select=id,profile_id,created_at&order=created_at.desc`
+      const sessions = await sbPaged(env, sessionPath)
+      logins = (sessions || []).length
+      recentLogins = (sessions || []).slice(0, 30).map((s) => ({
+        id: s.id,
+        type: 'login',
+        profileId: s.profile_id || '',
+        at: s.created_at,
+        label: 'Owner login'
+      }))
+    } catch {
+      logins = 0
+    }
+
+    let errors = []
+    try {
+      const errPath = errorFilter
+        ? `app_error_log?${errorFilter}&select=id,source,message,path,created_at&order=created_at.desc&limit=80`
+        : `app_error_log?select=id,source,message,path,created_at&order=created_at.desc&limit=80`
+      errors = (await sb(env, errPath)) || []
+    } catch {
+      errors = []
+    }
+
+    const uniqueSlugs = new Set(activities.map((a) => a.slug).filter(Boolean)).size
+    const saveContacts = activities.filter((a) => a.action === 'click:save_contact').length
+    const shares = analytics.totals?.shares || 0
+    const journeys = buildJourneyAnalytics(activities, {
+      logins,
+      errors: (errors || []).length
+    })
+
+    const feed = [
+      ...activities.slice(0, feedLimit).map((a) => ({
+        id: a.id,
+        type: a.action === 'open' ? 'open' : a.action.startsWith('share') ? 'share' : a.action.startsWith('friction') ? 'friction' : 'event',
+        action: a.action,
+        channel: a.channel,
+        slug: a.slug,
+        device: a.device,
+        country: a.country,
+        city: a.city,
+        dwellMs: a.dwellMs,
+        at: a.at,
+        label: a.action
+      })),
+      ...recentLogins,
+      ...(errors || []).slice(0, 40).map((e) => ({
+        id: e.id,
+        type: 'error',
+        action: 'error',
+        source: e.source || '',
+        path: e.path || '',
+        message: e.message || '',
+        at: e.created_at,
+        label: e.message || 'Error'
+      }))
+    ]
+      .sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')))
+      .slice(0, feedLimit)
+
+    return json({
+      ok: true,
+      days,
+      mode,
+      since,
+      until,
+      kpis: {
+        opens: analytics.totals?.opens || 0,
+        uniqueCards: uniqueSlugs,
+        logins,
+        saveContacts,
+        shares,
+        errors: (errors || []).length,
+        events: activities.length
+      },
+      dwell: journeys.dwell,
+      journeys: journeys.journeys,
+      analytics,
+      feed,
+      hangups: (errors || []).slice(0, 40).map((e) => ({
+        id: e.id,
+        source: e.source || '',
+        message: e.message || '',
+        path: e.path || '',
+        at: e.created_at
+      }))
     })
   }
 

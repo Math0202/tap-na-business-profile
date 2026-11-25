@@ -49,6 +49,11 @@ const shareModal = ref(null)
 const videoEl = ref(null)
 const embedSrc = ref('')
 const useEmbed = ref(false)
+const visitSessionKey = ref(
+  `vs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+)
+const visitStartedAt = ref(Date.now())
+let dwellSent = false
 
 const deleted = computed(() => isProfileDeleted(profile.value))
 const disabled = computed(() => isProfileDisabled(profile.value))
@@ -328,8 +333,12 @@ async function saveContact() {
       'END:VCARD'
     ])
     saveContactHint.value = isAndroidDevice()
-      ? 'Contact file ready. Open it and tap Save to add this person to your phone book.'
-      : 'Contact file downloaded. Open the file to add this person to your phone book.'
+      ? 'Contact file ready. Open it and tap Save to add this person to your contacts.'
+      : 'Contact file downloaded. Open the file to add this person to your contacts.'
+    saveContactOpen.value = true
+  } catch (err) {
+    logRemote('friction:save_contact', { reason: String(err?.message || err || 'failed') })
+    saveContactHint.value = 'Could not prepare the contact file. Please try again.'
     saveContactOpen.value = true
   } finally {
     savingContact.value = false
@@ -378,10 +387,13 @@ function eventVia() {
   return ''
 }
 
-function logRemote(action) {
+function logRemote(action, extra = {}) {
   const slug = shareSlug.value
   if (!slug) return
-  apiLogCardEvent(slug, action, eventVia()).catch?.(() => {})
+  apiLogCardEvent(slug, action, eventVia(), {
+    sessionKey: visitSessionKey.value,
+    ...extra
+  }).catch?.(() => {})
 }
 
 function onLinkTrack(key, label) {
@@ -423,21 +435,40 @@ function onKeydown(e) {
   }
 }
 
+function flushDwell() {
+  if (dwellSent || deleted.value || disabled.value || !shareSlug.value) return
+  const ms = Math.max(0, Date.now() - visitStartedAt.value)
+  if (ms < 250) return
+  dwellSent = true
+  logRemote('dwell', { dwellMs: ms })
+}
+
+function onVisibilityChange() {
+  if (document.visibilityState === 'hidden') flushDwell()
+}
+
 onMounted(() => {
   refresh()
+  visitStartedAt.value = Date.now()
+  dwellSent = false
   if (!deleted.value && !disabled.value) trackVisit(LOCAL_ID)
   window.openShareProfile = openShare
   document.addEventListener('keydown', onKeydown)
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  window.addEventListener('pagehide', flushDwell)
   window.addEventListener('focus', refresh)
   window.addEventListener('pageshow', refresh)
   if (route.hash === '#share') openShare()
 })
 
 onUnmounted(() => {
+  flushDwell()
   if (window.openShareProfile === openShare) {
     delete window.openShareProfile
   }
   document.removeEventListener('keydown', onKeydown)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  window.removeEventListener('pagehide', flushDwell)
   window.removeEventListener('focus', refresh)
   window.removeEventListener('pageshow', refresh)
 })
@@ -493,22 +524,7 @@ watch(() => route.path, () => {
               </p>
               <div class="mt-2 flex items-center gap-2 flex-wrap">
                 <button
-                  v-if="isVisitor"
-                  type="button"
-                  :aria-label="isAndroidDevice() ? 'Install' : 'Save profile'"
-                  class="inline-flex items-center gap-1 h-9 px-3 rounded-full bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold border border-zinc-700 transition-colors"
-                  :class="{ 'opacity-40 pointer-events-none': actionsBlocked || installingProfile }"
-                  :disabled="actionsBlocked || installingProfile"
-                  @click="saveProfileApp"
-                >
-                  <span
-                    class="material-symbols-outlined text-[16px]"
-                    :class="{ 'animate-spin': installingProfile }"
-                  >{{ installingProfile ? 'progress_activity' : (isAndroidDevice() ? 'install_mobile' : 'download') }}</span>
-                  {{ installingProfile ? 'Installing…' : (isAndroidDevice() ? 'Install' : 'Save profile') }}
-                </button>
-                <button
-                  v-else
+                  v-if="!isVisitor"
                   type="button"
                   aria-label="Share profile"
                   class="w-9 h-9 rounded-full bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center transition-colors border border-zinc-700"
@@ -728,7 +744,7 @@ watch(() => route.path, () => {
               class="material-symbols-outlined"
               :class="{ 'animate-spin': savingContact }"
             >{{ savingContact ? 'progress_activity' : 'person_add' }}</span>
-            {{ savingContact ? 'Preparing contact…' : 'Save to Phone Book' }}
+            {{ savingContact ? 'Preparing contact…' : 'Save Contact' }}
           </button>
           <button
             v-if="showBooking"
@@ -829,7 +845,7 @@ watch(() => route.path, () => {
         <div class="absolute inset-0 bg-black/70" @click="closeSaveContact" />
         <div class="relative w-full max-w-md card-item-bg rounded-3xl p-5 shadow-2xl">
           <div class="flex items-center justify-between mb-3">
-            <h2 class="text-lg font-bold">Save to phone book</h2>
+            <h2 class="text-lg font-bold">Save Contact</h2>
             <button
               type="button"
               aria-label="Close"
