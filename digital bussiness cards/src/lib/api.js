@@ -5,13 +5,11 @@
  */
 
 import { getStaffAccessToken } from './staffAuth'
+import { apiBaseUrl } from './hosts'
 
 const TOKEN_KEY = 'tapna.apiToken'
 
-export const API_BASE =
-  typeof window !== 'undefined' && /(^|\.)(tapnam\.com|redirct\.link)$/i.test(window.location.hostname)
-    ? ''
-    : 'https://tapnam.com'
+export const API_BASE = apiBaseUrl()
 
 export function getApiToken() {
   try {

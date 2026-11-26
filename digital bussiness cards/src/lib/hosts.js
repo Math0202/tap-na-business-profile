@@ -28,6 +28,18 @@ export function isAppHost(hostname = currentHostname()) {
   return /(^|\.)(tapnam\.com|redirct\.link)$/i.test(String(hostname || ''))
 }
 
+/**
+ * Worker API origin. admin.tapnam.com is a static SPA — /api lives on tapnam.com.
+ * Same-origin empty base only on the public apex (and legacy card hosts).
+ */
+export function apiBaseUrl(hostname = currentHostname()) {
+  const host = String(hostname || '').toLowerCase()
+  if (!host || isAdminHost(host) || isLocalHost(host)) return TABLE_ORIGIN
+  if (host === 'tapnam.com' || host === 'www.tapnam.com') return ''
+  if (host === 'redirct.link' || host === 'www.redirct.link') return ''
+  return TABLE_ORIGIN
+}
+
 /** Absolute staff URL on the admin subdomain (path must start with /). */
 export function adminAppUrl(path = '/admin') {
   const p = String(path || '/admin')
