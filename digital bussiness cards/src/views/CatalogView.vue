@@ -17,6 +17,7 @@ import {
   apiPublicCatalog,
   apiUploadAsset,
   apiSubmitCatalogCart,
+  apiLogCardEvent,
   getApiToken,
   ensureApiSession
 } from '../lib/api'
@@ -532,6 +533,10 @@ onMounted(async () => {
   if (mine?.email) guestEmail.value = mine.email
   if (mine?.phone) guestPhone.value = mine.phone
   refresh()
+  const visitSlug = String(route.params.serial || browsingPersonalSlug(route) || '').trim()
+  if (visitSlug && !isOwner.value) {
+    apiLogCardEvent(visitSlug, 'click:catalog', '').catch?.(() => {})
+  }
   window.addEventListener('tapna-profile-catalog-cart-changed', refreshCatalogCart)
 })
 

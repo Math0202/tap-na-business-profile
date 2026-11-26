@@ -10,6 +10,7 @@ import {
   activityIcon,
   CLICK_LABELS
 } from '../lib/adminStore'
+import ProfileButtonHits from '../components/ProfileButtonHits.vue'
 import {
   cardPublicUrl,
   kindLabel,
@@ -187,17 +188,39 @@ async function loadActivities() {
   const clickMap = {}
   for (const a of list) {
     const action = String(a.action || '')
-    if (!action.startsWith('click')) continue
-    const key = action.includes(':') ? action.slice(action.indexOf(':') + 1) : action
+    let key = ''
+    if (action === 'share:open') key = 'share_open'
+    else if (action.startsWith('share:')) key = `share_${action.slice(6)}`
+    else if (action.startsWith('click:')) key = action.slice(6)
+    else if (action.startsWith('open:')) key = action.slice(5)
+    if (!key) continue
     clickMap[key] = (clickMap[key] || 0) + 1
   }
-  clickRows.value = Object.entries(clickMap)
-    .map(([key, count]) => ({
+  const p = entry.value || {}
+  const present = new Set(['save_contact', 'share_open', 'copy_link', 'download_qr'])
+  if (p.phone) present.add('phone')
+  if (p.email) present.add('email')
+  if (p.whatsapp || p.phone) present.add('whatsapp')
+  if (p.linkedin) present.add('linkedin')
+  if (p.youtube) present.add('youtube')
+  if (p.x) present.add('x')
+  if (p.facebook) present.add('facebook')
+  if (p.instagram) present.add('instagram')
+  if (p.tiktok) present.add('tiktok')
+  if (p.website) present.add('website')
+  if (p.cardType !== 'table' && p.phone) present.add('connect')
+  present.add('book_meeting')
+  if (p.menuUrl) present.add('menu')
+  if (p.googleReview) present.add('review')
+  for (const key of Object.keys(clickMap)) present.add(key)
+  clickRows.value = [...present]
+    .map((key) => ({
       key,
-      label: CLICK_LABELS[key] || key,
-      count
+      label: CLICK_LABELS[key] || (key.startsWith('share_') ? `Share · ${key.slice(6)}` : key),
+      clicks: clickMap[key] || 0,
+      count: clickMap[key] || 0
     }))
-    .sort((a, b) => b.count - a.count)
+    .sort((a, b) => b.clicks - a.clicks || String(a.label).localeCompare(String(b.label)))
   const s = act.data.stats || {}
   stats.value = {
     visits: s.opens || 0,
@@ -500,20 +523,7 @@ onMounted(load)
               </button>
             </div>
 
-            <div v-if="!clickRows.length" class="card-item-bg rounded-2xl p-5 text-sm text-gray-400">
-              No link or button clicks recorded yet.
-            </div>
-
-            <ul v-else class="card-item-bg rounded-2xl divide-y divide-[var(--border)] overflow-hidden">
-              <li
-                v-for="row in clickRows"
-                :key="row.key"
-                class="flex items-center justify-between gap-3 px-4 py-3"
-              >
-                <p class="text-sm font-medium truncate">{{ row.label }}</p>
-                <p class="text-sm font-bold tabular-nums shrink-0">{{ row.count }}</p>
-              </li>
-            </ul>
+            <ProfileButtonHits :buttons="clickRows" />
           </div>
 
           <div>

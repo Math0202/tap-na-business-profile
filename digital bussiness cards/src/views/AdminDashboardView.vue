@@ -6,7 +6,7 @@ import AdminBottomNav from '../components/AdminBottomNav.vue'
 import {
   apiAdminOverview,
   apiAdminAnalytics,
-  apiAdminEvents,
+  apiAdminUsage,
   apiSalesChangelog,
   apiAdminErrors,
   apiSalesFinance,
@@ -32,7 +32,7 @@ import { CARD_ID_LABEL, CARD_ID_HINT } from '../lib/cardLabels'
 import { cardImageSrc } from '../lib/cardLinkStore'
 import { purgeLocalDeletedRecords } from '../lib/salesStore'
 import ActivityCharts from '../components/ActivityCharts.vue'
-import EventJourneyCards from '../components/EventJourneyCards.vue'
+import ProfileButtonHits from '../components/ProfileButtonHits.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -45,7 +45,7 @@ const query = ref('')
 const tab = ref('all') // all | personal | business
 const profileSort = ref('lastSeen') // lastSeen | saves | views
 const profileVisibleCount = ref(30)
-const panel = ref('profiles') // profiles | events | analytics | log | errors | deleted
+const panel = ref('profiles') // profiles | usage | analytics | log | errors | deleted
 
 const changeLog = ref([])
 const errorLog = ref([])
@@ -64,15 +64,16 @@ const analyticsLoading = ref(false)
 const analyticsError = ref('')
 const analyticsData = ref(null)
 
-const eventsLoading = ref(false)
-const eventsError = ref('')
-const eventsData = ref(null)
-const eventsJourneyFilter = ref('')
+const usageLoading = ref(false)
+const usageError = ref('')
+const usageData = ref(null)
+const usageUnusedOnly = ref(false)
+const usageExpandedId = ref('')
 
 const panels = [
   { id: 'profiles', label: 'Profiles', icon: 'group' },
   { id: 'teams', label: 'Groups', icon: 'groups' },
-  { id: 'events', label: 'Events', icon: 'event' },
+  { id: 'usage', label: 'Usage', icon: 'touch_app' },
   { id: 'analytics', label: 'Analytics', icon: 'monitoring' },
   { id: 'log', label: 'Log', icon: 'history' },
   { id: 'errors', label: 'Errors', icon: 'bug_report' },
@@ -127,7 +128,8 @@ const newMemberSharing = ref({
 })
 
 function panelFromRoute() {
-  const p = String(route.query.panel || 'profiles').toLowerCase()
+  let p = String(route.query.panel || 'profiles').toLowerCase()
+  if (p === 'events') p = 'usage'
   return panels.some((x) => x.id === p) ? p : 'profiles'
 }
 
@@ -169,17 +171,17 @@ async function refresh() {
         )
       }
       teamsLoading.value = false
-    } else if (panel.value === 'events') {
-      eventsLoading.value = true
-      eventsError.value = ''
-      const res = await apiAdminEvents({ ...analyticsQueryParams(), limit: 100 })
+    } else if (panel.value === 'usage') {
+      usageLoading.value = true
+      usageError.value = ''
+      const res = await apiAdminUsage(analyticsQueryParams())
       if (res.ok && res.data?.ok) {
-        eventsData.value = res.data
+        usageData.value = res.data
       } else {
-        eventsError.value = res.error || 'Could not load events'
-        eventsData.value = null
+        usageError.value = res.error || 'Could not load usage'
+        usageData.value = null
       }
-      eventsLoading.value = false
+      usageLoading.value = false
     } else if (panel.value === 'analytics') {
       analyticsLoading.value = true
       analyticsError.value = ''
@@ -441,40 +443,14 @@ const analyticsRangeLabel = computed(() => {
   return `Last ${analyticsDays.value} days`
 })
 
-const filteredEventsFeed = computed(() => {
-  const feed = eventsData.value?.feed || []
-  const id = eventsJourneyFilter.value
-  if (!id) return feed
-  return feed.filter((row) => {
-    const action = String(row.action || '')
-    const channel = String(row.channel || '')
-    const type = String(row.type || '')
-    if (id === 'nfc_engage') return channel === 'nfc' || (type === 'open' && channel === 'nfc')
-    if (id === 'qr_engage') return channel === 'qr'
-    if (id === 'web_engage') return channel === 'other' || (!channel && type !== 'login' && type !== 'error')
-    if (id === 'save_contact') {
-      return action === 'click:save_contact' || action === 'friction:save_contact' || type === 'open'
-    }
-    if (id === 'share') return action.startsWith('share:') || type === 'open'
-    if (id === 'login') return type === 'login' || type === 'error'
-    if (id === 'friction') {
-      return type === 'error' || type === 'friction' || action.startsWith('friction:')
-    }
-    return true
-  })
+const usageProfiles = computed(() => {
+  const list = usageData.value?.profiles || []
+  if (!usageUnusedOnly.value) return list
+  return list.filter((p) => Number(p.unusedCount) > 0)
 })
 
-function formatDurationMs(ms) {
-  const n = Number(ms)
-  if (!Number.isFinite(n) || n <= 0) return '—'
-  if (n < 1000) return `${Math.round(n)} ms`
-  if (n < 60000) return `${(n / 1000).toFixed(1)} s`
-  return `${(n / 60000).toFixed(1)} min`
-}
-
-function selectEventsJourney(journey) {
-  eventsJourneyFilter.value =
-    eventsJourneyFilter.value === journey?.id ? '' : String(journey?.id || '')
+function toggleUsageProfile(id) {
+  usageExpandedId.value = usageExpandedId.value === id ? '' : String(id || '')
 }
 
 function setAnalyticsPreset(days) {
@@ -975,7 +951,7 @@ watch(
 )
 
 watch([analyticsDays, analyticsRangeMode, analyticsFrom, analyticsTo], () => {
-  if (panel.value === 'analytics' || panel.value === 'events') refresh()
+  if (panel.value === 'analytics' || panel.value === 'usage') refresh()
 })
 
 watch([query, tab, profileSort], () => {
@@ -1380,19 +1356,19 @@ onMounted(() => {
         </div>
       </section>
 
-      <!-- Events panel -->
-      <section v-else-if="panel === 'events'" class="mb-8 space-y-4">
+      <!-- Usage panel -->
+      <section v-else-if="panel === 'usage'" class="mb-8 space-y-4">
         <div class="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-400">Events</h2>
+            <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-400">Usage</h2>
             <p class="text-xs text-gray-500 mt-1">
-              Profile opens, logins, dwell, journeys, and hangups for UX optimization
+              Which buttons and features visitors use — and which they ignore
             </p>
           </div>
           <div class="flex gap-2 overflow-x-auto pb-1 flex-wrap">
             <button
               v-for="d in [7, 30, 90]"
-              :key="'ev-' + d"
+              :key="'use-' + d"
               type="button"
               class="px-3.5 py-2 rounded-full text-xs font-semibold border shrink-0"
               :class="analyticsRangeMode === 'days' && analyticsDays === d
@@ -1439,153 +1415,112 @@ onMounted(() => {
           </label>
         </div>
 
-        <div v-if="eventsLoading || loading" class="card-item-bg rounded-2xl p-6 text-sm text-gray-400 text-center">
-          Loading events…
+        <div v-if="usageLoading || loading" class="card-item-bg rounded-2xl p-6 text-sm text-gray-400 text-center">
+          Loading usage…
         </div>
-        <div v-else-if="eventsError || loadError" class="card-item-bg rounded-2xl p-6 text-sm text-amber-300">
-          {{ eventsError || loadError }}
+        <div v-else-if="usageError || loadError" class="card-item-bg rounded-2xl p-6 text-sm text-amber-300">
+          {{ usageError || loadError }}
         </div>
-        <template v-else-if="eventsData">
+        <template v-else-if="usageData">
           <section class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <div class="card-item-bg rounded-2xl p-4">
-              <p class="text-[11px] uppercase tracking-wide text-gray-500">Opens</p>
-              <p class="text-2xl font-bold mt-1 text-emerald-300">{{ eventsData.kpis?.opens || 0 }}</p>
+              <p class="text-[11px] uppercase tracking-wide text-gray-500">Button clicks</p>
+              <p class="text-2xl font-bold mt-1 text-emerald-300">{{ usageData.kpis?.totalButtonClicks || 0 }}</p>
             </div>
             <div class="card-item-bg rounded-2xl p-4">
-              <p class="text-[11px] uppercase tracking-wide text-gray-500">Cards touched</p>
-              <p class="text-2xl font-bold mt-1">{{ eventsData.kpis?.uniqueCards || 0 }}</p>
+              <p class="text-[11px] uppercase tracking-wide text-gray-500">With catalog</p>
+              <p class="text-2xl font-bold mt-1">{{ usageData.kpis?.withCatalog || 0 }}</p>
+              <p class="text-[10px] text-gray-500 mt-1">{{ usageData.kpis?.catalogRatio || 0 }}% of profiles</p>
             </div>
             <div class="card-item-bg rounded-2xl p-4">
-              <p class="text-[11px] uppercase tracking-wide text-gray-500">Logins</p>
-              <p class="text-2xl font-bold mt-1 text-amber-200">{{ eventsData.kpis?.logins || 0 }}</p>
+              <p class="text-[11px] uppercase tracking-wide text-gray-500">No catalog</p>
+              <p class="text-2xl font-bold mt-1 text-amber-200">{{ usageData.kpis?.withoutCatalog || 0 }}</p>
             </div>
             <div class="card-item-bg rounded-2xl p-4">
-              <p class="text-[11px] uppercase tracking-wide text-gray-500">Save Contact</p>
-              <p class="text-2xl font-bold mt-1 text-sky-300">{{ eventsData.kpis?.saveContacts || 0 }}</p>
+              <p class="text-[11px] uppercase tracking-wide text-gray-500">Catalog visits</p>
+              <p class="text-2xl font-bold mt-1 text-sky-300">{{ usageData.kpis?.catalogVisits || 0 }}</p>
+              <p class="text-[10px] text-gray-500 mt-1">{{ usageData.kpis?.catalogCarts || 0 }} carts</p>
             </div>
             <div class="card-item-bg rounded-2xl p-4">
-              <p class="text-[11px] uppercase tracking-wide text-gray-500">Shares</p>
-              <p class="text-2xl font-bold mt-1 text-violet-300">{{ eventsData.kpis?.shares || 0 }}</p>
+              <p class="text-[11px] uppercase tracking-wide text-gray-500">Meetings booked</p>
+              <p class="text-2xl font-bold mt-1 text-violet-300">{{ usageData.kpis?.meetingsBooked || 0 }}</p>
+              <p class="text-[10px] text-gray-500 mt-1">{{ usageData.kpis?.profilesWithMeetings || 0 }} profiles</p>
             </div>
             <div class="card-item-bg rounded-2xl p-4">
-              <p class="text-[11px] uppercase tracking-wide text-gray-500">Hangups</p>
-              <p class="text-2xl font-bold mt-1 text-red-300">{{ eventsData.kpis?.errors || 0 }}</p>
-            </div>
-          </section>
-
-          <section class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div class="card-item-bg rounded-2xl p-4">
-              <p class="text-[11px] uppercase tracking-wide text-gray-500">Avg dwell</p>
-              <p class="text-xl font-bold mt-1">{{ formatDurationMs(eventsData.dwell?.avgMs) }}</p>
-            </div>
-            <div class="card-item-bg rounded-2xl p-4">
-              <p class="text-[11px] uppercase tracking-wide text-gray-500">P50 dwell</p>
-              <p class="text-xl font-bold mt-1">{{ formatDurationMs(eventsData.dwell?.p50Ms) }}</p>
-            </div>
-            <div class="card-item-bg rounded-2xl p-4">
-              <p class="text-[11px] uppercase tracking-wide text-gray-500">P95 dwell</p>
-              <p class="text-xl font-bold mt-1">{{ formatDurationMs(eventsData.dwell?.p95Ms) }}</p>
-            </div>
-            <div class="card-item-bg rounded-2xl p-4">
-              <p class="text-[11px] uppercase tracking-wide text-gray-500">Bounce (&lt;3s)</p>
-              <p class="text-xl font-bold mt-1 text-amber-300">
-                {{ eventsData.dwell?.bounceRate || 0 }}%
+              <p class="text-[11px] uppercase tracking-wide text-gray-500">Finance</p>
+              <p class="text-2xl font-bold mt-1">{{ usageData.kpis?.financeVisits || 0 }}</p>
+              <p class="text-[10px] text-gray-500 mt-1">
+                {{ usageData.kpis?.financeCalculates || 0 }} calculates · {{ usageData.kpis?.financeEnabled || 0 }} enabled
               </p>
             </div>
           </section>
 
-          <EventJourneyCards
-            :journeys="eventsData.journeys || []"
-            :active-id="eventsJourneyFilter"
-            @select="selectEventsJourney"
-          />
+          <section class="space-y-3">
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-400">All button clicks</h3>
+            <ul class="card-item-bg rounded-2xl divide-y divide-[var(--border)] overflow-hidden">
+              <li
+                v-for="row in (usageData.buttonTotals || [])"
+                :key="row.key"
+                class="flex items-center justify-between gap-3 px-4 py-3"
+              >
+                <p class="text-sm font-medium truncate">{{ row.label }}</p>
+                <p class="text-sm font-bold tabular-nums shrink-0">{{ row.clicks }}</p>
+              </li>
+            </ul>
+            <p v-if="!(usageData.buttonTotals || []).length" class="text-sm text-gray-500">
+              No button clicks in this range yet.
+            </p>
+          </section>
 
-          <ActivityCharts
-            v-if="eventsData.analytics"
-            :analytics="eventsData.analytics"
-            :days="analyticsRangeMode === 'all' ? 'all' : analyticsDays"
-            :range-label="analyticsRangeLabel"
-          />
-
-          <div class="grid gap-4 lg:grid-cols-2">
-            <section class="space-y-3">
-              <div class="flex items-center justify-between gap-2">
-                <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-400">Activity feed</h3>
-                <button
-                  v-if="eventsJourneyFilter"
-                  type="button"
-                  class="text-xs text-gray-400 hover:text-white"
-                  @click="eventsJourneyFilter = ''"
-                >
-                  Clear filter
-                </button>
-              </div>
-              <ul class="space-y-2 max-h-[28rem] overflow-y-auto pr-1">
-                <li
-                  v-for="row in filteredEventsFeed"
-                  :key="row.id + '-' + (row.at || '')"
-                  class="card-item-bg rounded-2xl p-3"
-                >
-                  <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0">
-                      <div class="flex items-center gap-2 flex-wrap">
-                        <span
-                          class="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full"
-                          :class="{
-                            'bg-emerald-500/15 text-emerald-300': row.type === 'open',
-                            'bg-sky-500/15 text-sky-300': row.type === 'event',
-                            'bg-violet-500/15 text-violet-300': row.type === 'share',
-                            'bg-amber-500/15 text-amber-200': row.type === 'login',
-                            'bg-red-500/15 text-red-300': row.type === 'error' || row.type === 'friction'
-                          }"
-                        >
-                          {{ row.type }}
-                        </span>
-                        <span v-if="row.channel" class="text-[10px] uppercase text-gray-500">{{ row.channel }}</span>
-                        <span v-if="row.slug" class="text-[10px] text-gray-500 truncate">{{ row.slug }}</span>
-                      </div>
-                      <p class="text-sm font-semibold mt-1 truncate">{{ row.label || row.action || row.message }}</p>
-                      <p class="text-xs text-gray-500 mt-1">
-                        <span v-if="row.device">{{ row.device }}</span>
-                        <span v-if="row.country"> · {{ row.country }}</span>
-                        <span v-if="row.dwellMs != null"> · dwell {{ formatDurationMs(row.dwellMs) }}</span>
-                      </p>
-                    </div>
-                    <p class="text-[11px] text-gray-500 shrink-0 text-right">{{ formatDate(row.at) }}</p>
-                  </div>
-                </li>
-              </ul>
-              <p v-if="!filteredEventsFeed.length" class="text-sm text-gray-500">No events in this range.</p>
-            </section>
-
-            <section class="space-y-3">
-              <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-400">Friction / hangups</h3>
-              <ul class="space-y-2 max-h-[28rem] overflow-y-auto pr-1">
-                <li
-                  v-for="row in (eventsData.hangups || [])"
-                  :key="row.id"
-                  class="card-item-bg rounded-2xl p-3 border border-red-500/10"
-                >
-                  <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0">
-                      <p class="text-[10px] uppercase tracking-wide text-red-300/80">{{ row.source || 'error' }}</p>
-                      <p class="text-sm font-semibold mt-1 break-words">{{ row.message || 'Unknown error' }}</p>
-                      <p v-if="row.path" class="text-xs text-gray-500 mt-1 truncate">{{ row.path }}</p>
-                    </div>
-                    <p class="text-[11px] text-gray-500 shrink-0">{{ formatDate(row.at) }}</p>
-                  </div>
-                </li>
-              </ul>
-              <p v-if="!(eventsData.hangups || []).length" class="text-sm text-gray-500">No hangups logged in this range.</p>
+          <section class="space-y-3">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+              <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-400">By profile</h3>
               <button
                 type="button"
-                class="text-xs font-semibold text-gray-300 hover:text-white underline"
-                @click="setPanel('errors')"
+                class="px-3 py-1.5 rounded-full text-xs font-semibold border"
+                :class="usageUnusedOnly
+                  ? 'bg-white text-black border-white'
+                  : 'border-[var(--border)] text-gray-400'"
+                @click="usageUnusedOnly = !usageUnusedOnly"
               >
-                Open Errors panel
+                Unused buttons only
               </button>
-            </section>
-          </div>
+            </div>
+            <ul class="space-y-2">
+              <li
+                v-for="row in usageProfiles"
+                :key="row.id"
+                class="card-item-bg rounded-2xl overflow-hidden"
+              >
+                <button
+                  type="button"
+                  class="w-full text-left px-4 py-3 flex items-start justify-between gap-3 hover:bg-white/5"
+                  @click="toggleUsageProfile(row.id)"
+                >
+                  <div class="min-w-0">
+                    <p class="text-sm font-semibold truncate">{{ row.name }}</p>
+                    <p class="text-[11px] text-gray-500 mt-0.5">
+                      {{ row.visits }} visits · {{ row.clickedCount }} clicked · {{ row.unusedCount }} unused
+                      <span v-if="row.hasCatalog"> · catalog {{ row.catalogVisits }}</span>
+                      <span v-if="row.meetingsBooked"> · meetings {{ row.meetingsBooked }}</span>
+                      <span v-if="row.financeEnabled"> · finance {{ row.financeVisits }}/{{ row.financeCalculates }}</span>
+                    </p>
+                  </div>
+                  <RouterLink
+                    :to="`/admin/profiles/${row.id}`"
+                    class="text-xs text-sky-300 shrink-0 no-underline hover:underline"
+                    @click.stop
+                  >
+                    Open
+                  </RouterLink>
+                </button>
+                <div v-if="usageExpandedId === row.id" class="px-4 pb-4">
+                  <ProfileButtonHits :buttons="row.buttons || []" />
+                </div>
+              </li>
+            </ul>
+            <p v-if="!usageProfiles.length" class="text-sm text-gray-500">No profiles match this filter.</p>
+          </section>
         </template>
       </section>
 

@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import BrandMark from '../components/BrandMark.vue'
-import { apiResolveCard, apiUpdateMe, ensureApiSession, getApiToken } from '../lib/api'
+import { apiLogCardEvent, apiResolveCard, apiUpdateMe, ensureApiSession, getApiToken } from '../lib/api'
 import { isLoggedIn, isTableBusiness, loadProfile, saveProfile, setViewedProfile } from '../lib/profileStore'
 import { personalPagePath } from '../lib/profilePaths'
 import {
@@ -165,7 +165,38 @@ async function load() {
   }
 }
 
-watch(() => route.params.serial, load)
+let financeVisitLogged = false
+let financeCalcLogged = false
+
+function logFinance(action) {
+  const code = slug.value
+  if (!code || isOwner.value) return
+  apiLogCardEvent(code, action, '').catch?.(() => {})
+}
+
+watch([price, deposit, fees, balloon, rate, term], () => {
+  if (loading.value || isOwner.value || !available.value) return
+  if (num(price.value) <= 0) return
+  if (financeCalcLogged) return
+  financeCalcLogged = true
+  logFinance('click:finance_calculate')
+})
+
+watch(
+  () => [loading.value, available.value, slug.value, isOwner.value],
+  () => {
+    if (loading.value || !available.value || !slug.value || isOwner.value) return
+    if (financeVisitLogged) return
+    financeVisitLogged = true
+    logFinance('click:finance')
+  }
+)
+
+watch(() => route.params.serial, () => {
+  financeVisitLogged = false
+  financeCalcLogged = false
+  load()
+})
 onMounted(load)
 </script>
 

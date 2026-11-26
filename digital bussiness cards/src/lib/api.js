@@ -174,6 +174,22 @@ export function apiAdminEvents({
   return request(`/api/admin/events${qs ? `?${qs}` : ''}`, { timeoutMs: 45000 })
 }
 
+/** Product usage: button clicks, catalogs, meetings, vehicle finance */
+export function apiAdminUsage({
+  days = 30,
+  range = '',
+  from = '',
+  to = ''
+} = {}) {
+  const q = new URLSearchParams()
+  if (range === 'all' || range === 'custom') q.set('range', range)
+  else if (days) q.set('days', String(days))
+  if (from) q.set('from', String(from))
+  if (to) q.set('to', String(to))
+  const qs = q.toString()
+  return request(`/api/admin/usage${qs ? `?${qs}` : ''}`, { timeoutMs: 45000 })
+}
+
 /** Link a card to a profile */
 export function apiClaimCard(slug, { profileId, kind } = {}) {
   return request(`/api/cards/${encodeURIComponent(slug)}/claim`, {

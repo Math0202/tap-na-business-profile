@@ -37,7 +37,13 @@ export const CLICK_LABELS = {
   share_open: 'Share / QR button',
   save_contact: 'Save contact',
   play_video: 'Play video',
-  copy_link: 'Copy link'
+  copy_link: 'Copy link',
+  book_meeting: 'Book a meeting',
+  connect: 'Connect',
+  catalog: 'Catalog',
+  finance: 'Vehicle finance',
+  finance_calculate: 'Finance calculate',
+  save_profile_app: 'Save profile app'
 }
 
 function readJson(key, fallback) {

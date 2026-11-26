@@ -352,7 +352,7 @@ function closeSaveContact() {
 
 function acceptShareDetails() {
   askShareOpen.value = false
-  connectOpen.value = true
+  openConnect()
 }
 
 function declineShareDetails() {
@@ -399,6 +399,25 @@ function logRemote(action, extra = {}) {
 function onLinkTrack(key, label) {
   trackClick(LOCAL_ID, key, label)
   logRemote('click:' + (key || 'link'))
+}
+
+function onCatalogClick() {
+  trackClick(LOCAL_ID, 'catalog', 'Catalog')
+  logRemote('click:catalog')
+}
+
+function openBooking() {
+  if (actionsBlocked.value) return
+  trackClick(LOCAL_ID, 'book_meeting', 'Book a meeting')
+  logRemote('click:book_meeting')
+  bookOpen.value = true
+}
+
+function openConnect() {
+  if (actionsBlocked.value) return
+  trackClick(LOCAL_ID, 'connect', 'Connect')
+  logRemote('click:connect')
+  connectOpen.value = true
 }
 
 function onShareChannel(channel) {
@@ -704,13 +723,18 @@ watch(() => route.path, () => {
         >
           <div class="flex items-center justify-between px-1">
             <p class="text-[10px] uppercase tracking-wide text-gray-500">Offers</p>
-            <RouterLink :to="catalogPath" class="text-[11px] text-emerald-400 no-underline">View catalog</RouterLink>
+            <RouterLink
+              :to="catalogPath"
+              class="text-[11px] text-emerald-400 no-underline"
+              @click="onCatalogClick"
+            >View catalog</RouterLink>
           </div>
           <RouterLink
             v-for="item in offerPreviewItems"
             :key="item.id"
             :to="{ path: catalogPath, query: { item: item.id } }"
             class="card-item-bg rounded-2xl flex items-center p-4 no-underline text-inherit"
+            @click="onCatalogClick"
           >
             <div class="w-12 h-12 rounded-full bg-white overflow-hidden flex items-center justify-center text-black mr-4 shadow-lg shrink-0">
               <img
@@ -752,7 +776,7 @@ watch(() => route.path, () => {
             class="w-full py-4 rounded-full bg-zinc-800 text-white font-bold text-lg hover:bg-zinc-700 transition-all flex items-center justify-center gap-2 border border-zinc-700"
             :class="{ 'opacity-40 pointer-events-none': actionsBlocked }"
             :disabled="actionsBlocked"
-            @click="bookOpen = true"
+            @click="openBooking"
           >
             <span class="material-symbols-outlined">event</span>
             Book a meeting
@@ -763,7 +787,7 @@ watch(() => route.path, () => {
             class="w-full py-4 rounded-full bg-zinc-800 text-white font-bold text-lg hover:bg-zinc-700 transition-all flex items-center justify-center gap-2 border border-zinc-700"
             :class="{ 'opacity-40 pointer-events-none': actionsBlocked }"
             :disabled="actionsBlocked"
-            @click="connectOpen = true"
+            @click="openConnect"
           >
             <span class="material-symbols-outlined">handshake</span>
             Connect

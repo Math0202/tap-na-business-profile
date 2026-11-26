@@ -489,6 +489,246 @@ function percentile(sorted, p) {
   return sorted[idx]
 }
 
+const USAGE_BUTTON_LABELS = {
+  phone: 'Number',
+  email: 'Email',
+  whatsapp: 'WhatsApp',
+  linkedin: 'LinkedIn',
+  youtube: 'YouTube',
+  x: 'X',
+  facebook: 'Facebook',
+  instagram: 'Instagram',
+  tiktok: 'TikTok',
+  website: 'Website',
+  menu: 'Menu',
+  review: 'Google review',
+  checkin: 'Events check-in',
+  feedback: 'Feedback',
+  download_qr: 'Download QR',
+  share_open: 'Share / QR button',
+  save_contact: 'Save contact',
+  play_video: 'Play video',
+  copy_link: 'Copy link',
+  book_meeting: 'Book a meeting',
+  connect: 'Connect',
+  catalog: 'Catalog',
+  finance: 'Vehicle finance',
+  finance_calculate: 'Finance calculate',
+  save_profile_app: 'Save profile app'
+}
+
+function usageButtonKeyFromAction(action) {
+  const a = String(action || '').trim().toLowerCase()
+  if (!a || a === 'open' || a === 'dwell') return ''
+  if (a === 'share:open') return 'share_open'
+  if (a.startsWith('share:')) return `share_${a.slice(6).replace(/[^a-z0-9_-]/g, '_') || 'channel'}`
+  if (a.startsWith('click:')) return a.slice(6).replace(/[^a-z0-9_-]/g, '_') || 'link'
+  if (a.startsWith('open:')) return a.slice(5).replace(/[^a-z0-9_-]/g, '_') || 'page'
+  return ''
+}
+
+function usageButtonLabel(key) {
+  if (USAGE_BUTTON_LABELS[key]) return USAGE_BUTTON_LABELS[key]
+  if (String(key).startsWith('share_')) {
+    const ch = String(key).slice(6).replace(/_/g, ' ')
+    return ch ? `Share · ${ch}` : 'Share channel'
+  }
+  return String(key || 'Button').replace(/_/g, ' ')
+}
+
+function profileHasFilled(value) {
+  return String(value || '').trim().length > 0
+}
+
+function presentButtonsForProfile(row) {
+  const cardType = row.card_type === 'table' ? 'table' : 'personal'
+  const keys = new Set(['save_contact', 'share_open', 'copy_link', 'download_qr'])
+  if (profileHasFilled(row.phone)) keys.add('phone')
+  if (profileHasFilled(row.email)) keys.add('email')
+  if (profileHasFilled(row.whatsapp) || profileHasFilled(row.phone)) keys.add('whatsapp')
+  if (profileHasFilled(row.linkedin)) keys.add('linkedin')
+  if (profileHasFilled(row.youtube)) keys.add('youtube')
+  if (profileHasFilled(row.x)) keys.add('x')
+  if (profileHasFilled(row.facebook)) keys.add('facebook')
+  if (profileHasFilled(row.instagram)) keys.add('instagram')
+  if (profileHasFilled(row.tiktok)) keys.add('tiktok')
+  if (profileHasFilled(row.website)) keys.add('website')
+  if (profileHasFilled(row.video)) keys.add('play_video')
+  if (row.show_booking !== false) keys.add('book_meeting')
+  if (cardType === 'personal' && profileHasFilled(row.phone)) keys.add('connect')
+  if (cardType === 'table') {
+    if (
+      profileHasFilled(row.menu_url) ||
+      profileHasFilled(row.menu_pdf) ||
+      (Array.isArray(row.menu_images) && row.menu_images.length)
+    ) {
+      keys.add('menu')
+    }
+    if (profileHasFilled(row.google_review)) keys.add('review')
+    if (row.show_checkin) keys.add('checkin')
+    if (row.show_feedback) keys.add('feedback')
+  }
+  const catalog = normalizeCatalogItems(row.catalog_items).filter((x) => x.active !== false)
+  if (catalog.length) keys.add('catalog')
+  const finance = normalizeVehicleFinance(row.vehicle_finance)
+  if (finance.enabled) {
+    keys.add('finance')
+    keys.add('finance_calculate')
+  }
+  return [...keys]
+}
+
+function buildAdminUsagePayload({
+  profiles = [],
+  cards = [],
+  activities = [],
+  meetings = [],
+  carts = []
+} = {}) {
+  const slugToProfile = {}
+  for (const c of cards || []) {
+    if (!c?.slug || !c.profile_id || c.deleted === true) continue
+    slugToProfile[c.slug] = c.profile_id
+  }
+
+  const clickMapByProfile = {}
+  const visitsByProfile = {}
+  const globalClicks = {}
+  let totalButtonClicks = 0
+
+  for (const a of activities || []) {
+    const pid = slugToProfile[a.slug]
+    if (!pid) continue
+    if (a.action === 'open') {
+      visitsByProfile[pid] = (visitsByProfile[pid] || 0) + 1
+      continue
+    }
+    const key = usageButtonKeyFromAction(a.action)
+    if (!key) continue
+    if (!clickMapByProfile[pid]) clickMapByProfile[pid] = {}
+    clickMapByProfile[pid][key] = (clickMapByProfile[pid][key] || 0) + 1
+    globalClicks[key] = (globalClicks[key] || 0) + 1
+    totalButtonClicks += 1
+  }
+
+  const meetingsByProfile = {}
+  for (const m of meetings || []) {
+    const pid = m.profile_id
+    if (!pid) continue
+    meetingsByProfile[pid] = (meetingsByProfile[pid] || 0) + 1
+  }
+
+  const cartsByProfile = {}
+  for (const c of carts || []) {
+    const pid = c.profile_id
+    if (!pid || c.deleted === true) continue
+    cartsByProfile[pid] = (cartsByProfile[pid] || 0) + 1
+  }
+
+  let withCatalog = 0
+  let withoutCatalog = 0
+  let financeEnabled = 0
+  let catalogVisits = 0
+  let financeVisits = 0
+  let financeCalculates = 0
+  const profileRows = []
+
+  for (const p of profiles || []) {
+    const present = presentButtonsForProfile(p)
+    const clicks = clickMapByProfile[p.id] || {}
+    for (const key of Object.keys(clicks)) {
+      if (!present.includes(key)) present.push(key)
+    }
+    const buttons = present
+      .map((key) => ({
+        key,
+        label: usageButtonLabel(key),
+        clicks: clicks[key] || 0
+      }))
+      .sort((a, b) => b.clicks - a.clicks || a.label.localeCompare(b.label))
+
+    const catalogItems = normalizeCatalogItems(p.catalog_items).filter((x) => x.active !== false)
+    const hasCatalog = catalogItems.length > 0
+    if (hasCatalog) withCatalog += 1
+    else withoutCatalog += 1
+
+    const finance = normalizeVehicleFinance(p.vehicle_finance)
+    const financeOn = finance.enabled === true
+    if (financeOn) financeEnabled += 1
+
+    const catVisits = clicks.catalog || 0
+    const finVisits = clicks.finance || 0
+    const finCalc = clicks.finance_calculate || 0
+    catalogVisits += catVisits
+    financeVisits += finVisits
+    financeCalculates += finCalc
+
+    profileRows.push({
+      id: p.id,
+      name: p.name || p.company || 'Untitled',
+      cardType: p.card_type === 'table' ? 'table' : 'personal',
+      visits: visitsByProfile[p.id] || 0,
+      hasCatalog,
+      catalogItemCount: catalogItems.length,
+      catalogVisits: catVisits,
+      catalogCarts: cartsByProfile[p.id] || 0,
+      meetingsBooked: meetingsByProfile[p.id] || 0,
+      financeEnabled: financeOn,
+      financeVisits: finVisits,
+      financeCalculates: finCalc,
+      buttons,
+      unusedCount: buttons.filter((b) => b.clicks === 0).length,
+      clickedCount: buttons.filter((b) => b.clicks > 0).length
+    })
+  }
+
+  profileRows.sort((a, b) => b.visits - a.visits || a.name.localeCompare(b.name))
+
+  const buttonTotals = Object.entries(globalClicks)
+    .map(([key, clicks]) => ({ key, label: usageButtonLabel(key), clicks }))
+    .sort((a, b) => b.clicks - a.clicks || a.label.localeCompare(b.label))
+
+  const meetingsBooked = (meetings || []).length
+  const profilesWithMeetings = Object.keys(meetingsByProfile).length
+  const totalProfiles = profileRows.length
+  const catalogRatio =
+    totalProfiles > 0 ? Math.round((withCatalog / totalProfiles) * 1000) / 10 : 0
+
+  return {
+    kpis: {
+      totalButtonClicks,
+      withCatalog,
+      withoutCatalog,
+      catalogRatio,
+      catalogVisits,
+      catalogCarts: (carts || []).filter((c) => c.deleted !== true).length,
+      meetingsBooked,
+      profilesWithMeetings,
+      financeEnabled,
+      financeVisits,
+      financeCalculates
+    },
+    buttonTotals,
+    catalog: {
+      withCatalog,
+      withoutCatalog,
+      ratio: catalogRatio,
+      visits: catalogVisits,
+      carts: (carts || []).filter((c) => c.deleted !== true).length
+    },
+    meetings: {
+      booked: meetingsBooked,
+      profilesWithBookings: profilesWithMeetings
+    },
+    finance: {
+      enabledProfiles: financeEnabled,
+      visits: financeVisits,
+      calculates: financeCalculates
+    },
+    profiles: profileRows
+  }
+}
+
 function buildJourneyAnalytics(activities = [], { logins = 0, errors = 0 } = {}) {
   const opens = activities.filter((r) => r.action === 'open')
   const opensNfc = opens.filter((r) => r.channel === 'nfc').length
@@ -7446,6 +7686,74 @@ async function handleApi(request, env, url) {
         path: e.path || '',
         at: e.created_at
       }))
+    })
+  }
+
+  if (pathname === '/api/admin/usage' && method === 'GET') {
+    const gate = await requireStaff(env, request, { roles: ['admin'] })
+    if (gate.error) return gate.error
+    const range = parseAnalyticsRange(request, 30)
+    const { since, until, days, mode } = range
+    const openFilter = timeRangeQuery('opened_at', since, until)
+    const meetingFilter = timeRangeQuery('created_at', since, until)
+    const cartFilter = timeRangeQuery('created_at', since, until)
+
+    const profiles = await sb(
+      env,
+      'profiles?deleted=eq.false&select=id,card_type,name,company,phone,email,whatsapp,linkedin,youtube,x,facebook,instagram,tiktok,website,video,show_booking,show_checkin,show_feedback,menu_url,menu_pdf,menu_images,google_review,catalog_items,vehicle_finance,disabled&order=created_at.desc&limit=500'
+    )
+    const cards = await sb(
+      env,
+      'cards?select=slug,profile_id,deleted&order=created_at.desc&limit=2000'
+    )
+
+    let opens = []
+    try {
+      const openPath = openFilter
+        ? `card_opens?${openFilter}&select=id,slug,channel,action,opened_at&order=opened_at.desc`
+        : `card_opens?select=id,slug,channel,action,opened_at&order=opened_at.desc`
+      opens = await sbPaged(env, openPath)
+    } catch {
+      opens = []
+    }
+    const activities = mapOpenRows(opens)
+
+    let meetings = []
+    try {
+      const meetingPath = meetingFilter
+        ? `meetings?${meetingFilter}&select=id,profile_id,created_at,status`
+        : `meetings?select=id,profile_id,created_at,status`
+      meetings = (await sbPaged(env, meetingPath)) || []
+      meetings = meetings.filter((m) => String(m.status || '') !== 'cancelled')
+    } catch {
+      meetings = []
+    }
+
+    let carts = []
+    try {
+      const cartPath = cartFilter
+        ? `profile_catalog_carts?${cartFilter}&select=id,profile_id,created_at,deleted`
+        : `profile_catalog_carts?select=id,profile_id,created_at,deleted`
+      carts = (await sbPaged(env, cartPath)) || []
+    } catch {
+      carts = []
+    }
+
+    const usage = buildAdminUsagePayload({
+      profiles: profiles || [],
+      cards: cards || [],
+      activities,
+      meetings,
+      carts
+    })
+
+    return json({
+      ok: true,
+      days,
+      mode,
+      since,
+      until,
+      ...usage
     })
   }
 
