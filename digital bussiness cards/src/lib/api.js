@@ -248,6 +248,7 @@ export function apiUpdateCardContact(slug, contact = {}) {
       contactName: String(contact.name ?? contact.contactName ?? '').trim(),
       contactCompany: String(contact.company ?? contact.contactCompany ?? '').trim(),
       contactPhone: String(contact.phone ?? contact.contactPhone ?? '').trim(),
+      contactWorkCell: String(contact.workCell ?? contact.contactWorkCell ?? '').trim(),
       contactEmail: String(contact.email ?? contact.contactEmail ?? '').trim(),
       contactTitle: String(contact.title ?? contact.contactTitle ?? '').trim()
     }

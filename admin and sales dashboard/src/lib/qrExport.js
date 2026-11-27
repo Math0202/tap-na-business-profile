@@ -28,6 +28,7 @@ export function cardHasContactDetails(card = {}) {
     String(card.contactName || card.contact_name || card.name || '').trim() ||
       String(card.contactCompany || card.contact_company || card.company || '').trim() ||
       String(card.contactPhone || card.contact_phone || card.phone || '').trim() ||
+      String(card.contactWorkCell || card.contact_work_cell || card.workCell || '').trim() ||
       String(card.contactEmail || card.contact_email || card.email || '').trim()
   )
 }
@@ -37,6 +38,7 @@ function contactFieldsFromCard(card = {}) {
     name: String(card.contactName || card.contact_name || card.name || '').trim(),
     company: String(card.contactCompany || card.contact_company || card.company || '').trim(),
     phone: String(card.contactPhone || card.contact_phone || card.phone || '').trim(),
+    workCell: String(card.contactWorkCell || card.contact_work_cell || card.workCell || '').trim(),
     email: String(card.contactEmail || card.contact_email || card.email || '').trim(),
     title: String(card.contactTitle || card.contact_title || card.title || '').trim()
   }
@@ -53,7 +55,7 @@ export function cardQrPayload(card = {}, { origin } = {}) {
   const kind = card.kind
   const publicOrigin = resolvePublicOrigin(kind, origin)
   const contact = contactFieldsFromCard(card)
-  if (contact.name || contact.company || contact.phone || contact.email) {
+  if (contact.name || contact.company || contact.phone || contact.workCell || contact.email) {
     const profileUrl =
       String(card.profileUrl || '').trim() ||
       (slug ? profileShareUrl(slug, publicOrigin, { cardType: kind === 'table' ? 'table' : 'personal' }) : '')

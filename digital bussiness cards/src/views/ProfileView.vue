@@ -57,6 +57,7 @@ const name = ref('')
 const title = ref('')
 const company = ref('')
 const phone = ref('')
+const workCell = ref('')
 const email = ref('')
 const address = ref('')
 const bio = ref('')
@@ -191,6 +192,7 @@ function fillForm(profile) {
     title.value = ''
     company.value = ''
     phone.value = ''
+    workCell.value = ''
     email.value = ''
     address.value = ''
     menuUrl.value = ''
@@ -232,6 +234,7 @@ function fillForm(profile) {
     title.value = profile.title || ''
     company.value = profile.company || ''
     phone.value = profile.phone || ''
+    workCell.value = profile.workCell || ''
     email.value = profile.email || ''
     address.value = profile.address || ''
     bio.value = profile.bio || ''
@@ -863,6 +866,7 @@ async function onSave(e) {
       title: title.value.trim(),
       company: company.value.trim(),
       phone: phone.value.trim(),
+      workCell: workCell.value.trim(),
       email: email.value.trim(),
       address: address.value.trim(),
       menuUrl: menuUrl.value.trim(),
@@ -909,6 +913,7 @@ async function onSave(e) {
         title: saved.title,
         company: saved.company,
         phone: saved.phone,
+        workCell: saved.workCell,
         email: saved.email,
         whatsapp: saved.whatsapp,
         linkedin: saved.linkedin,
@@ -1260,6 +1265,14 @@ onMounted(async () => {
             Show phone number on public profile
           </label>
           <p class="field-hint">Stored for your account — only shown publicly if you opt in.</p>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="field-work-cell">Work cell <span class="text-gray-500 font-normal">(optional)</span></label>
+          <div class="field-shell">
+            <span class="material-symbols-outlined field-icon">smartphone</span>
+            <input id="field-work-cell" v-model="workCell" type="tel" class="field-input" placeholder="+264 81 000 0000" />
+          </div>
+          <p class="field-hint">Shown on your public card when filled.</p>
         </div>
         <div class="field-group">
           <label class="field-label" for="field-email">Email</label>

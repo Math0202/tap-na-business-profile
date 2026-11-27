@@ -491,6 +491,7 @@ function percentile(sorted, p) {
 
 const USAGE_BUTTON_LABELS = {
   phone: 'Number',
+  work_cell: 'Work cell',
   email: 'Email',
   whatsapp: 'WhatsApp',
   linkedin: 'LinkedIn',
@@ -544,6 +545,7 @@ function presentButtonsForProfile(row) {
   const cardType = row.card_type === 'table' ? 'table' : 'personal'
   const keys = new Set(['save_contact', 'share_open', 'copy_link', 'download_qr'])
   if (profileHasFilled(row.phone)) keys.add('phone')
+  if (profileHasFilled(row.work_cell)) keys.add('work_cell')
   if (profileHasFilled(row.email)) keys.add('email')
   if (profileHasFilled(row.whatsapp) || profileHasFilled(row.phone)) keys.add('whatsapp')
   if (profileHasFilled(row.linkedin)) keys.add('linkedin')
@@ -2305,6 +2307,7 @@ async function publicProfile(env, row, { includeCards = false } = {}) {
     title: row.title,
     company: row.company,
     phone: row.phone,
+    workCell: row.work_cell || '',
     email: row.email,
     whatsapp,
     linkedin,
@@ -3192,10 +3195,13 @@ function cardContactPreset(card, profile = null) {
     name: String((fromProfile && profile.name) || card.contact_name || '').trim(),
     company: String((fromProfile && profile.company) || card.contact_company || '').trim(),
     phone: String((fromProfile && profile.phone) || card.contact_phone || '').trim(),
+    workCell: String((fromProfile && profile.work_cell) || card.contact_work_cell || '').trim(),
     email: String((fromProfile && profile.email) || card.contact_email || '').trim(),
     title: String((fromProfile && profile.title) || card.contact_title || '').trim()
   }
-  if (!preset.name && !preset.company && !preset.phone && !preset.email && !preset.title) return null
+  if (!preset.name && !preset.company && !preset.phone && !preset.workCell && !preset.email && !preset.title) {
+    return null
+  }
   return preset
 }
 
@@ -3210,6 +3216,7 @@ function claimProfileFields(body, claimCard) {
     name: nameFromBody || String(contact.contact_name || '').trim().slice(0, 160),
     company: pick(body?.company, contact.contact_company, 160),
     phone: pick(body?.phone, contact.contact_phone, 40),
+    work_cell: pick(body?.workCell ?? body?.work_cell, contact.contact_work_cell, 80),
     title: pick(body?.title, contact.contact_title, 160)
   }
 }
@@ -4620,6 +4627,11 @@ async function handleApi(request, env, url) {
         name: String(c.name || c.contactName || c.contact_name || '').trim().slice(0, 160),
         company: String(c.company || c.contactCompany || c.contact_company || '').trim().slice(0, 160),
         phone: String(c.phone || c.contactPhone || c.contact_phone || '').trim().slice(0, 80),
+        workCell: String(
+          c.workCell || c.contactWorkCell || c.contact_work_cell || c.work_cell || ''
+        )
+          .trim()
+          .slice(0, 80),
         email: String(c.email || c.contactEmail || c.contact_email || '').trim().toLowerCase().slice(0, 160),
         title: String(c.title || c.contactTitle || c.contact_title || '').trim().slice(0, 120)
       }
@@ -4690,6 +4702,7 @@ async function handleApi(request, env, url) {
         contact_name: contact.name,
         contact_company: contact.company,
         contact_phone: contact.phone,
+        contact_work_cell: contact.workCell,
         contact_email: contact.email,
         contact_title: contact.title
       }
@@ -4710,6 +4723,7 @@ async function handleApi(request, env, url) {
         contactName: contact.name,
         contactCompany: contact.company,
         contactPhone: contact.phone,
+        contactWorkCell: contact.workCell,
         contactEmail: contact.email,
         contactTitle: contact.title,
         nfcUrl: cardPageUrl(slug, kind, url.origin),
@@ -4892,7 +4906,7 @@ async function handleApi(request, env, url) {
     const body = await readJson(request)
     const cards = await sb(
       env,
-      `cards?slug=eq.${encodeURIComponent(slug)}&select=id,kind,industry,personal_type,profile_id,contact_name,contact_company,contact_phone,contact_email,contact_title`
+      `cards?slug=eq.${encodeURIComponent(slug)}&select=id,kind,industry,personal_type,profile_id,contact_name,contact_company,contact_phone,contact_work_cell,contact_email,contact_title`
     )
     if (!cards?.length) return bad('Card not found', 404)
     const cardRow = cards[0]
@@ -4918,6 +4932,7 @@ async function handleApi(request, env, url) {
       ['contactName', 'contact_name', 'name'],
       ['contactCompany', 'contact_company', 'company'],
       ['contactPhone', 'contact_phone', 'phone'],
+      ['contactWorkCell', 'contact_work_cell', 'workCell'],
       ['contactEmail', 'contact_email', 'email'],
       ['contactTitle', 'contact_title', 'title']
     ]
@@ -4941,6 +4956,7 @@ async function handleApi(request, env, url) {
       patch.contact_name = pick('contactName', 'contact_name', 'name', 160)
       patch.contact_company = pick('contactCompany', 'contact_company', 'company', 160)
       patch.contact_phone = pick('contactPhone', 'contact_phone', 'phone', 80)
+      patch.contact_work_cell = pick('contactWorkCell', 'contact_work_cell', 'workCell', 80)
       patch.contact_email = pick('contactEmail', 'contact_email', 'email', 160).toLowerCase()
       patch.contact_title = pick('contactTitle', 'contact_title', 'title', 120)
     }
@@ -4978,6 +4994,10 @@ async function handleApi(request, env, url) {
         patch.contact_company !== undefined ? patch.contact_company : cardRow.contact_company || '',
       contactPhone:
         patch.contact_phone !== undefined ? patch.contact_phone : cardRow.contact_phone || '',
+      contactWorkCell:
+        patch.contact_work_cell !== undefined
+          ? patch.contact_work_cell
+          : cardRow.contact_work_cell || '',
       contactEmail:
         patch.contact_email !== undefined ? patch.contact_email : cardRow.contact_email || '',
       contactTitle:
@@ -7294,7 +7314,7 @@ async function handleApi(request, env, url) {
     if (gate.error) return gate.error
     const [profiles, cards, batches] = await Promise.all([
       sb(env, 'profiles?deleted=eq.false&select=id,card_type,name,title,company,email,phone,address,avatar,logo,disabled,created_at,updated_at&order=created_at.desc&limit=500'),
-      sb(env, 'cards?select=slug,kind,industry,personal_type,product_id,status,profile_id,linked_at,created_at,deleted,deleted_at,deleted_by,batch_id,contact_name,contact_company,contact_phone,contact_email,contact_title&order=created_at.desc&limit=2000'),
+      sb(env, 'cards?select=slug,kind,industry,personal_type,product_id,status,profile_id,linked_at,created_at,deleted,deleted_at,deleted_by,batch_id,contact_name,contact_company,contact_phone,contact_work_cell,contact_email,contact_title&order=created_at.desc&limit=2000'),
       sb(env, 'card_batches?select=id,name,kind,personal_type,created_by,created_at&order=created_at.desc&limit=500')
     ])
     const cardsByProfile = {}
@@ -7409,6 +7429,7 @@ async function handleApi(request, env, url) {
         contactName: c.contact_name || '',
         contactCompany: c.contact_company || '',
         contactPhone: c.contact_phone || '',
+        contactWorkCell: c.contact_work_cell || '',
         contactEmail: c.contact_email || '',
         contactTitle: c.contact_title || ''
       }))
@@ -7700,7 +7721,7 @@ async function handleApi(request, env, url) {
 
     const profiles = await sb(
       env,
-      'profiles?deleted=eq.false&select=id,card_type,name,company,phone,email,whatsapp,linkedin,youtube,x,facebook,instagram,tiktok,website,video,show_booking,show_checkin,show_feedback,menu_url,menu_pdf,menu_images,google_review,catalog_items,vehicle_finance,disabled&order=created_at.desc&limit=500'
+      'profiles?deleted=eq.false&select=id,card_type,name,company,phone,work_cell,email,whatsapp,linkedin,youtube,x,facebook,instagram,tiktok,website,video,show_booking,show_checkin,show_feedback,menu_url,menu_pdf,menu_images,google_review,catalog_items,vehicle_finance,disabled&order=created_at.desc&limit=500'
     )
     const cards = await sb(
       env,
@@ -7894,6 +7915,10 @@ async function handleApi(request, env, url) {
       title: body.title !== undefined ? String(body.title || '').trim() : profile.title,
       company: body.company !== undefined ? String(body.company || '').trim() : profile.company,
       phone: body.phone !== undefined ? String(body.phone || '').trim() : profile.phone,
+      work_cell:
+        body.workCell !== undefined
+          ? String(body.workCell || '').trim().slice(0, 80)
+          : profile.work_cell || '',
       email: body.email !== undefined ? String(body.email || '').trim().toLowerCase() : profile.email,
       whatsapp: body.whatsapp !== undefined ? String(body.whatsapp || '').trim() : profile.whatsapp,
       linkedin: body.linkedin !== undefined ? String(body.linkedin || '').trim() : profile.linkedin,
@@ -8794,6 +8819,10 @@ async function handleApi(request, env, url) {
         title: body.title ?? profile.title,
         company: body.company ?? profile.company,
         phone: body.phone ?? profile.phone,
+        work_cell:
+          body.workCell !== undefined
+            ? String(body.workCell || '').trim().slice(0, 80)
+            : profile.work_cell || '',
         email: body.email ?? profile.email,
         whatsapp: body.whatsapp ?? profile.whatsapp,
         linkedin: body.linkedin ?? profile.linkedin,

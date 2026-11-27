@@ -116,6 +116,7 @@ export function buildShareVcardPayload({
   name = '',
   company = '',
   phone = '',
+  workCell = '',
   email = '',
   profileUrl = '',
   title = ''
@@ -126,11 +127,12 @@ export function buildShareVcardPayload({
   const last = parts.slice(1).join(' ') || ''
   const org = String(company || '').trim()
   const tel = String(phone || '').trim()
+  const workTel = String(workCell || '').trim()
   const mail = String(email || '').trim()
   const url = String(profileUrl || '').trim()
   const jobTitle = String(title || '').trim()
 
-  if (!fullName && !org && !tel && !mail && !url) return ''
+  if (!fullName && !org && !tel && !workTel && !mail && !url) return ''
 
   const lines = [
     'BEGIN:VCARD',
@@ -140,6 +142,7 @@ export function buildShareVcardPayload({
     jobTitle ? `TITLE:${escapeVcardValue(jobTitle)}` : '',
     org ? `ORG:${escapeVcardValue(org)}` : '',
     tel ? `TEL;TYPE=CELL:${escapeVcardValue(tel)}` : '',
+    workTel ? `TEL;TYPE=WORK:${escapeVcardValue(workTel)}` : '',
     mail ? `EMAIL:${escapeVcardValue(mail)}` : '',
     url ? `URL:${escapeVcardValue(url)}` : '',
     'END:VCARD'
@@ -154,6 +157,7 @@ export function buildShareVcardFromProfile(profile, shareUrl) {
     name: p.name || '',
     company: p.company || '',
     phone: p.phone || '',
+    workCell: p.workCell || p.contactWorkCell || '',
     email: p.email || '',
     title: p.title || '',
     profileUrl: shareUrl || ''

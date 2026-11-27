@@ -7,6 +7,7 @@ import { resolveSocialUrl, hasMenuContent, menuPageHref } from './profileStore'
 
 export const BUSINESS_LINK_DEFS = [
   { key: 'phone', icon: 'phone', label: 'Number', trackKey: 'phone' },
+  { key: 'work_cell', icon: 'smartphone', label: 'Work cell', trackKey: 'work_cell' },
   { key: 'email', icon: 'email', label: 'Email', trackKey: 'email' },
   { key: 'whatsapp', icon: 'whatsapp', label: 'WhatsApp', trackKey: 'whatsapp', external: true },
   { key: 'website', icon: 'website', label: 'Website', trackKey: 'website', external: true },
@@ -69,6 +70,7 @@ export function listConfiguredBusinessDestinations(profile) {
   }
 
   if (profile.showPhone && filled(profile.phone)) add('phone', 'tel:' + String(profile.phone).trim())
+  if (filled(profile.workCell)) add('work_cell', 'tel:' + String(profile.workCell).trim())
   if (profile.showEmail && filled(profile.email)) add('email', 'mailto:' + String(profile.email).trim())
   if (filled(profile.whatsapp)) add('whatsapp', resolveSocialUrl('whatsapp', profile.whatsapp))
   if (filled(profile.website)) add('website', resolveSocialUrl('website', profile.website))

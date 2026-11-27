@@ -137,7 +137,7 @@ function advancePopup() {
 
 const visibleTiles = computed(() => {
   const p = profile.value
-  return normalizeLinkOrder(p.linkOrder).map((key) => {
+  const tiles = normalizeLinkOrder(p.linkOrder).map((key) => {
     const def = businessLinkDef(key)
     if (!def) return null
     if (key === 'phone') {
@@ -146,6 +146,15 @@ const visibleTiles = computed(() => {
         ...def,
         detail: contactDetail('phone', p.phone),
         href: hrefOrEmpty(p.phone, 'phone'),
+        external: false
+      }
+    }
+    if (key === 'work_cell') {
+      if (!filled(p.workCell)) return null
+      return {
+        ...def,
+        detail: contactDetail('phone', p.workCell),
+        href: hrefOrEmpty(p.workCell, 'phone'),
         external: false
       }
     }
@@ -230,6 +239,22 @@ const visibleTiles = computed(() => {
     }
     return null
   }).filter(Boolean)
+
+  if (filled(p.workCell)) {
+    const workTile = {
+      key: 'work_cell',
+      icon: 'smartphone',
+      label: 'Work cell',
+      trackKey: 'work_cell',
+      detail: contactDetail('phone', p.workCell),
+      href: hrefOrEmpty(p.workCell, 'phone'),
+      external: false
+    }
+    const phoneIdx = tiles.findIndex((t) => t.key === 'phone')
+    if (phoneIdx >= 0) tiles.splice(phoneIdx + 1, 0, workTile)
+    else tiles.unshift(workTile)
+  }
+  return tiles
 })
 
 function openShare() {
@@ -272,7 +297,8 @@ async function saveContact() {
     'FN:' + n,
     'ORG:' + (profile.value.company || n),
     'TITLE:' + (profile.value.title || ''),
-    profile.value.phone ? 'TEL;TYPE=WORK:' + profile.value.phone : '',
+    profile.value.phone ? 'TEL;TYPE=CELL:' + profile.value.phone : '',
+    profile.value.workCell ? 'TEL;TYPE=WORK:' + profile.value.workCell : '',
     profile.value.email ? 'EMAIL:' + profile.value.email : '',
     profile.value.website ? 'URL:' + resolveSocialUrl('website', profile.value.website) : '',
     profile.value.address

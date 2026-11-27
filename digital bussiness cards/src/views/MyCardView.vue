@@ -326,6 +326,7 @@ async function saveContact() {
       'TITLE:' + (profile.value.title || ''),
       'ORG:' + (profile.value.company || ''),
       profile.value.phone ? 'TEL;TYPE=CELL:' + profile.value.phone : '',
+      profile.value.workCell ? 'TEL;TYPE=WORK:' + profile.value.workCell : '',
       profile.value.email ? 'EMAIL:' + profile.value.email : '',
       contactUrl ? 'URL:' + contactUrl : '',
       photo,
@@ -633,6 +634,15 @@ watch(() => route.path, () => {
             track-key="phone"
             :detail="contactDetail('phone', profile.phone)"
             :href="filledHref(profile.phone, 'phone')"
+            @track="onLinkTrack"
+          />
+          <LinkRow
+            v-if="filledHref(profile.workCell, 'phone')"
+            icon="smartphone"
+            label="Work cell"
+            track-key="work_cell"
+            :detail="contactDetail('phone', profile.workCell)"
+            :href="filledHref(profile.workCell, 'phone')"
             @track="onLinkTrack"
           />
           <LinkRow

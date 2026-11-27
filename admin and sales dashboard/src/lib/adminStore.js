@@ -20,6 +20,7 @@ export const LOCAL_ID = 'local-device'
 
 export const CLICK_LABELS = {
   phone: 'Number',
+  work_cell: 'Work cell',
   email: 'Email',
   whatsapp: 'WhatsApp',
   linkedin: 'LinkedIn',

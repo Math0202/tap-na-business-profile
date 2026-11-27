@@ -53,6 +53,7 @@ const form = ref({
   bio: '',
   email: '',
   phone: '',
+  workCell: '',
   whatsapp: '',
   website: '',
   address: '',
@@ -106,6 +107,7 @@ function applyProfile(p) {
     company: p.company || '',
     email: p.email || '',
     phone: p.phone || '',
+    workCell: p.workCell || '',
     whatsapp: p.whatsapp || '',
     linkedin: p.linkedin || '',
     youtube: p.youtube || '',
@@ -146,6 +148,7 @@ function applyProfile(p) {
     bio: p.bio || '',
     email: p.email || '',
     phone: p.phone || '',
+    workCell: p.workCell || '',
     whatsapp: p.whatsapp || '',
     website: p.website || '',
     address: p.address || '',
@@ -199,6 +202,7 @@ async function loadActivities() {
   const p = entry.value || {}
   const present = new Set(['save_contact', 'share_open', 'copy_link', 'download_qr'])
   if (p.phone) present.add('phone')
+  if (p.workCell) present.add('work_cell')
   if (p.email) present.add('email')
   if (p.whatsapp || p.phone) present.add('whatsapp')
   if (p.linkedin) present.add('linkedin')
@@ -294,6 +298,7 @@ async function saveManage(e) {
     bio: form.value.bio,
     email: form.value.email,
     phone: form.value.phone,
+    workCell: form.value.workCell,
     whatsapp: form.value.whatsapp,
     website: form.value.website,
     address: form.value.address,
@@ -640,6 +645,12 @@ onMounted(load)
                 <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">Phone</label>
                 <div class="field-shell">
                   <input v-model="form.phone" type="tel" class="field-input" placeholder="+264…">
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">Work cell (optional)</label>
+                <div class="field-shell">
+                  <input v-model="form.workCell" type="tel" class="field-input" placeholder="+264…">
                 </div>
               </div>
               <div>

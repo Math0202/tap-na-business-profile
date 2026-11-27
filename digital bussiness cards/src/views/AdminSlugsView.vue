@@ -85,6 +85,7 @@ const contactEditForm = ref({
   name: '',
   company: '',
   phone: '',
+  workCell: '',
   email: '',
   title: ''
 })
@@ -125,7 +126,7 @@ const personalTypeOptions = computed(() => Object.values(PERSONAL_TYPES))
 const newPersonalTypeOptions = computed(() => SELLABLE_PERSONAL_TYPES)
 
 function emptyContactRow() {
-  return { name: '', company: '', phone: '', email: '', title: '' }
+  return { name: '', company: '', phone: '', workCell: '', email: '', title: '' }
 }
 
 function syncContactRows(count) {
@@ -179,7 +180,7 @@ const filteredSlugs = computed(() => {
     if (from && (!created || created < from)) return false
     if (to && (!created || created > to)) return false
     if (!q) return true
-    return [c.serial, c.kind, c.productName, c.customerName, c.profileName, c.saleId, c.profileId, c.batchName, c.contactName, c.contactCompany, c.contactEmail, c.contactPhone]
+    return [c.serial, c.kind, c.productName, c.customerName, c.profileName, c.saleId, c.profileId, c.batchName, c.contactName, c.contactCompany, c.contactEmail, c.contactPhone, c.contactWorkCell]
       .join(' ')
       .toLowerCase()
       .includes(q)
@@ -368,6 +369,7 @@ async function refresh() {
     contactName: c.contactName || local[c.slug]?.contactName || '',
     contactCompany: c.contactCompany || local[c.slug]?.contactCompany || '',
     contactPhone: c.contactPhone || local[c.slug]?.contactPhone || '',
+    contactWorkCell: c.contactWorkCell || local[c.slug]?.contactWorkCell || '',
     contactEmail: c.contactEmail || local[c.slug]?.contactEmail || '',
     contactTitle: c.contactTitle || local[c.slug]?.contactTitle || '',
     status: c.deleted ? 'disabled' : (c.profileId ? 'linked' : 'unlinked')
@@ -442,6 +444,7 @@ async function generateSlugs() {
       name: String(row.name || '').trim(),
       company: String(row.company || '').trim(),
       phone: String(row.phone || '').trim(),
+      workCell: String(row.workCell || '').trim(),
       email: String(row.email || '').trim(),
       title: String(row.title || '').trim()
     }))
@@ -716,6 +719,7 @@ function downloadCsv(rows, filename) {
     'contact_name',
     'contact_company',
     'contact_phone',
+    'contact_work_cell',
     'contact_email',
     'contact_title',
     'nfc_url',
@@ -726,7 +730,9 @@ function downloadCsv(rows, filename) {
   ]
   const lines = [header.join(',')]
   for (const c of rows) {
-    const hasContact = Boolean(c.contactName || c.contactCompany || c.contactPhone || c.contactEmail)
+    const hasContact = Boolean(
+      c.contactName || c.contactCompany || c.contactPhone || c.contactWorkCell || c.contactEmail
+    )
     lines.push(
       [
         c.batchName || '',
@@ -737,6 +743,7 @@ function downloadCsv(rows, filename) {
         c.contactName || '',
         c.contactCompany || '',
         c.contactPhone || '',
+        c.contactWorkCell || '',
         c.contactEmail || '',
         c.contactTitle || '',
         cardPublicUrl(c.serial, undefined, { kind: c.kind }),
@@ -826,6 +833,7 @@ function openContactEdit(card) {
     name: card.contactName || '',
     company: card.contactCompany || '',
     phone: card.contactPhone || '',
+    workCell: card.contactWorkCell || '',
     email: card.contactEmail || '',
     title: card.contactTitle || ''
   }
@@ -892,6 +900,7 @@ async function refreshContactEditPreview() {
       contactName: contactEditForm.value.name,
       contactCompany: contactEditForm.value.company,
       contactPhone: contactEditForm.value.phone,
+      contactWorkCell: contactEditForm.value.workCell,
       contactEmail: contactEditForm.value.email,
       contactTitle: contactEditForm.value.title
     }
@@ -921,15 +930,20 @@ async function saveContactEdit({ clear = false } = {}) {
   const serial = contactEditSerial.value
   if (!serial) return
   const contact = clear
-    ? { name: '', company: '', phone: '', email: '', title: '' }
+    ? { name: '', company: '', phone: '', workCell: '', email: '', title: '' }
     : {
         name: String(contactEditForm.value.name || '').trim(),
         company: String(contactEditForm.value.company || '').trim(),
         phone: String(contactEditForm.value.phone || '').trim(),
+        workCell: String(contactEditForm.value.workCell || '').trim(),
         email: String(contactEditForm.value.email || '').trim(),
         title: String(contactEditForm.value.title || '').trim()
       }
-  if (!clear && !contact.name && (contact.company || contact.phone || contact.email || contact.title)) {
+  if (
+    !clear &&
+    !contact.name &&
+    (contact.company || contact.phone || contact.workCell || contact.email || contact.title)
+  ) {
     flash('Enter a full name, or clear all fields')
     return
   }
@@ -941,6 +955,7 @@ async function saveContactEdit({ clear = false } = {}) {
       contactName: contact.name,
       contactCompany: contact.company,
       contactPhone: contact.phone,
+      contactWorkCell: contact.workCell,
       contactEmail: contact.email,
       contactTitle: contact.title
     }
@@ -989,7 +1004,7 @@ async function saveContactEdit({ clear = false } = {}) {
           : 'Contact details saved — QR updated'
     )
     if (clear) {
-      contactEditForm.value = { name: '', company: '', phone: '', email: '', title: '' }
+      contactEditForm.value = { name: '', company: '', phone: '', workCell: '', email: '', title: '' }
       await refreshContactEditPreview()
     } else {
       closeContactEdit()
@@ -1211,6 +1226,9 @@ watch(filteredSlugs, (rows) => {
                 </div>
                 <div class="field-shell !rounded-xl">
                   <input v-model="row.phone" type="tel" class="field-input" placeholder="Phone" :aria-label="`Phone card ${idx + 1}`">
+                </div>
+                <div class="field-shell !rounded-xl">
+                  <input v-model="row.workCell" type="tel" class="field-input" placeholder="Work cell (optional)" :aria-label="`Work cell card ${idx + 1}`">
                 </div>
                 <div class="field-shell !rounded-xl">
                   <input v-model="row.email" type="email" class="field-input" placeholder="Email" :aria-label="`Email card ${idx + 1}`">
@@ -1715,6 +1733,9 @@ watch(filteredSlugs, (rows) => {
           </div>
           <div class="field-shell !rounded-2xl">
             <input v-model="contactEditForm.phone" type="tel" class="field-input" placeholder="Phone" aria-label="Phone">
+          </div>
+          <div class="field-shell !rounded-2xl">
+            <input v-model="contactEditForm.workCell" type="tel" class="field-input" placeholder="Work cell (optional)" aria-label="Work cell">
           </div>
           <div class="field-shell !rounded-2xl">
             <input v-model="contactEditForm.email" type="email" class="field-input" placeholder="Email" aria-label="Email">

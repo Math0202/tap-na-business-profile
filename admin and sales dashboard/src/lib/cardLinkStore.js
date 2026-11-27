@@ -202,6 +202,7 @@ function normalizeCard(c) {
     contactName: String(c.contactName || c.contact_name || '').trim(),
     contactCompany: String(c.contactCompany || c.contact_company || '').trim(),
     contactPhone: String(c.contactPhone || c.contact_phone || '').trim(),
+    contactWorkCell: String(c.contactWorkCell || c.contact_work_cell || '').trim(),
     contactEmail: String(c.contactEmail || c.contact_email || '').trim(),
     contactTitle: String(c.contactTitle || c.contact_title || '').trim()
   }
@@ -398,6 +399,7 @@ export function provisionSlugs({
         contactName: remote.contactName || remote.contact_name || '',
         contactCompany: remote.contactCompany || remote.contact_company || '',
         contactPhone: remote.contactPhone || remote.contact_phone || '',
+        contactWorkCell: remote.contactWorkCell || remote.contact_work_cell || '',
         contactEmail: remote.contactEmail || remote.contact_email || '',
         contactTitle: remote.contactTitle || remote.contact_title || ''
       })
